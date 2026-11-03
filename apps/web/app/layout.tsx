@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AppShell>
+        <AppShell profile={null}>
           {children}
         </AppShell>
       </body>
