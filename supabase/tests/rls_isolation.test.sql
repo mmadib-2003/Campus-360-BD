@@ -1,0 +1,94 @@
+-- supabase/tests/rls_isolation.test.sql
+-- Run via: supabase test db
+BEGIN;
+SELECT plan(6);
+
+-- Create two test users: Student A at JU, Student B at DU
+INSERT INTO auth.users (id, email) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'student.a@juniv.edu'),
+  ('22222222-2222-2222-2222-222222222222', 'student.b@du.ac.bd');
+
+INSERT INTO public.profiles (id, university_id, email, full_name, student_id, trust_level)
+VALUES
+  ('11111111-1111-1111-1111-111111111111', (SELECT id FROM public.universities WHERE code = 'JU'), 'student.a@juniv.edu', 'JU Student A', 'JU-2021', 'EMAIL_VERIFIED'),
+  ('22222222-2222-2222-2222-222222222222', (SELECT id FROM public.universities WHERE code = 'DU'), 'student.b@du.ac.bd', 'DU Student B', 'DU-2021', 'EMAIL_VERIFIED');
+
+-- JU Student A creates a private post and a grievance complaint
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '11111111-1111-1111-1111-111111111111';
+
+INSERT INTO public.posts (id, university_id, author_id, body)
+VALUES (
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  (SELECT id FROM public.universities WHERE code = 'JU'),
+  '11111111-1111-1111-1111-111111111111',
+  'JU internal campus post'
+);
+
+INSERT INTO public.complaints (id, university_id, tracking_code, student_id, is_anonymous, title, category, description, sla_due_at)
+VALUES (
+  'cccccccc-cccc-cccc-cccc-cccccccccccc',
+  (SELECT id FROM public.universities WHERE code = 'JU'),
+  'JU-CASE-2026-999999',
+  '11111111-1111-1111-1111-111111111111',
+  false,
+  'Hall water supply issue',
+  'HALL_RESIDENCE',
+  'Water pump inactive on 3rd floor for 24 hours.',
+  now() + INTERVAL '48 hours'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM public.posts WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  1,
+  'JU Student A can read their own university post'
+);
+
+-- Switch session to DU Student B and verify zero cross-university leakage
+SET LOCAL "request.jwt.claim.sub" = '22222222-2222-2222-2222-222222222222';
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM public.posts WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  0,
+  'DU Student B CANNOT read JU private post (RLS tenant isolation enforced)'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM public.complaints WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'),
+  0,
+  'DU Student B CANNOT read JU complaint'
+);
+
+-- Verify immutable audit log cannot be deleted
+PREPARE delete_audit AS DELETE FROM public.complaint_audit_log;
+SELECT throws_ok(
+  'delete_audit',
+  'Audit logs are immutable and cannot be updated or deleted.',
+  'Immutable trigger blocks deletion on complaint_audit_log'
+);
+
+-- Verify review aggregate trigger updates review_aggregates automatically
+INSERT INTO public.reviews (university_id, author_id, target_type, target_id, rating, body)
+VALUES (
+  (SELECT id FROM public.universities WHERE code = 'DU'),
+  '22222222-2222-2222-2222-222222222222',
+  'LIBRARY',
+  'dddddddd-dddd-dddd-dddd-dddddddddddd',
+  5,
+  'Excellent reading room air conditioning and Wi-Fi.'
+);
+
+SELECT is(
+  (SELECT review_count FROM public.review_aggregates WHERE target_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'),
+  1,
+  'Trigger automatically populates review_aggregates count'
+);
+
+SELECT is(
+  (SELECT avg_rating FROM public.review_aggregates WHERE target_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'),
+  5.00,
+  'Trigger automatically computes avg_rating = 5.00'
+);
+
+SELECT * FROM finish();
+ROLLBACK;

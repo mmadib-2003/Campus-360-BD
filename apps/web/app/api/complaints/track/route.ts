@@ -1,0 +1,81 @@
+// apps/web/app/api/complaints/track/route.ts
+import { NextRequest } from 'next/server';
+import crypto from 'crypto';
+import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
+import { apiError, apiSuccess } from '@/lib/api-response';
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  const trackingCode = String(body.trackingCode || '').trim().toUpperCase();
+  const trackingSecret = typeof body.trackingSecret === 'string' ? body.trackingSecret.trim() : '';
+
+  if (!trackingCode) {
+    return apiError('MISSING_CODE', 'Tracking code is required.', 'ট্র্যাকিং কোড প্রদান করা আবশ্যক।', 400);
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: complaint } = await admin
+    .from('complaints')
+    .select(`
+      id,
+      university_id,
+      tracking_code,
+      student_id,
+      is_anonymous,
+      tracking_secret_hash,
+      title,
+      category,
+      severity,
+      status,
+      sla_hours,
+      sla_due_at,
+      sla_breached,
+      resolution_summary,
+      student_rating,
+      last_activity_at,
+      created_at,
+      governing_units(name_en, name_bn, unit_code),
+      complaint_status_history(from_status, to_status, reason, created_at)
+    `)
+    .eq('tracking_code', trackingCode)
+    .maybeSingle();
+
+  if (!complaint) {
+    return apiError('NOT_FOUND', 'No complaint found matching that tracking code.', 'এই ট্র্যাকিং কোডে কোনো অভিযোগ পাওয়া যায়নি।', 404);
+  }
+
+  const supabase = createSupabaseRouteClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let hasFullAccess = false;
+  if (complaint.student_id && user?.id === complaint.student_id) {
+    hasFullAccess = true;
+  } else if (complaint.is_anonymous && trackingSecret && complaint.tracking_secret_hash) {
+    const pepper = process.env.ANON_COMPLAINT_PEPPER || 'default-anon-pepper';
+    const candidateHash = crypto
+      .createHmac('sha256', pepper)
+      .update(`${trackingCode}:${trackingSecret}`)
+      .digest('hex');
+    hasFullAccess = crypto.timingSafeEqual(
+      Buffer.from(candidateHash, 'hex'),
+      Buffer.from(complaint.tracking_secret_hash, 'hex')
+    );
+  }
+
+  const { data: messages } = hasFullAccess
+    ? await admin
+        .from('complaint_messages')
+        .select('id, sender_role, body, attachment_paths, created_at')
+        .eq('complaint_id', complaint.id)
+        .eq('is_internal_note', false)
+        .order('created_at', { ascending: true })
+    : { data: [] };
+
+  const { tracking_secret_hash: _omitted, ...safeComplaint } = complaint;
+
+  return apiSuccess({
+    complaint: safeComplaint,
+    hasFullAccess,
+    messages: messages ?? [],
+  });
+}

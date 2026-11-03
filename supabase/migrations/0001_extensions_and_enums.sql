@@ -1,0 +1,113 @@
+-- supabase/migrations/0001_extensions_and_enums.sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+
+CREATE TYPE university_category AS ENUM (
+  'GENERAL',
+  'SCIENCE_AND_TECH',
+  'ENGINEERING',
+  'AGRICULTURAL',
+  'SPECIALIZED',
+  'OPEN_AND_AFFILIATING'
+);
+
+CREATE TYPE trust_level AS ENUM (
+  'UNVERIFIED',
+  'EMAIL_VERIFIED',
+  'ID_VERIFIED',
+  'TRUSTED'
+);
+
+CREATE TYPE app_role AS ENUM (
+  'STUDENT',
+  'FACULTY',
+  'COUNSELOR',
+  'GOVERNING_BODY',
+  'UNIVERSITY_ADMIN',
+  'SUPER_ADMIN'
+);
+
+CREATE TYPE id_verification_status AS ENUM (
+  'PENDING',
+  'APPROVED',
+  'REJECTED'
+);
+
+CREATE TYPE archive_category AS ENUM (
+  'LECTURE_NOTES',
+  'PAST_EXAMS',
+  'QUESTION_BANKS',
+  'ASSIGNMENTS',
+  'LAB_MANUALS',
+  'SYLLABUS',
+  'REFERENCE_BOOKS',
+  'THESIS_PROJECT_REPORTS',
+  'COURSE_OUTLINES'
+);
+
+CREATE TYPE content_visibility AS ENUM (
+  'PRIVATE_TO_UNIVERSITY',
+  'PUBLIC'
+);
+
+CREATE TYPE virus_scan_status AS ENUM (
+  'PENDING',
+  'CLEAN',
+  'QUARANTINED'
+);
+
+CREATE TYPE complaint_category AS ENUM (
+  'ACADEMIC',
+  'HALL_RESIDENCE',
+  'HARASSMENT',
+  'RAGGING_BULLYING',
+  'SEXUAL_HARASSMENT',
+  'FINANCIAL',
+  'INFRASTRUCTURE',
+  'TRANSPORT',
+  'HEALTH',
+  'DISCRIMINATION',
+  'OTHER'
+);
+
+CREATE TYPE complaint_severity AS ENUM (
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'CRITICAL'
+);
+
+CREATE TYPE complaint_status AS ENUM (
+  'SUBMITTED',
+  'ACKNOWLEDGED',
+  'IN_REVIEW',
+  'ACTION_TAKEN',
+  'RESOLVED',
+  'CLOSED',
+  'REOPENED',
+  'ESCALATED',
+  'REJECTED_WITH_REASON'
+);
+
+CREATE TYPE review_target_type AS ENUM (
+  'MARKETPLACE',
+  'BLOOD_DONOR',
+  'ARCHIVE_FILE',
+  'EVENT',
+  'COMPLAINT_RESOLUTION',
+  'TRANSPORTATION',
+  'HALL_DINING',
+  'LIBRARY',
+  'TUTORING',
+  'HOUSING',
+  'LOST_AND_FOUND',
+  'CLUBS',
+  'NOTICE_BOARD'
+);
+
+CREATE TYPE event_live_override AS ENUM (
+  'AUTO',
+  'FORCE_LIVE',
+  'FORCE_ENDED'
+);

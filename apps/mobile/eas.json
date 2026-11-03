@@ -1,0 +1,12 @@
+// apps/mobile/eas.json
+{
+  "cli": { "version": ">= 10.0.0" },
+  "build": {
+    "development": { "developmentClient": true, "distribution": "internal" },
+    "staging": { "distribution": "internal", "env": { "APP_ENV": "staging" } },
+    "production": { "autoIncrement": true, "env": { "APP_ENV": "production" } }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@campus360/mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@campus360/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.45.4",
+    "@tanstack/react-query": "^5.56.2",
+    "expo": "~51.0.28",
+    "expo-document-picker": "~12.0.2",
+    "expo-image-picker": "~15.0.7",
+    "expo-local-authentication": "~14.0.1",
+    "expo-notifications": "~0.28.16",
+    "expo-router": "~3.5.23",
+    "expo-secure-store": "~13.0.2",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-maps": "1.14.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.45",
+    "typescript": "~5.3.3"
+  }
+}

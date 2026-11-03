@@ -1,0 +1,12 @@
+# apps/mobile/maestro/flow-complaint-and-checkin.yaml
+appId: com.campus360bd.app
+---
+- launchApp
+- assertVisible: "Campus360 BD"
+- tapOn: "Grievance / অভিযোগ"
+- tapOn: "Case Title / শিরোনাম"
+- inputText: "Streetlight outage near Nawab Faizunnesa Hall"
+- tapOn: "Description / বিস্তারিত"
+- inputText: "Three solar streetlights on the hall road are non-functional since Tuesday."
+- tapOn: "Submit Grievance / জমা দিন"
+- assertVisible: "Complaint Filed / অভিযোগ জমা হয়েছে"

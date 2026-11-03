@@ -1,0 +1,45 @@
+// apps/mobile/app.json
+{
+  "expo": {
+    "name": "Campus360 BD",
+    "slug": "campus360-bd",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "campus360bd",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.campus360bd.app",
+      "associatedDomains": ["applinks:app.campus360bd.com"],
+      "config": {
+        "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_IOS_KEY}"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Campus360 BD uses your location to verify event geofence check-in and show nearby campus venues.",
+        "NSFaceIDUsageDescription": "Campus360 BD uses Face ID to protect your anonymous grievance tracking keys."
+      }
+    },
+    "android": {
+      "package": "com.campus360bd.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY}"
+        }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "app.campus360bd.com", "pathPrefix": "/" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      "expo-notifications"
+    ]
+  }
+}

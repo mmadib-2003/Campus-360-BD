@@ -1,0 +1,8 @@
+version: '3.9'
+services:
+  clamav:
+    image: clamav/clamav:stable
+    container_name: campus360_clamav
+    ports:
+      - "3310:3310"
+    restart: unless-stopped

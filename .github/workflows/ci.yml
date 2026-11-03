@@ -1,0 +1,39 @@
+# .github/workflows/ci.yml
+name: CI — Lint, Typecheck, Unit, RLS & Playwright E2E
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck & Lint all workspaces
+        run: pnpm turbo run lint typecheck
+
+      - name: Run Vitest unit tests
+        run: pnpm turbo run test
+
+      - name: Start local Supabase & execute pgTAP RLS isolation tests
+        run: |
+          supabase start
+          supabase db reset
+          supabase test db
