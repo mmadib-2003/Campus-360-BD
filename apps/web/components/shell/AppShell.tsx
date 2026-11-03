@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { t } from '@/lib/i18n';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export interface ActiveSessionProfile {
   id: string;
@@ -20,20 +21,22 @@ export interface ActiveSessionProfile {
 
 const MODULES = [
   { href: '/', key: 'moduleFeed', icon: '🏠' },
-  { href: '/archive', key: 'moduleArchive', icon: '📚' },
-  { href: '/complaints', key: 'moduleComplaints', icon: '🛡️' },
+  { href: '/marketplace', key: 'moduleMarketplace2', icon: '🛍️' },
+  { href: '/skills', key: 'moduleSkills', icon: '🎓' },
+  { href: '/civic', key: 'moduleCivic', icon: '🛡️' },
   { href: '/events', key: 'moduleEvents', icon: '📅' },
   { href: '/events/map', key: 'moduleLiveMap', icon: '📍' },
+  { href: '/health', key: 'moduleHealth', icon: '🩸' },
+  { href: '/archive', key: 'moduleArchive', icon: '📚' },
+  { href: '/mentorship', key: 'moduleMentorship', icon: '📖' },
+  { href: '/housing', key: 'moduleHousing2', icon: '🏢' },
+  { href: '/careers', key: 'moduleCareers', icon: '💼' },
+  { href: '/dining', key: 'moduleDining2', icon: '🍛' },
+  { href: '/lost-found', key: 'moduleLostFound2', icon: '🔍' },
+  { href: '/sports', key: 'moduleSports', icon: '🏆' },
+  { href: '/trust', key: 'moduleTrust', icon: '✅' },
   { href: '/reviews', key: 'moduleReviews', icon: '⭐' },
-  { href: '/?module=marketplace', key: 'moduleMarketplace', icon: '🛍️' },
-  { href: '/?module=blood', key: 'moduleBlood', icon: '🩸' },
-  { href: '/?module=transport', key: 'moduleTransport', icon: '🚌' },
-  { href: '/?module=dining', key: 'moduleDining', icon: '🍛' },
-  { href: '/?module=library', key: 'moduleLibrary', icon: '📖' },
-  { href: '/?module=tutoring', key: 'moduleTutoring', icon: '🎓' },
-  { href: '/?module=housing', key: 'moduleHousing', icon: '🏢' },
-  { href: '/?module=lostfound', key: 'moduleLostFound', icon: '🔍' },
-  { href: '/?module=clubs', key: 'moduleClubs', icon: '🎭' },
+  { href: '/admin/console', key: 'moduleAdmin', icon: '🏛️' },
 ];
 
 export function AppShell({
@@ -98,6 +101,7 @@ export function AppShell({
             >
               {locale === 'en' ? 'বাংলা' : 'EN'}
             </button>
+            <NotificationBell />
             <button
               type="button"
               onClick={toggleTheme}
@@ -158,7 +162,8 @@ export function AppShell({
         <aside className="hidden md:block w-64 shrink-0">
           <nav className="sticky top-28 space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             {MODULES.map((m) => {
-              const active = pathname === m.href;
+              const active =
+                m.href === '/' ? pathname === '/' : pathname === m.href || pathname.startsWith(`${m.href}/`);
               return (
                 <Link
                   key={m.href}
@@ -184,10 +189,10 @@ export function AppShell({
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
         {[
           { href: '/', icon: '🏠', label: 'Feed' },
-          { href: '/archive', icon: '📚', label: 'Archive' },
-          { href: '/complaints', icon: '🛡️', label: 'Grievance' },
-          { href: '/events/map', icon: '📍', label: 'Live Map' },
-          { href: '/reviews', icon: '⭐', label: 'Reviews' },
+          { href: '/marketplace', icon: '🛍️', label: 'Market' },
+          { href: '/civic', icon: '🛡️', label: 'Civic' },
+          { href: '/events', icon: '📅', label: 'Events' },
+          { href: '/health', icon: '🩸', label: 'Health' },
         ].map((tab) => (
           <Link
             key={tab.href}

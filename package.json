@@ -2,7 +2,7 @@
   "name": "campus360-bd",
   "version": "1.0.0",
   "private": true,
-  "description": "Campus360 BD — Multi-University Verified Super-App Platform (Web + Mobile + Supabase)",
+  "description": "Campus360 BD \u2014 Multi-University Verified Super-App Platform (Web + Mobile + Supabase)",
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev": "turbo run dev --parallel",
@@ -15,7 +15,8 @@
     "test:e2e:web": "pnpm --filter @campus360/web test:e2e",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
-    "db:test": "supabase test db"
+    "db:test": "supabase test db",
+    "test:modules": "vitest run apps/web/__tests__"
   },
   "devDependencies": {
     "turbo": "^2.1.3",
