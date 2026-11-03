@@ -1,10 +1,11 @@
 // apps/web/app/verify-email/page.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function VerifyEmailPage() {
+// ১. মূল ফর্মের লজিক একটি আলাদা কম্পোনেন্টে রাখা হলো
+function VerifyEmailForm() {
   const router = useRouter();
   const sp = useSearchParams();
   const [email, setEmail] = useState(sp.get('email') || '');
@@ -66,5 +67,14 @@ export default function VerifyEmailPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+// ২. মূল পেজ কম্পোনেন্টটি এখন Suspense-এর সাহায্যে ফর্মটিকে রেন্ডার করবে
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div className="text-center mt-20">Loading...</div>}>
+      <VerifyEmailForm />
+    </Suspense>
   );
 }
