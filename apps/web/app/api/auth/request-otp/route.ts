@@ -3,7 +3,10 @@ import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
+import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);

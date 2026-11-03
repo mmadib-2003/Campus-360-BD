@@ -1,6 +1,7 @@
 // apps/web/app/page.tsx
 import React from 'react';
 import Link from 'next/link';
+import { ModuleHub } from '@/components/modules/ModuleHub';
 
 const FEATURED_UNIVERSITIES = [
   { code: 'JU', name_en: 'Jahangirnagar University', name_bn: 'জাহাঙ্গীরনগর বিশ্ববিদ্যালয়', domains: '@juniv.edu, @student.juniv.edu' },
@@ -39,6 +40,8 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+
+      <ModuleHub />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

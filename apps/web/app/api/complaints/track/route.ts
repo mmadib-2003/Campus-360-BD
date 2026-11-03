@@ -3,6 +3,9 @@ import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
+import { isSupabaseServerConfigured } from '@/lib/request-context';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -42,6 +45,15 @@ export async function POST(req: NextRequest) {
 
   if (!complaint) {
     return apiError('NOT_FOUND', 'No complaint found matching that tracking code.', 'এই ট্র্যাকিং কোডে কোনো অভিযোগ পাওয়া যায়নি।', 404);
+  }
+
+  if (!isSupabaseServerConfigured()) {
+    return apiError(
+      'SUPABASE_NOT_CONFIGURED',
+      'Server database credentials are not configured for this deployment.',
+      'এই ডিপ্লয়মেন্টে সার্ভার ডাটাবেস কনফিগার করা হয়নি।',
+      503
+    );
   }
 
   const supabase = createSupabaseRouteClient();
