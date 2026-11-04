@@ -36,3 +36,34 @@ assets; they are community-contributed Wikimedia Commons files.
 fallbacks used by the offline demo payload. They are only shown if a remote
 image fails to load and the gradient fallback is not enough; the remote
 Wikimedia URL is always preferred.
+
+## Expanded campus photography (18 additional universities)
+
+The home feed now shows authentic campus photographs for 24 public universities.
+These are the additional files (all served from Wikimedia Commons; each file
+page carries the authoritative author and licence):
+
+| University | Cover photograph |
+| --- | --- |
+| Islamic University, Bangladesh (IU) | [Islamic University Lake with Central Mosque View.jpg](https://commons.wikimedia.org/wiki/File:Islamic_University_Lake_with_Central_Mosque_View.jpg) |
+| Khulna University (KU) | [Khan Jahan Ali Hall.jpg](https://commons.wikimedia.org/wiki/File:Khan_Jahan_Ali_Hall.jpg) |
+| Jagannath University (JNU) | [Jagannath University Bird View.jpg](https://commons.wikimedia.org/wiki/File:Jagannath_University_Bird_View.jpg) |
+| Comilla University (COU) | [Comilla University campus building.jpg](https://commons.wikimedia.org/wiki/File:Comilla_University_campus_building.jpg) |
+| Begum Rokeya University, Rangpur (BRUR) | [Campus of Begum Rokeya University, Rangpur.jpg](https://commons.wikimedia.org/wiki/File:Campus_of_Begum_Rokeya_University,_Rangpur.jpg) |
+| Bangladesh University of Professionals (BUP) | [BUP Campus Aerial View 2.jpg](https://commons.wikimedia.org/wiki/File:BUP_Campus_Aerial_View_2.jpg) |
+| University of Barishal (BU) | [Barishal University Campus Front.jpg](https://commons.wikimedia.org/wiki/File:Barishal_University_Campus_Front.jpg) |
+| Jashore University of Science and Technology (JUST) | [Sir Jagadish Chandra Bose Academic Building, Jashore University of Science and Technology.jpg](https://commons.wikimedia.org/wiki/File:Sir_Jagadish_Chandra_Bose_Academic_Building,_Jashore_University_of_Science_and_Technology.jpg) |
+| Bangladesh Agricultural University (BAU) | [Bangladesh Agricultural University (BAU).jpg](https://commons.wikimedia.org/wiki/File:Bangladesh_Agricultural_University_(BAU).jpg) |
+| CUET | [CUET GATE.jpg](https://commons.wikimedia.org/wiki/File:CUET_GATE.jpg) |
+| KUET | [KUET Central field.jpg](https://commons.wikimedia.org/wiki/File:KUET_Central_field.jpg) |
+| RUET | [Rajshahi University of Engineering and Technology (RUET) Campus.jpg](https://commons.wikimedia.org/wiki/File:Rajshahi_University_of_Engineering_and_Technology_(RUET)_Campus.jpg) |
+| MBSTU | [Academic building at Mawlana Bhashani Science and Technology University 03.jpg](https://commons.wikimedia.org/wiki/File:Academic_building_at_Mawlana_Bhashani_Science_and_Technology_University_03.jpg) |
+| PSTU | [AdminBuilding.jpg](https://commons.wikimedia.org/wiki/File:AdminBuilding.jpg) |
+| NSTU | [Academic building-1, NSTU.jpg](https://commons.wikimedia.org/wiki/File:Academic_building-1,_NSTU.jpg) |
+| PUST | [PUST Campus.jpg](https://commons.wikimedia.org/wiki/File:PUST_Campus.jpg) |
+| BSMRAU | [BSMRAU Agri New Building.jpg](https://commons.wikimedia.org/wiki/File:BSMRAU_Agri_New_Building.jpg) |
+| SAU | [Sher-e-Bangla Agricultural University.jpg](https://commons.wikimedia.org/wiki/File:Sher-e-Bangla_Agricultural_University.jpg) |
+
+The institutional logos for these universities are likewise real files from
+Wikipedia/Wikimedia (see the `logo_url` values in `supabase/seed/seed.sql` and
+`supabase/migrations/0017_university_real_images_expanded.sql`).

@@ -369,3 +369,48 @@ describe('authentic campus imagery and one-click demo identities', () => {
     expect(demoData).toContain("'Demo#1234'");
   });
 });
+
+describe('expanded authentic campus imagery (24 universities)', () => {
+  const seed = read('supabase/seed/seed.sql');
+  const expanded = read('supabase/migrations/0017_university_real_images_expanded.sql');
+  const demoAuth = read('apps/web/lib/demo-auth.ts');
+
+  it('points 24 public universities at real Wikimedia files in both seed and migration', () => {
+    const expected = [
+      ['IU', 'Islamic_University_Lake_with_Central_Mosque_View.jpg'],
+      ['KU', 'Khan_Jahan_Ali_Hall.jpg'],
+      ['JNU', 'Jagannath_University_Bird_View.jpg'],
+      ['COU', 'Comilla_University_campus_building.jpg'],
+      ['BRUR', 'Campus_of_Begum_Rokeya_University%2C_Rangpur.jpg'],
+      ['BUP', 'BUP_Campus_Aerial_View_2.jpg'],
+      ['BU', 'Barishal_University_Campus_Front.jpg'],
+      ['JUST', 'Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg'],
+      ['BAU', 'Bangladesh_Agricultural_University_%28BAU%29.jpg'],
+      ['CUET', 'CUET_GATE.jpg'],
+      ['KUET', 'KUET_Central_field.jpg'],
+      ['RUET', 'Rajshahi_University_of_Engineering_and_Technology_%28RUET%29_Campus.jpg'],
+      ['MBSTU', 'Academic_building_at_Mawlana_Bhashani_Science_and_Technology_University_03.jpg'],
+      ['PSTU', 'AdminBuilding.jpg'],
+      ['NSTU', 'Academic_building-1%2C_NSTU.jpg'],
+      ['PUST', 'PUST_Campus.jpg'],
+      ['BSMRAU', 'BSMRAU_Agri_New_Building.jpg'],
+      ['SAU', 'Sher-e-Bangla_Agricultural_University.jpg'],
+    ] as const;
+    for (const [code, file] of expected) {
+      expect(seed, `${code} seed cover`).toContain(file);
+      expect(expanded, `${code} migration cover`).toContain(file);
+    }
+    // The offline preview payload must carry the same authentic files for the
+    // demo campuses it serves.
+    for (const file of [
+      'Jagannath_University_Bird_View.jpg',
+      'BUP_Campus_Aerial_View_2.jpg',
+      'Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg',
+      'KUET_Central_field.jpg',
+      'CUET_GATE.jpg',
+      'Bangladesh_Agricultural_University_%28BAU%29.jpg',
+    ]) {
+      expect(demoAuth, `demo payload ${file}`).toContain(file);
+    }
+  });
+});
