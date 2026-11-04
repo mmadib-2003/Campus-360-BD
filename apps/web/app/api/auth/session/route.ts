@@ -2,17 +2,34 @@
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { demoNextStep, readDemoSessionPayload } from '@/lib/demo-auth';
+import { demoFindUniversity } from '@/lib/modules/demo-data';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   if (!isSupabaseServerConfigured()) {
-    return apiError(
-      'SUPABASE_NOT_CONFIGURED',
-      'Server database credentials are not configured for this deployment.',
-      'এই ডিপ্লয়মেন্টে সার্ভার ডাটাবেস কনফিগার করা হয়নি।',
-      503
-    );
+    const demo = readDemoSessionPayload();
+    if (!demo) return apiSuccess({ authenticated: false, profile: null, roles: [], demo: true });
+    const university = demoFindUniversity(demo.universityId);
+    const role = demo.role === 'admin' ? 'UNIVERSITY_ADMIN' : demo.role === 'faculty' ? 'FACULTY' : demo.role === 'alumni' ? 'ALUMNI' : 'STUDENT';
+    return apiSuccess({
+      authenticated: true,
+      demo: true,
+      profile: {
+        id: `demo-user-${university?.code.toLowerCase()}-${demo.role}`,
+        university_id: demo.universityId,
+        email: demo.email,
+        full_name: demo.fullName,
+        student_id: demo.studentId,
+        trust_level: 'ID_VERIFIED',
+        universities: university
+          ? { code: university.code, name_en: university.name_en, name_bn: university.name_bn }
+          : null,
+      },
+      roles: [{ role, university_id: demo.universityId }],
+      nextStep: demoNextStep(demo.role),
+    });
   }
 
   const supabase = createSupabaseRouteClient();

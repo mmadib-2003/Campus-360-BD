@@ -23,6 +23,8 @@ import {
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
 import { formatBdt, timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 const KIND_LABEL: Record<string, string> = {
   SELL: 'For sale',
@@ -33,6 +35,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export default function MarketplacePage() {
   const session = useSession();
+  const { locale, t } = useUi();
   const [kindFilter, setKindFilter] = React.useState('ALL');
   const [categoryFilter, setCategoryFilter] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -120,9 +123,9 @@ export default function MarketplacePage() {
       <div className="space-y-6">
         <ModuleHeader
           icon="🛍️"
-          title="Campus Economy & Marketplace"
-          titleBn="ক্যাম্পাস ইকোনমি ও মার্কেটপ্লেস"
-          blurb="Buy, sell, rent or exchange used books, laptops, bicycles and lab equipment with safe campus-locker handovers."
+          title={t('Campus Economy & Marketplace')}
+          titleBn={t('Campus Economy & Marketplace')}
+          blurb={t('Buy, sell and rent verified student items with monitored campus handover points.')}
         />
         <SignInPrompt moduleName="the marketplace" />
       </div>
@@ -135,7 +138,7 @@ export default function MarketplacePage() {
         icon="🛍️"
         title="Campus Economy & Marketplace"
         titleBn="ক্যাম্পাস ইকোনমি ও মার্কেটপ্লেস"
-        blurb="Buy, sell, rent or exchange used books, laptops, bicycles and lab equipment. Every deal is handed over at a monitored campus pickup point or locker."
+        blurb={t('Buy, sell and rent verified student items with monitored campus handover points.')}
         live
         demo={listings.demo}
       >
@@ -178,13 +181,13 @@ export default function MarketplacePage() {
           {listings.loading ? (
             <SkeletonList rows={3} />
           ) : listings.error ? (
-            <EmptyState icon="⚠️" title="Could not load listings" description={listings.error} action={<Button onClick={listings.refresh}>Retry</Button>} />
+            <EmptyState icon="⚠️" title={t('No listings found')} description={listings.error} action={<Button onClick={listings.refresh}>{t('Loading…')}</Button>} />
           ) : listings.data.length === 0 ? (
             <EmptyState
               icon="🛍️"
-              title="No listings match your filters yet"
-              description="Be the first to post a book, laptop or bicycle for your campus."
-              action={<Button onClick={() => setCreateOpen(true)}>Post the first listing</Button>}
+              title={t('No listings found')}
+              description={t('Be the first to post in this category.')}
+              action={<Button onClick={() => setCreateOpen(true)}>{t('New listing')}</Button>}
             />
           ) : (
             listings.data.map((listing) => {
@@ -196,6 +199,7 @@ export default function MarketplacePage() {
                     <div className="min-w-0 space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge tone="emerald">{KIND_LABEL[String(listing.kind)] ?? listing.kind}</Badge>
+                        <CampusBadge universityId={listing.university_id} />
                         <Badge tone={statusTone(listing.status)}>{String(listing.status)}</Badge>
                         {listing.condition && <Badge tone="slate">{String(listing.condition).replace('_', ' ')}</Badge>}
                       </div>
@@ -205,7 +209,7 @@ export default function MarketplacePage() {
                         <span>👤 {seller.full_name ?? 'Student seller'}</span>
                         {seller.trust_level && <span>✓ {seller.trust_level}</span>}
                         <span>🕒 {timeAgo(listing.created_at)}</span>
-                        {pickup.name_en && <span>📦 {pickup.name_en}</span>}
+                        {pickup.name_en && <span>📦 {locale === 'bn' ? pickup.name_bn ?? pickup.name_en : pickup.name_en}</span>}
                       </div>
                     </div>
                     <div className="text-right shrink-0 space-y-2">
@@ -215,7 +219,7 @@ export default function MarketplacePage() {
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <Button size="sm" variant="secondary" onClick={() => setActiveListing(listing)}>
-                          💬 Chat with seller
+                          {t('Contact')}
                         </Button>
                         <Button
                           size="sm"
@@ -225,7 +229,7 @@ export default function MarketplacePage() {
                             setCheckoutOpen(true);
                           }}
                         >
-                          Reserve & pick locker
+                          {t('Reserve')}
                         </Button>
                       </div>
                     </div>
@@ -238,7 +242,7 @@ export default function MarketplacePage() {
 
         <div className="space-y-4">
           <Card className="p-4 space-y-2">
-            <SectionHeader icon="📦" title="Campus Pickup Points" subtitle="Monitored lockers & security desks" />
+            <SectionHeader icon="📦" title={t('Campus pickup point')} subtitle={t('Campus pickup point')} />
             <ul className="space-y-2">
               {pickupPoints.data.map((point) => (
                 <li key={String(point.id)} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs">
@@ -248,14 +252,14 @@ export default function MarketplacePage() {
               ))}
               {pickupPoints.data.length === 0 && (
                 <li className="text-xs text-slate-400">
-                  Pickup points appear here once your university admin publishes them.
+                  {t('No listings found')}
                 </li>
               )}
             </ul>
           </Card>
 
           <Card className="p-4 space-y-2">
-            <SectionHeader icon="🧾" title="My orders" subtitle="Realtime handover status" />
+            <SectionHeader icon="🧾" title={t('My orders')} subtitle={t('My listings')} />
             {orders.data.length === 0 ? (
               <p className="text-xs text-slate-400">No orders yet. Reserve a listing to see live status here.</p>
             ) : (
@@ -278,7 +282,7 @@ export default function MarketplacePage() {
           <Card className="p-4 text-xs space-y-1.5">
             <div className="font-bold text-sm">Safety first 🤝</div>
             <p className="text-slate-500 dark:text-slate-400">
-              Always meet at a campus pickup point, inspect the item before paying, and keep the conversation inside
+              {t('Your data stays inside your university tenant.')}
               Campus360 so moderators can help if something goes wrong.
             </p>
             <Link href="/trust" className="text-emerald-500 font-semibold">
@@ -288,7 +292,7 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Post a marketplace listing" wide>
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('New listing')} wide>
         <ModuleForm
           moduleKey="marketplace"
           options={{ pickup_point_id: pickupOptions }}
@@ -302,7 +306,7 @@ export default function MarketplacePage() {
       <Modal
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
-        title={`Reserve: ${checkoutListing?.title ?? ''}`}
+        title={`${t('Reserve')}: ${checkoutListing?.title ?? ''}`}
         footer={
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-slate-400">Safe handover at a monitored campus point.</span>
@@ -313,12 +317,12 @@ export default function MarketplacePage() {
         }
       >
         <div className="space-y-3">
-          <Field label="Campus pickup point / locker" hint="Required for every transaction.">
+          <Field label={t('Campus pickup point')} hint={t('Campus pickup point')}>
             <Select
               value={pickupPointId}
               onChange={(event) => setPickupPointId(event.target.value)}
               options={pickupOptions}
-              placeholder="Select a pickup point"
+              placeholder={t('Campus pickup point')}
             />
           </Field>
           <Field label="Preferred handover window" hint="e.g. Today 5–7 PM, or after Friday prayer">
@@ -329,7 +333,7 @@ export default function MarketplacePage() {
           </Field>
           <div className="p-3 rounded-xl bg-emerald-500/10 text-[11px] text-emerald-700 dark:text-emerald-300">
             Amount payable on handover: <strong>{formatBdt(checkoutListing?.price_bdt)}</strong>. Campus360 never holds
-            your money — pay only after inspecting the item at the pickup point.
+            {t('Your data stays inside your university tenant.')}
           </div>
         </div>
       </Modal>
@@ -351,6 +355,7 @@ function ListingChat({
   onClose: () => void;
 }) {
   const session = useSession();
+  const { t } = useUi();
   const [draft, setDraft] = React.useState('');
   const messages = useRealtimeModuleList('marketplace-messages', {
     filters: { listing_id: String(listing.id) },
@@ -387,7 +392,7 @@ function ListingChat({
   }
 
   return (
-    <Modal open onClose={onClose} title={`Chat — ${listing.title}`}>
+    <Modal open onClose={onClose} title={`${t('Contact')} — ${listing.title}`}>
       <div className="space-y-3">
         <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
           {visible.length === 0 && (

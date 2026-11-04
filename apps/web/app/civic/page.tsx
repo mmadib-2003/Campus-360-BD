@@ -24,6 +24,8 @@ import {
 import { useApiList, useRealtimeTable, useSession, useModuleMutation, Row } from '@/lib/modules/client';
 import { trySupabaseBrowser } from '@/lib/supabase-browser';
 import { timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { demoUpdate } from '@/lib/modules/demo-data';
 
 const CATEGORIES = [
   'INFRASTRUCTURE',
@@ -37,8 +39,36 @@ const CATEGORIES = [
 
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
+const CATEGORY_LABELS: Record<string, string> = {
+  INFRASTRUCTURE: 'Infrastructure',
+  SECURITY: 'Security',
+  TRANSPORT: 'Transport',
+  HALL_RESIDENCE: 'Hall / Residence',
+  HEALTH: 'Health',
+  ACADEMIC: 'Academic',
+  OTHER: 'Other',
+};
+
+const SEVERITY_LABELS: Record<string, string> = {
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+  CRITICAL: 'Critical',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  SUBMITTED: 'Submitted',
+  ACKNOWLEDGED: 'Acknowledged',
+  IN_REVIEW: 'In Review',
+  ACTION_TAKEN: 'Action Taken',
+  RESOLVED: 'Resolved',
+  CLOSED: 'Closed',
+  REJECTED_WITH_REASON: 'Rejected',
+};
+
 export default function CivicPage() {
   const session = useSession();
+  const { t } = useUi();
   const [category, setCategory] = React.useState('ALL');
   const [severity, setSeverity] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -100,7 +130,20 @@ export default function CivicPage() {
   async function toggleUpvote(ticket: Row) {
     const id = String(ticket.id);
     if (upvoted[id]) {
-      toast.show('You already upvoted this issue.', 'amber');
+      toast.show(t('You already upvoted this issue.'), 'amber');
+      return;
+    }
+    if (session.demo) {
+      const updated = demoUpdate('complaints_public', id, {
+        upvotes_count: Number(ticket.upvotes_count ?? 0) + 1,
+      });
+      setUpvoted((prev) => ({ ...prev, [id]: true }));
+      if (updated) {
+        tickets.setData((prev) =>
+          prev.map((item) => (String(item.id) === id ? { ...item, ...updated } : item))
+        );
+      }
+      toast.show(t('Upvoted — this pushes the issue up the admin queue.'));
       return;
     }
     const result = await upvoteMutation.create({ complaint_id: id });
@@ -111,15 +154,15 @@ export default function CivicPage() {
           String(item.id) === id ? { ...item, upvotes_count: Number(item.upvotes_count ?? 0) + 1 } : item
         )
       );
-      toast.show('Upvoted — this pushes the issue up the admin queue.');
+      toast.show(t('Upvoted — this pushes the issue up the admin queue.'));
       return;
     }
     if (result.error?.toLowerCase().includes('already')) {
       setUpvoted((prev) => ({ ...prev, [id]: true }));
-      toast.show('You already upvoted this issue.', 'amber');
+      toast.show(t('You already upvoted this issue.'), 'amber');
       return;
     }
-    toast.show(result.error ?? 'Could not upvote.', 'rose');
+    toast.show(result.error ?? t('Could not upvote.'), 'rose');
   }
 
   async function submitTicket(event: React.FormEvent) {
@@ -144,7 +187,7 @@ export default function CivicPage() {
         });
         setCreated({ trackingCode: code });
         tickets.refresh();
-        toast.show(`Ticket submitted (preview). Tracking code ${code}`);
+        toast.show(`${t('Case Filed Successfully')} — ${code}`);
         setCreateOpen(false);
         return;
       }
@@ -165,7 +208,7 @@ export default function CivicPage() {
       });
       const payload = await res.json();
       if (!payload.success) {
-        toast.show(payload?.error?.message_en ?? 'Could not submit ticket.', 'rose');
+        toast.show(payload?.error?.message_en ?? t('Could not submit ticket.'), 'rose');
         return;
       }
       setCreated({
@@ -174,7 +217,7 @@ export default function CivicPage() {
       });
       setCreateOpen(false);
       tickets.refresh();
-      toast.show('Ticket submitted to the administration.');
+      toast.show(t('Case Filed Successfully'));
     } catch (error) {
       toast.show(error instanceof Error ? error.message : 'Network error', 'rose');
     } finally {
@@ -185,7 +228,7 @@ export default function CivicPage() {
   async function uploadEvidence(file: File) {
     const supabase = trySupabaseBrowser();
     if (!supabase || session.demo) {
-      toast.show('Photo upload needs a connected Supabase project. Add the link manually.', 'amber');
+      toast.show(t('Photo evidence'), 'amber');
       return;
     }
     const path = `${session.profile?.university_id ?? 'campus'}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]+/g, '-')}`;
@@ -199,7 +242,7 @@ export default function CivicPage() {
       ...prev,
       evidence_urls: [prev.evidence_urls, data.publicUrl].filter(Boolean).join(', '),
     }));
-    toast.show('Photo attached.');
+    toast.show(t('Photo evidence'));
   }
 
   if (!session.loading && !session.authenticated) {
@@ -220,20 +263,20 @@ export default function CivicPage() {
     <div className="space-y-6">
       <ModuleHeader
         icon="🛡️"
-        title="Civic Ticketing & Complaint Box"
-        titleBn="সিভিক টিকিটিং ও অভিযোগ বক্স"
-        blurb="Report campus infrastructure or security issues with photo evidence. Upvotes decide the priority queue, and the moment an administrator resolves a ticket the status updates here — no refresh needed."
+        title={t('Civic Ticketing & Complaint Box')}
+        titleBn={t('Civic Ticketing & Complaint Box')}
+        blurb={t('Report campus infrastructure or security issues with photo evidence. Upvotes decide the priority queue, and the moment an administrator resolves a ticket the status updates here — no refresh needed.')}
         live
         demo={tickets.demo}
       >
-        <Button onClick={() => setCreateOpen(true)}>+ Report an issue</Button>
+        <Button onClick={() => setCreateOpen(true)}>+ {t('Report an issue')}</Button>
       </ModuleHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Open tickets" value={stats.open} hint="Awaiting action" tone="amber" />
-        <Stat label="Resolved" value={stats.resolved} hint="Closed by admin" />
-        <Stat label="Critical" value={stats.critical} hint="Escalated priority" tone="rose" />
-        <Stat label="Citizen upvotes" value={stats.upvotes} hint="Priority signal" />
+        <Stat label={t('Open tickets')} value={stats.open} hint={t('In queue')} tone="amber" />
+        <Stat label={t('Resolved')} value={stats.resolved} hint={t('Resolved')} />
+        <Stat label={t('Critical')} value={stats.critical} hint={t('Needs escalation')} tone="rose" />
+        <Stat label={t('Citizen upvotes')} value={stats.upvotes} hint={t('Upvotes')} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -241,44 +284,44 @@ export default function CivicPage() {
           href="/admin/console"
           className="px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
         >
-          🏛️ Admin resolution console
+          🏛️ {t('Admin resolution console')}
         </Link>
         <Link
           href="/complaints"
           className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 dark:border-slate-700"
         >
-          Formal grievance (SLA tracked)
+          {t('Formal grievance (SLA tracked)')}
         </Link>
         <Link
           href="/complaints/track"
           className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 dark:border-slate-700"
         >
-          Track a case
+          {t('Track a case')}
         </Link>
       </div>
 
       <Card className="p-4 space-y-3">
         <div className="flex flex-col md:flex-row gap-2">
           <Input
-            placeholder="Search tickets by title or tracking code…"
+            placeholder={t('Search tickets by title or tracking code…')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            aria-label="Search tickets"
+            aria-label={t('Search')}
           />
           <Select
-            aria-label="Severity"
+            aria-label={t('Severity')}
             value={severity}
             onChange={(event) => setSeverity(event.target.value)}
-            placeholder="All severities"
+            placeholder={t('All severities')}
             className="md:max-w-[200px]"
-            options={SEVERITIES.map((value) => ({ value, label: value }))}
+            options={SEVERITIES.map((value) => ({ value, label: t(SEVERITY_LABELS[value]) }))}
           />
         </div>
         <FilterChips
-          label="Category"
+          label={t('Category')}
           value={category}
           onChange={setCategory}
-          options={CATEGORIES.map((value) => ({ value, label: value.replace('_', ' ') }))}
+          options={CATEGORIES.map((value) => ({ value, label: t(CATEGORY_LABELS[value]) }))}
         />
       </Card>
 
@@ -287,9 +330,9 @@ export default function CivicPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon="🛠️"
-          title="No public tickets match your filters"
-          description="Report a broken light, unsafe walkway or waterlogging issue — attach a photo so the administration can act faster."
-          action={<Button onClick={() => setCreateOpen(true)}>Report the first issue</Button>}
+          title={t('No public tickets match your filters')}
+          description={t('Report campus infrastructure or security issues with photo evidence. Upvotes decide the priority queue, and the moment an administrator resolves a ticket the status updates here — no refresh needed.')}
+          action={<Button onClick={() => setCreateOpen(true)}>{t('Report the first issue')}</Button>}
         />
       ) : (
         <div className="space-y-3">
@@ -317,10 +360,16 @@ export default function CivicPage() {
                   </div>
                   <div className="min-w-0 flex-1 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={statusTone(ticket.status)}>{String(ticket.status).replace(/_/g, ' ')}</Badge>
-                      <Badge tone={statusTone(ticket.severity)}>{String(ticket.severity)}</Badge>
-                      <Badge tone="slate">{String(ticket.category).replace('_', ' ')}</Badge>
+                      <Badge tone={statusTone(ticket.status)}>{t(STATUS_LABELS[String(ticket.status)] ?? String(ticket.status))}</Badge>
+                      <Badge tone={statusTone(ticket.severity)}>{t(SEVERITY_LABELS[String(ticket.severity)] ?? String(ticket.severity))}</Badge>
+                      <Badge tone="slate">{t(CATEGORY_LABELS[String(ticket.category)] ?? String(ticket.category))}</Badge>
                       <span className="text-[11px] font-mono text-slate-400">{ticket.tracking_code}</span>
+                      <Link
+                        href={`/track/${encodeURIComponent(String(ticket.tracking_code ?? ''))}`}
+                        className="ml-auto text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                      >
+                        {t('Track')} →
+                      </Link>
                     </div>
                     <h3 className="font-bold text-sm">{ticket.title}</h3>
                     {ticket.location_hint && (
@@ -342,61 +391,60 @@ export default function CivicPage() {
       <Card className="p-4">
         <SectionHeader
           icon="ℹ️"
-          title="How Civic Ticketing differs from a formal grievance"
-          subtitle="Civic tickets are public, upvote-driven maintenance/security reports."
+          title={t('How Civic Ticketing differs from a formal grievance')}
+          subtitle={t('Civic tickets are public, upvote-driven maintenance/security reports.')}
         />
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-          Anything involving harassment, ragging or discrimination belongs in the SLA-tracked{' '}
-          <Link href="/complaints" className="text-emerald-500 font-semibold">
-            formal grievance system
-          </Link>
-          , where anonymity and escalation are enforced by the database.
+          {t('Anything involving harassment, ragging or discrimination belongs in the SLA-tracked formal grievance system, where anonymity and escalation are enforced by the database.')}
         </p>
+        <Link href="/complaints" className="inline-block mt-1 text-xs text-emerald-500 font-semibold">
+          {t('Formal grievance (SLA tracked)')} →
+        </Link>
       </Card>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Report a campus issue" wide>
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('Report a campus issue')} wide>
         <form onSubmit={submitTicket} className="space-y-3">
-          <Field label="Issue title">
+          <Field label={t('Issue title')}>
             <Input
               required
               value={form.title}
               onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
-              placeholder="Broken streetlight outside the new hall"
+              placeholder={t('Location on campus')}
             />
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Category">
+            <Field label={t('Category')}>
               <Select
                 value={form.category}
                 onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}
-                options={CATEGORIES.map((value) => ({ value, label: value.replace('_', ' ') }))}
+                options={CATEGORIES.map((value) => ({ value, label: t(CATEGORY_LABELS[value]) }))}
               />
             </Field>
-            <Field label="Severity">
+            <Field label={t('Severity')}>
               <Select
                 value={form.severity}
                 onChange={(event) => setForm((prev) => ({ ...prev, severity: event.target.value }))}
-                options={SEVERITIES.map((value) => ({ value, label: value }))}
+                options={SEVERITIES.map((value) => ({ value, label: t(SEVERITY_LABELS[value]) }))}
               />
             </Field>
           </div>
-          <Field label="What is happening?">
+          <Field label={t('What is happening?')}>
             <textarea
               required
               value={form.description}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
               className="w-full rounded-xl px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 min-h-[110px]"
-              placeholder="Describe the problem, when it started and who it affects."
+              placeholder={t('What is happening?')}
             />
           </Field>
-          <Field label="Location on campus">
+          <Field label={t('Location on campus')}>
             <Input
               value={form.location_hint}
               onChange={(event) => setForm((prev) => ({ ...prev, location_hint: event.target.value }))}
-              placeholder="Between the new hall and the central field"
+              placeholder={t('Location on campus')}
             />
           </Field>
-          <Field label="Photo evidence" hint="JPG/PNG up to 10 MB — stored in Supabase Storage">
+          <Field label={t('Photo evidence')} hint={t('Optional — adds a second verification factor')}>
             <input
               type="file"
               accept="image/*"
@@ -412,21 +460,20 @@ export default function CivicPage() {
           )}
           <div className="flex items-center gap-2">
             <Button type="submit" loading={submitting}>
-              Submit ticket
+              {t('Submit ticket')}
             </Button>
             <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
-              Cancel
+              {t('Cancel')}
             </Button>
           </div>
         </form>
       </Modal>
 
       {created && (
-        <Modal open onClose={() => setCreated(null)} title="Ticket submitted">
+        <Modal open onClose={() => setCreated(null)} title={t('Case Filed Successfully')}>
           <div className="space-y-3 text-sm">
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Keep this tracking code — you can follow the status live, and the administration routes it to the
-              responsible unit with an SLA timer.
+              {t('Paste your ticket ID to see the live status timeline.')}
             </p>
             <div className="p-3 rounded-xl bg-emerald-500/10 font-mono text-center text-emerald-600 dark:text-emerald-300 font-bold">
               {created.trackingCode}
@@ -436,10 +483,10 @@ export default function CivicPage() {
                 href={`/complaints/track?code=${created.trackingCode ?? ''}`}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
               >
-                Track this ticket
+                {t('Track a case')}
               </Link>
               <Button variant="secondary" onClick={() => setCreated(null)}>
-                Done
+                {t('Continue')}
               </Button>
             </div>
           </div>

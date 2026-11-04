@@ -20,11 +20,14 @@ import {
 } from '@/components/modules/ui';
 import { useApiList, useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
 import { timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { demoUpdate } from '@/lib/modules/demo-data';
 
 const RESOLUTION_STATUSES = ['ACKNOWLEDGED', 'IN_REVIEW', 'ACTION_TAKEN', 'RESOLVED', 'CLOSED', 'REJECTED_WITH_REASON'];
 
 export default function AdminConsolePage() {
   const session = useSession();
+  const { t } = useUi();
   const tickets = useApiList('/api/civic/tickets', {
     query: { limit: 100, scope: 'admin' },
     table: 'complaints_public',
@@ -39,6 +42,39 @@ export default function AdminConsolePage() {
   const [reply, setReply] = React.useState('');
   const [pending, setPending] = React.useState(false);
   const toast = useToast();
+  const [idReviews, setIdReviews] = React.useState<Array<Record<string, any>>>([]);
+
+  React.useEffect(() => {
+    function readReviews() {
+      try {
+        const raw = window.localStorage.getItem('campus360.demo.idverifications');
+        setIdReviews(raw ? (JSON.parse(raw) as Array<Record<string, any>>) : []);
+      } catch {
+        setIdReviews([]);
+      }
+    }
+    readReviews();
+    window.addEventListener('storage', readReviews);
+    window.addEventListener('campus360:demo-store', readReviews);
+    return () => {
+      window.removeEventListener('storage', readReviews);
+      window.removeEventListener('campus360:demo-store', readReviews);
+    };
+  }, []);
+
+  function reviewId(id: string, status: 'VERIFIED' | 'MANUAL_REVIEW') {
+    try {
+      const raw = window.localStorage.getItem('campus360.demo.idverifications');
+      const rows = raw ? (JSON.parse(raw) as Array<Record<string, any>>) : [];
+      const next = rows.map((row) => (String(row.id) === String(id) ? { ...row, reviewStatus: status } : row));
+      window.localStorage.setItem('campus360.demo.idverifications', JSON.stringify(next));
+      setIdReviews(next);
+      window.dispatchEvent(new CustomEvent('campus360:demo-store'));
+      toast.show(status === 'VERIFIED' ? t('Verified') : t('Rejected'));
+    } catch {
+      toast.show(t('Manual review'), 'rose');
+    }
+  }
 
   const stats = React.useMemo(() => {
     const open = tickets.data.filter((ticket) => !['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
@@ -52,15 +88,19 @@ export default function AdminConsolePage() {
     setPending(true);
     try {
       if (session.demo) {
+        const updated = demoUpdate('complaints_public', String(activeTicket.id), {
+          status,
+          resolution_summary: summary || activeTicket.resolution_summary,
+        });
         tickets.setData((prev) =>
           prev.map((item) =>
-            String(item.id) === String(activeTicket.id)
-              ? { ...item, status, resolution_summary: summary || item.resolution_summary }
-              : item
+            String(item.id) === String(activeTicket.id) ? { ...item, ...(updated ?? {}) } : item
           )
         );
-        toast.show('Status updated (preview mode).');
+        tickets.refresh();
+        toast.show(t('Status updated (preview mode).'));
         setActiveTicket(null);
+        setSummary('');
         return;
       }
 
@@ -75,13 +115,13 @@ export default function AdminConsolePage() {
       });
       const payload = await res.json();
       if (!payload.success) {
-        toast.show(payload?.error?.message_en ?? 'Update denied.', 'rose');
+        toast.show(payload?.error?.message_en ?? t('Update denied.'), 'rose');
         return;
       }
       tickets.setData((prev) =>
         prev.map((item) => (String(item.id) === String(activeTicket.id) ? { ...item, ...payload.data } : item))
       );
-      toast.show('Ticket updated — the student was notified in real time.');
+      toast.show(t('Ticket updated — the student was notified in real time.'));
       setActiveTicket(null);
       setSummary('');
     } catch (error) {
@@ -98,9 +138,9 @@ export default function AdminConsolePage() {
     setPending(false);
     if (result.ok) {
       setReply('');
-      toast.show('Reply sent to the student.');
+      toast.show(t('Ticket updated — the student was notified in real time.'));
     } else {
-      toast.show(result.error ?? 'Could not reply.', 'rose');
+      toast.show(result.error ?? t('Could not reply.'), 'rose');
     }
   }
 
@@ -120,9 +160,14 @@ export default function AdminConsolePage() {
             (only <code>UNIVERSITY_ADMIN</code>, <code>GOVERNING_BODY</code> and <code>SUPER_ADMIN</code> roles can
             update tickets).
           </p>
-          <Link href="/signin" className="inline-block px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
-            Sign in
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/admin/login" className="inline-block px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+              {t('Admin Login')}
+            </Link>
+            <Link href="/signin" className="inline-block px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 dark:border-slate-700">
+              {t('Sign In')}
+            </Link>
+          </div>
         </Card>
       </div>
     );
@@ -132,30 +177,84 @@ export default function AdminConsolePage() {
     <div className="space-y-6">
       <ModuleHeader
         icon="🏛️"
-        title="Administration Console"
-        titleBn="প্রশাসনিক কনসোল"
-        blurb="Live civic-ticket queue, dispute support and moderation. Every status change is written to the immutable audit log and pushed to the reporting student in real time."
+        title={t('Administration Console')}
+        titleBn={t('Administration Console')}
+        blurb={t('Live civic-ticket queue, dispute support and moderation. Every status change is written to the immutable audit log and pushed to the reporting student in real time.')}
         live
         demo={tickets.demo}
       >
         <Badge tone="emerald">{session.profile?.universities?.code ?? 'CAMPUS'}</Badge>
-        <Badge tone="teal">{session.isAdmin ? 'ADMIN' : 'LIMITED'}</Badge>
+        <Badge tone="teal">{session.isAdmin ? t('Admin') : t('Unverified')}</Badge>
       </ModuleHeader>
 
       {!session.isAdmin && (
         <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300">
-          Your account has student-level permissions. The database will reject ticket mutations, but you can still view
+          {t('Your account has student-level permissions. The database will reject ticket mutations, but you can still view the queue for transparency. Ask your university admin to grant GOVERNING_BODY or UNIVERSITY_ADMIN.')} The database will reject ticket mutations, but you can still view
           the queue for transparency. Ask your university admin to grant <code>GOVERNING_BODY</code> or{' '}
           <code>UNIVERSITY_ADMIN</code>.
         </div>
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Open tickets" value={stats.open} tone="amber" hint="In queue" />
-        <Stat label="SLA breached" value={stats.breached} tone="rose" hint="Needs escalation" />
-        <Stat label="Critical" value={stats.critical} tone="rose" hint="Handle first" />
-        <Stat label="Total this campus" value={stats.total} hint="All time" />
+        <Stat label={t('Open tickets')} value={stats.open} tone="amber" hint={t('In queue')} />
+        <Stat label={t('SLA breached')} value={stats.breached} tone="rose" hint={t('Needs escalation')} />
+        <Stat label={t('Critical')} value={stats.critical} tone="rose" hint={t('Handle first')} />
+        <Stat label={t('Total this campus')} value={stats.total} hint={t('All time')} />
       </div>
+
+      <section className="space-y-3">
+        <SectionHeader
+          icon="🪪"
+          title={t('ID verification review queue')}
+          subtitle={t('Optional — adds a second verification factor')}
+        />
+        {idReviews.length === 0 ? (
+          <Card className="p-4 text-xs text-slate-500">{t('No submissions waiting for review.')}</Card>
+        ) : (
+          <div className="space-y-2">
+            {idReviews.map((review) => (
+              <Card key={String(review.id)} className="p-3 flex flex-wrap items-center gap-3 text-xs">
+                <span className="font-mono font-semibold">{String(review.student_id_number ?? '—')}</span>
+                <span className="text-slate-500">{String(review.name ?? '—')}</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">
+                  {String(review.university_code ?? '')} • {Number(review.confidence ?? 0)}%
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-full font-semibold ${
+                    review.reviewStatus === 'VERIFIED'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+                      : review.reviewStatus === 'MANUAL_REVIEW'
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  {review.reviewStatus === 'VERIFIED'
+                    ? t('Verified')
+                    : review.reviewStatus === 'MANUAL_REVIEW'
+                      ? t('Manual review')
+                      : t('Pending review')}
+                </span>
+                <div className="ml-auto flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => reviewId(String(review.id), 'VERIFIED')}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold"
+                  >
+                    {t('Approve')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => reviewId(String(review.id), 'MANUAL_REVIEW')}
+                    className="px-3 py-1.5 rounded-lg border border-amber-500/40 text-amber-600 dark:text-amber-300 font-semibold"
+                  >
+                    {t('Reject')}
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="space-y-3">
         <SectionHeader icon="🎫" title="Civic ticket queue" subtitle="Sorted by most recent activity" />

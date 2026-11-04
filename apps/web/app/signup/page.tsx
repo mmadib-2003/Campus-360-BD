@@ -1,167 +1,293 @@
-// apps/web/app/signup/page.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useUi } from '@/lib/i18n-client';
+import { UniversityCombobox, type UniversityOption } from '@/components/auth/UniversityCombobox';
 
-interface UniversityOption {
-  id: string;
-  code: string;
-  name_en: string;
-  name_bn: string;
-  category: string;
-  university_email_domains: { domain: string; is_primary: boolean }[];
-}
+type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
+
+const ROLES: Array<{ value: DemoRole; icon: string; key: string }> = [
+  { value: 'student', icon: '🎓', key: 'Student' },
+  { value: 'faculty', icon: '🏫', key: 'Faculty / Staff' },
+  { value: 'alumni', icon: '🤝', key: 'Alumni' },
+  { value: 'admin', icon: '🏛️', key: 'University Admin' },
+];
 
 export default function SignUpPage() {
   const router = useRouter();
-  const [universities, setUniversities] = useState<UniversityOption[]>([]);
-  const [universityId, setUniversityId] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [studentId, setStudentId] = useState('');
-  const [email, setEmail] = useState('');
-  const [consentTerms, setConsentTerms] = useState(false);
-  const [consentPrivacy, setConsentPrivacy] = useState(false);
-  const [consentGuidelines, setConsentGuidelines] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const { locale, t } = useUi();
+  const [universities, setUniversities] = React.useState<UniversityOption[]>([]);
+  const [loadingUniversities, setLoadingUniversities] = React.useState(true);
+  const [role, setRole] = React.useState<DemoRole | ''>('');
+  const [universityId, setUniversityId] = React.useState('');
+  const [fullName, setFullName] = React.useState('');
+  const [studentId, setStudentId] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [consentTerms, setConsentTerms] = React.useState(false);
+  const [consentPrivacy, setConsentPrivacy] = React.useState(false);
+  const [consentGuidelines, setConsentGuidelines] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    let cancelled = false;
     fetch('/api/universities')
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          setUniversities(res.data);
-          if (res.data[0]) setUniversityId(res.data[0].id);
+      .then((response) => response.json())
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload?.success && Array.isArray(payload.data)) {
+          setUniversities(payload.data as UniversityOption[]);
         }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoadingUniversities(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const selectedUniv = universities.find((u) => u.id === universityId);
+  const selectedUniversity = universities.find((university) => university.id === universityId);
+  const emailDomain = email.includes('@') ? email.split('@')[1]?.toLowerCase() ?? '' : '';
+  const domainApproved = Boolean(
+    selectedUniversity?.university_email_domains?.some((domain) => domain.domain.toLowerCase() === emailDomain)
+  );
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setErrorMsg(null);
 
+    if (!role) return setErrorMsg(t('Select your role to continue'));
+    if (!universityId) return setErrorMsg(t('Select your university to continue'));
+    if (!fullName.trim()) return setErrorMsg(t('Enter your full name'));
+    if (!studentId.trim()) return setErrorMsg(t('Enter your student ID'));
+    if (!email.trim()) return setErrorMsg(t('Enter your university email'));
+    if (!domainApproved) return setErrorMsg(t('This email domain is not approved for the selected university.'));
     if (!consentTerms || !consentPrivacy || !consentGuidelines) {
-      setErrorMsg('Please accept Terms, Privacy Policy, and Community Guidelines. / সকল শর্তাবলীতে সম্মতি দিন।');
-      return;
+      return setErrorMsg(t('Please accept Terms, Privacy Policy, and Community Guidelines.'));
     }
 
     setSubmitting(true);
-    const res = await fetch('/api/auth/request-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        universityId,
-        signupPayload: { fullName, studentId },
-      }),
-    });
-    const payload = await res.json();
-    setSubmitting(false);
-
-    if (!payload.success) {
-      setErrorMsg(`${payload.error?.message_en} / ${payload.error?.message_bn}`);
-      return;
+    try {
+      const response = await fetch('/api/auth/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          universityId,
+          role,
+          signupPayload: { fullName, studentId, role },
+        }),
+      });
+      const payload = await response.json();
+      if (!payload.success) {
+        setErrorMsg(payload?.error?.message_en ?? t('Verification failed'));
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(
+          'campus360.signup',
+          JSON.stringify({
+            email,
+            universityId: payload.data?.universityId ?? universityId,
+            role,
+            fullName,
+            studentId,
+            demoCode: payload.data?.demoCode ?? null,
+            demo: Boolean(payload.data?.demo),
+          })
+        );
+      }
+      router.push(`/verify-email?email=${encodeURIComponent(email)}&role=${role}`);
+    } catch {
+      setErrorMsg(t('Verification failed'));
+    } finally {
+      setSubmitting(false);
     }
-
-    router.push(`/verify-email?email=${encodeURIComponent(email)}`);
   }
 
   return (
-    <div className="max-w-xl mx-auto my-10 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-      <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-        Join Your Campus / আপনার ক্যাম্পাসে যুক্ত হোন
-      </h1>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-        Strict institutional email verification across all Bangladesh public universities.
-      </p>
+    <div className="max-w-2xl mx-auto my-8 space-y-5">
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{t('Join Your Campus')}</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('Create your verified campus account')}</p>
+          </div>
+          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px] font-semibold">
+            {universities.length || 12}+ {t('Public University')}
+          </span>
+        </div>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4 text-sm">
-        <div>
-          <label className="block font-medium mb-1">Public University / পাবলিক বিশ্ববিদ্যালয়</label>
-          <select
-            value={universityId}
-            onChange={(e) => setUniversityId(e.target.value)}
-            className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
-          >
-            {universities.map((u) => (
-              <option key={u.id} value={u.id}>
-                [{u.code}] {u.name_en} — {u.name_bn}
-              </option>
-            ))}
-          </select>
-          {selectedUniv && (
-            <p className="text-xs text-emerald-500 mt-1">
-              Approved domains:{' '}
-              {selectedUniv.university_email_domains.map((d) => `@${d.domain}`).join(', ')}
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5 text-sm">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">{t('I am a')}</span>
+              <span className="text-[11px] text-slate-400">1 / 3</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {ROLES.map((option) => {
+                const active = role === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setRole(option.value)}
+                    aria-pressed={active}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      active
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-emerald-500/40'
+                    }`}
+                  >
+                    <span className="text-base" aria-hidden>
+                      {option.icon}
+                    </span>
+                    <span className="block text-xs font-semibold mt-1">{t(option.key)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {role === 'admin' && (
+              <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-300">
+                {t('Admin accounts are verified through the institution')}{' '}
+                <Link href="/admin/login" className="font-semibold underline">
+                  {t('Go to admin login')}
+                </Link>
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">{t('Public University')}</span>
+              <span className="text-[11px] text-slate-400">2 / 3</span>
+            </div>
+            {loadingUniversities ? (
+              <div className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ) : (
+              <UniversityCombobox
+                universities={universities}
+                value={universityId}
+                onChange={setUniversityId}
+                label={t('Public University')}
+                placeholder={t('Search university by name, code or city…')}
+                hint={t('Type to search — try “Dhaka” or “BUET”')}
+                invalid={Boolean(errorMsg && !universityId)}
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium mb-1" htmlFor="signup-name">
+                {t('Full Name')}
+              </label>
+              <input
+                id="signup-name"
+                required
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder={locale === 'bn' ? 'নুসরাত জাহান' : 'Nusrat Jahan'}
+                className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1" htmlFor="signup-student-id">
+                {t('Student ID')}
+              </label>
+              <input
+                id="signup-student-id"
+                required
+                value={studentId}
+                onChange={(event) => setStudentId(event.target.value)}
+                placeholder={selectedUniversity ? `${selectedUniversity.code}-2026-12345` : 'DU-2026-12345'}
+                className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1" htmlFor="signup-email">
+              {t('University Email')}
+            </label>
+            <input
+              id="signup-email"
+              required
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder={
+                selectedUniversity?.university_email_domains?.[0]
+                  ? `name@${selectedUniversity.university_email_domains[0].domain}`
+                  : 'name@du.ac.bd'
+              }
+              className={`w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border ${
+                email && !domainApproved ? 'border-rose-500' : 'border-slate-300 dark:border-slate-700'
+              }`}
+            />
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+              {t('Use your institutional email — for example')}{' '}
+              {selectedUniversity?.university_email_domains?.[0]
+                ? `name@${selectedUniversity.university_email_domains[0].domain}`
+                : 'name@du.ac.bd'}
             </p>
+            {email && !domainApproved && (
+              <p className="text-[11px] text-rose-500 mt-1">{t('This email domain is not approved for the selected university.')}</p>
+            )}
+          </div>
+
+          <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={consentTerms} onChange={(event) => setConsentTerms(event.target.checked)} />
+              <span>{t('I agree to the Terms of Service')}</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={consentPrivacy} onChange={(event) => setConsentPrivacy(event.target.checked)} />
+              <span>{t('I agree to the Privacy & Data Retention Policy')}</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={consentGuidelines}
+                onChange={(event) => setConsentGuidelines(event.target.checked)}
+              />
+              <span>{t('I pledge to uphold the Campus Community Guidelines')}</span>
+            </label>
+          </div>
+
+          {errorMsg && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs">
+              {errorMsg}
+            </div>
           )}
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-medium mb-1">Full Name / পূর্ণ নাম</label>
-            <input
-              required
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
-            />
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow disabled:opacity-60"
+          >
+            {submitting ? t('Sending OTP…') : t('Send 6-Digit Verification OTP')}
+          </button>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <Link href="/signin" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+              {t('Already have an account? Sign in')}
+            </Link>
+            <Link href="/admin/login" className="text-slate-500 hover:underline">
+              {t('Admin Login')}
+            </Link>
           </div>
-          <div>
-            <label className="block font-medium mb-1">Student ID / স্টুডেন্ট আইডি</label>
-            <input
-              required
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
-            />
-          </div>
-        </div>
+        </form>
+      </div>
 
-        <div>
-          <label className="block font-medium mb-1">University Email / প্রাতিষ্ঠানিক ইমেইল</label>
-          <input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@student.juniv.edu or name@du.ac.bd"
-            className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
-          />
-        </div>
-
-        <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={consentTerms} onChange={(e) => setConsentTerms(e.target.checked)} />
-            <span>I agree to the Campus360 BD Terms of Service / আমি ব্যবহারের শর্তাবলীতে সম্মত</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={consentPrivacy} onChange={(e) => setConsentPrivacy(e.target.checked)} />
-            <span>I agree to the Privacy & Data Retention Policy / আমি গোপনীয়তা নীতিতে সম্মত</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={consentGuidelines} onChange={(e) => setConsentGuidelines(e.target.checked)} />
-            <span>I pledge to uphold verified Campus Community Guidelines / আমি ক্যাম্পাস নীতিমালা মেনে চলব</span>
-          </label>
-        </div>
-
-        {errorMsg && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs">
-            {errorMsg}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow"
-        >
-          {submitting ? 'Sending 6-Digit OTP...' : 'Send 6-Digit Verification OTP / ওটিপি পাঠান'}
-        </button>
-      </form>
+      <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-slate-600 dark:text-slate-300">
+        <p className="font-semibold text-emerald-700 dark:text-emerald-300">{t('University email OTP is required for every account.')}</p>
+        <p className="mt-1">{t('Your data stays inside your university tenant.')}</p>
+      </div>
     </div>
   );
 }
