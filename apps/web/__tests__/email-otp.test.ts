@@ -1,6 +1,7 @@
 // apps/web/__tests__/email-otp.test.ts
 // Real-time email OTP unit coverage: code strength, TTL policy, digest
-// comparison and the Resend message shape. No network, no database.
+// comparison, the message shape and SMTP error classification. No network, no
+// database, no credentials.
 import { describe, expect, it } from 'vitest';
 import {
   OTP_CODE_OFFSET,
@@ -15,7 +16,15 @@ import {
   remainingOtpSeconds,
 } from '../lib/demo-otp';
 import { hashOtp, normalizeOtpInput, otpHashMatches } from '../lib/otp-crypto';
-import { buildOtpEmailHtml, buildOtpEmailText, isResendConfigured, otpEmailSubject, sendOtpEmail } from '../lib/otp-email';
+import {
+  buildOtpEmailHtml,
+  buildOtpEmailText,
+  classifySmtpError,
+  gmailCredentials,
+  isSmtpConfigured,
+  otpEmailSubject,
+  sendOtpEmail,
+} from '../lib/otp-email';
 
 const EMAIL = 'student.du@du.ac.bd';
 
@@ -141,13 +150,33 @@ describe('otp email rendering', () => {
   });
 
   it('reports an unconfigured provider instead of throwing', async () => {
-    expect(isResendConfigured()).toBe(false);
+    expect(gmailCredentials()).toBeNull();
+    expect(isSmtpConfigured()).toBe(false);
     const result = await sendOtpEmail(input);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.provider).toBe('unconfigured');
+      expect(result.error).toContain('GMAIL_USER');
       expect(result.retryable).toBe(false);
     }
+  });
+});
+
+describe('smtp failure classification', () => {
+  it('separates credential/quota faults from transient socket faults', () => {
+    expect(classifySmtpError({ code: 'EAUTH', responseCode: 535, message: 'Invalid login' }).retryable).toBe(false);
+    expect(classifySmtpError({ response: 'Daily sending quota exceeded' }).retryable).toBe(false);
+    expect(classifySmtpError({ code: 'ESOCKET', message: 'connection reset' }).retryable).toBe(true);
+    expect(classifySmtpError({ code: 'ETIMEDOUT', message: 'timeout' }).retryable).toBe(true);
+    expect(classifySmtpError({ responseCode: 421, message: 'too many connections' }).retryable).toBe(true);
+    expect(classifySmtpError({ responseCode: 550, message: 'Recipient address rejected' }).retryable).toBe(false);
+    expect(classifySmtpError(new Error('boom')).retryable).toBe(true);
+  });
+
+  it('names the credential problem for operators, not just for logs', () => {
+    expect(classifySmtpError({ code: 'EAUTH', message: 'Invalid login: 535-5.7.8' }).message).toContain(
+      'GMAIL_APP_PASSWORD'
+    );
   });
 });
 

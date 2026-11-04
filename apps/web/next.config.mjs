@@ -6,10 +6,10 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ['@campus360/shared', '@campus360/ui'],
-  // The Resend SDK is server-only and pulls in Node built-ins (crypto, http).
+  // Nodemailer is server-only and reaches for Node built-ins (net, tls, dns).
   // Keeping it external stops the bundler from walking it into a client graph.
   experimental: {
-    serverComponentsExternalPackages: ['resend'],
+    serverComponentsExternalPackages: ['nodemailer'],
   },
   async headers() {
     return [

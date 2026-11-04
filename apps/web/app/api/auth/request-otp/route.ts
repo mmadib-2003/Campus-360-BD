@@ -2,15 +2,15 @@
 // ============================================================================
 // Step 1 of the email OTP flow: whitelist the institutional domain, mint a
 // 6-digit CSPRNG code, persist its HMAC digest + 5-minute expiry in Supabase,
-// and deliver the code to the inbox in real time through the Resend API.
+// and deliver the code to the inbox in real time over Gmail SMTP (Nodemailer).
 //
 //   POST /api/auth/request-otp
 //   { email, universityId?, role?, signupPayload?: { fullName, studentId, ... } }
 //
 // The plaintext code is returned to the client ONLY on the Track B demo path
-// (no Resend key + NEXT_PUBLIC_AUTH_MODE=demo). On the real path the response
-// carries the expiry and cooldown — never the code, which exists only inside
-// the email.
+// (no SMTP credentials + NEXT_PUBLIC_AUTH_MODE=demo). On the real path the
+// response carries the expiry and cooldown — never the code, which exists only
+// inside the email.
 // ============================================================================
 import { NextRequest } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
@@ -28,7 +28,7 @@ import {
   redactEmail,
   remainingOtpSeconds,
 } from '@/lib/demo-otp';
-import { isResendConfigured, sendOtpEmail } from '@/lib/otp-email';
+import { isSmtpConfigured, sendOtpEmail } from '@/lib/otp-email';
 import { otpSecurityConfigError } from '@/lib/otp-crypto';
 import {
   createOtpChallenge,
@@ -153,16 +153,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Track A (real email) is the default. Track B (deterministic demo code in
-  // the panel) only applies while no Resend key is configured — setting
-  // RESEND_API_KEY promotes the deployment to real delivery automatically.
-  const mailConfigured = isResendConfigured();
+  // the panel) only applies while no SMTP credentials are configured — setting
+  // GMAIL_USER + GMAIL_APP_PASSWORD promotes the deployment to real delivery.
+  const mailConfigured = isSmtpConfigured();
   const demoMode = isDemoAuthMode() && !mailConfigured;
 
   if (!mailConfigured && !demoMode) {
     return apiError(
       'EMAIL_PROVIDER_NOT_CONFIGURED',
-      'OTP email delivery is not configured on this server (missing RESEND_API_KEY).',
-      'এই সার্ভারে ওটিপি ইমেইল পাঠানো সেটআপ করা নেই (RESEND_API_KEY অনুপস্থিত)।',
+      'OTP email delivery is not configured on this server (missing GMAIL_USER / GMAIL_APP_PASSWORD).',
+      'এই সার্ভারে ওটিপি ইমেইল পাঠানো সেটআপ করা নেই (GMAIL_USER / GMAIL_APP_PASSWORD অনুপস্থিত)।',
       503
     );
   }
@@ -176,8 +176,8 @@ export async function POST(req: NextRequest) {
   };
 
   // Store the digest + 5-minute expiry in Supabase first: the code must be
-  // verifiable the instant the email lands, and the row's id doubles as the
-  // Resend idempotency key so a retried request cannot double-mail.
+  // verifiable the instant the email lands, and the row's id seeds the
+  // Message-ID so a retried request cannot produce a second, competing code.
   const challenge = await createOtpChallenge({
     admin,
     email: rawEmail,
@@ -254,7 +254,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await markOtpEmailSent(admin, challenge.id, delivery.emailId);
+  await markOtpEmailSent(admin, challenge.id, delivery.messageId);
 
   return apiSuccess(
     {
@@ -266,7 +266,7 @@ export async function POST(req: NextRequest) {
       cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
       ttlSeconds: OTP_TTL_SECONDS,
       delivery: 'email',
-      emailId: delivery.emailId,
+      messageId: delivery.messageId,
     },
     200,
     { delivery: delivery.provider },

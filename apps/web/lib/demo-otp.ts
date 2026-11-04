@@ -6,18 +6,20 @@
 // `generateOtpCode()`, hashed with HMAC-SHA256 (`lib/otp-crypto.ts`) and
 // persisted to `verification_attempts` (`lib/otp-store.ts`) with a 5-minute
 // TTL (`expires_at`). The plaintext code exists only in the request handler's
-// memory and inside the Resend email (`lib/otp-email.ts`). It is never written
+// memory and inside the SMTP email (`lib/otp-email.ts`). It is never written
 // to the database and never printed to a log.
 //
-// Track B (escape hatch) — when Resend is NOT configured *and*
+// Track B (escape hatch) — when SMTP is NOT configured *and*
 // `NEXT_PUBLIC_AUTH_MODE === 'demo'`, `/api/auth/request-otp` falls back to a
 // deterministic per-email code surfaced in the Demo OTP panel, so the flow
-// still completes offline. Configuring `RESEND_API_KEY` promotes the platform
-// onto Track A automatically, even while `AUTH_MODE` is still `'demo'`.
+// still completes offline. Configuring `GMAIL_USER` + `GMAIL_APP_PASSWORD`
+// promotes the platform onto Track A automatically, even while `AUTH_MODE` is
+// still `'demo'`.
 //
 // Supabase's built-in email provider cannot serve Track A on its own: it only
 // delivers to organization team members (2 emails/hour project-wide cap), so
-// real student inboxes require the direct Resend API. See docs/OTP_DIAGNOSIS.md.
+// real student inboxes need our own relay — Nodemailer over Gmail SMTP, which
+// requires no verified domain. See docs/OTP_DIAGNOSIS.md.
 //
 // This module stays pure and isomorphic (Web Crypto only, no `node:` imports)
 // so the demo panel can re-derive the same code client-side. Anything that
