@@ -45,6 +45,24 @@ export interface ModuleSpec {
   statusValues?: string[];
   softDelete?: boolean;
   verifiedOnly?: boolean;
+  /**
+   * Readable by a signed-out visitor. The route honours this for GET only, and it is a
+   * claim about the DATABASE as much as about the UI: a module gets the flag only when
+   * supabase/migrations/0013_anon_public_listing_reads.sql gave `anon` a SELECT policy
+   * on `table`. Without that policy the read still succeeds and returns zero rows --
+   * exactly the "the campus looks empty" failure this change exists to end -- so the
+   * flags and the migration are checked against each other in
+   * __tests__/anon-listing-reads.test.ts.
+   */
+  publicRead?: boolean;
+  /**
+   * Column list for anonymous reads: `select` minus whatever 0013 withheld from `anon`
+   * (contact details), and minus embeds on tables guests may not read. PostgREST answers
+   * a request for an ungranted column with a 400, so this is not optional for those
+   * specs -- their plain `select` still names contact_note / contact_email /
+   * alumni_profiles.
+   */
+  publicSelect?: string;
 }
 
 const str = (column: string, required = false, max = 500): FieldSpec => ({ column, type: 'text', required, max });
@@ -63,6 +81,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   marketplace: {
     key: 'marketplace',
+    publicRead: true,
     table: 'marketplace_listings',
     ownerColumn: 'seller_id',
     select: 'id, university_id, seller_id, title, description, category, kind, price_bdt, rent_period, condition, images, status, is_negotiable, keyword_tags, pickup_point_id, views_count, created_at, campus_pickup_points(name_en, name_bn, location_en), profiles:seller_id(full_name, trust_level, avatar_url)',
@@ -90,6 +109,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'marketplace-pickup-points': {
     key: 'marketplace-pickup-points',
+    publicRead: true,
     table: 'campus_pickup_points',
     select: 'id, university_id, code, name_en, name_bn, location_en, location_bn, is_active',
     fields: [
@@ -141,6 +161,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   skills: {
     key: 'skills',
+    publicRead: true,
     table: 'skill_postings',
     ownerColumn: 'author_id',
     select: 'id, university_id, author_id, type, title, description, category, skills, location_en, location_bn, availability, rate_bdt, is_remote, status, applicants_count, created_at',
@@ -197,8 +218,10 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   clubs: {
     key: 'clubs',
+    publicRead: true,
     table: 'clubs',
     select: 'id, university_id, slug, name_en, name_bn, category, description_en, description_bn, logo_url, member_count, is_recruiting, contact_email, created_at',
+    publicSelect: 'id, university_id, slug, name_en, name_bn, category, description_en, description_bn, logo_url, member_count, is_recruiting, created_at',
     fields: [
       str('name_en', true, 120),
       str('name_bn', true, 120),
@@ -227,6 +250,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'club-notices': {
     key: 'club-notices',
+    publicRead: true,
     table: 'club_notices',
     ownerColumn: 'author_id',
     select: 'id, university_id, club_id, author_id, title, body, created_at',
@@ -303,6 +327,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'health-contacts': {
     key: 'health-contacts',
+    publicRead: true,
     table: 'health_contacts',
     select: 'id, university_id, kind, label_en, label_bn, phone, available_hours, notes_en, notes_bn, is_active',
     fields: [
@@ -339,6 +364,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   mentors: {
     key: 'mentors',
+    publicRead: true,
     table: 'mentor_profiles',
     ownerColumn: 'user_id',
     select: 'id, university_id, user_id, headline, expertise, languages, session_rate_bdt, bio, is_accepting, sessions_count, rating, profiles:user_id(full_name, avatar_url)',
@@ -358,6 +384,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'mentorship-slots': {
     key: 'mentorship-slots',
+    publicRead: true,
     table: 'mentorship_slots',
     ownerColumn: 'mentor_id',
     select: 'id, university_id, mentor_id, topic, starts_at, ends_at, capacity, booked_count, is_active, mentor_profiles(headline, user_id, profiles:user_id(full_name))',
@@ -394,6 +421,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   housing: {
     key: 'housing',
+    publicRead: true,
     table: 'housing_listings',
     ownerColumn: 'owner_id',
     select: 'id, university_id, owner_id, kind, title, description, rent_bdt, seat_count, gender_policy, area_en, area_bn, distance_km, amenities, image_urls, status, created_at',
@@ -420,6 +448,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   rideshare: {
     key: 'rideshare',
+    publicRead: true,
     table: 'rideshare_offers',
     ownerColumn: 'owner_id',
     select: 'id, university_id, owner_id, mode, origin, destination, depart_at, seats_total, seats_available, fare_bdt, vehicle_details, notes, status, created_at, profiles:owner_id(full_name)',
@@ -510,9 +539,11 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   careers: {
     key: 'careers',
+    publicRead: true,
     table: 'career_opportunities',
     ownerColumn: 'alumni_id',
     select: 'id, university_id, alumni_id, kind, company, title, description, location, is_remote, salary_range, apply_url, deadline, status, created_at, alumni_profiles(job_title, employer, profiles:user_id(full_name))',
+    publicSelect: 'id, university_id, alumni_id, kind, company, title, description, location, is_remote, salary_range, apply_url, deadline, status, created_at',
     fields: [
       { column: 'alumni_id', type: 'uuid', required: true },
       en('kind', ['INTERNSHIP', 'FULL_TIME', 'REFERRAL', 'PART_TIME', 'CONTRACT'], true),
@@ -573,6 +604,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   'cafeteria-menus': {
     key: 'cafeteria-menus',
+    publicRead: true,
     table: 'cafeteria_menus',
     select: 'id, university_id, hall_id, name_en, name_bn, serving_date, meal, pickup_window, is_active, halls(name_en), cafeteria_items(id, name_en, name_bn, price_bdt, is_available, is_vegetarian)',
     fields: [
@@ -591,6 +623,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'cafeteria-items': {
     key: 'cafeteria-items',
+    publicRead: true,
     table: 'cafeteria_items',
     select: 'id, university_id, menu_id, name_en, name_bn, price_bdt, is_available, stock, is_vegetarian',
     fields: [
@@ -661,9 +694,11 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   'lost-found': {
     key: 'lost-found',
+    publicRead: true,
     table: 'lost_items',
     ownerColumn: 'reporter_id',
     select: 'id, university_id, reporter_id, kind, title, description, category, keywords, location_en, occurred_on, image_urls, contact_note, status, matched_item_id, created_at, profiles:reporter_id(full_name)',
+    publicSelect: 'id, university_id, reporter_id, kind, title, description, category, keywords, location_en, occurred_on, image_urls, status, matched_item_id, created_at, profiles:reporter_id(full_name)',
     fields: [
       en('kind', ['LOST', 'FOUND'], true),
       str('title', true, 140),
@@ -689,9 +724,11 @@ export const MODULES: Record<string, ModuleSpec> = {
   /* ------------------------------------------------------------------ */
   'sports-teams': {
     key: 'sports-teams',
+    publicRead: true,
     table: 'sports_teams',
     ownerColumn: 'captain_id',
     select: 'id, university_id, captain_id, name, sport, skill_level, needed_roles, description, contact_note, status, created_at',
+    publicSelect: 'id, university_id, captain_id, name, sport, skill_level, needed_roles, description, status, created_at',
     fields: [
       str('name', true, 120),
       str('sport', true, 60),
@@ -709,6 +746,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'sports-challenges': {
     key: 'sports-challenges',
+    publicRead: true,
     table: 'sports_challenges',
     ownerColumn: 'challenger_id',
     select: 'id, university_id, challenger_id, team_name, sport, title, description, preferred_date, venue, status, created_at',
@@ -728,6 +766,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   'sports-venues': {
     key: 'sports-venues',
+    publicRead: true,
     table: 'sports_venues',
     select: 'id, university_id, name_en, name_bn, sport, capacity, hourly_rate_bdt, lat, lng, is_active',
     fields: [
@@ -762,6 +801,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   campaigns: {
     key: 'campaigns',
+    publicRead: true,
     table: 'donation_campaigns',
     ownerColumn: 'organizer_id',
     select: 'id, university_id, organizer_id, title, story, cause, target_bdt, raised_bdt, donors_count, deadline, cover_image_url, is_verified, status, created_at',
@@ -867,6 +907,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
   reviews: {
     key: 'reviews',
+    publicRead: true,
     table: 'reviews',
     ownerColumn: 'author_id',
     select: 'id, university_id, author_id, target_type, target_id, rating, title, body, verified_participation, created_at',
@@ -905,3 +946,25 @@ export function getModule(key: string): ModuleSpec | null {
 }
 
 export const MODULE_KEYS = Object.keys(MODULES);
+
+/**
+ * Who may read a module's list, decided in one place so the rule is unit-testable
+ * without a Next request, and so the route can never drift into "anonymous callers get
+ * the member query" (which would hand them the tenant filter and a `mine` scope) or
+ * "anonymous callers get the member column list" (which PostgREST rejects with a 400,
+ * because 0013 withheld those columns).
+ *
+ *  - 'member'  a session exists: tenant-scoped, full `select`.
+ *  - 'public'  no session, module is publicly listed: no campus filter, `publicSelect`.
+ *  - 'deny'    no session and not public -- or no server credentials at all, where the
+ *              honest answer is requireAuth()'s 401/503 rather than an empty array that
+ *              reads as "this campus has nothing".
+ */
+export function resolveListingAccess(
+  spec: Pick<ModuleSpec, 'publicRead'>,
+  state: { hasSession: boolean; serverConfigured: boolean }
+): 'member' | 'public' | 'deny' {
+  if (state.hasSession) return 'member';
+  if (!state.serverConfigured) return 'deny';
+  return spec.publicRead === true ? 'public' : 'deny';
+}

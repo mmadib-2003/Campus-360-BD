@@ -40,7 +40,6 @@ export default function LostFoundPage() {
     filters: { kind, category },
     search,
     limit: 60,
-    enabled: !!session.authenticated,
   });
   const matches = useRealtimeModuleList('lost-item-matches', { limit: 50, enabled: !!session.authenticated });
   const itemMutation = useModuleMutation('lost-found');

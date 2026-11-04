@@ -56,7 +56,7 @@ export default function HealthPage() {
     enabled: !!session.authenticated,
   });
   const donors = useModuleListDonors(bloodGroup, session);
-  const contacts = useRealtimeModuleList('health-contacts', { enabled: !!session.authenticated });
+  const contacts = useRealtimeModuleList('health-contacts', {});
   const slots = useRealtimeModuleList('counseling-slots', { enabled: !!session.authenticated });
   const requestsMutation = useModuleMutation('blood-requests');
   const responsesMutation = useModuleMutation('blood-responses');

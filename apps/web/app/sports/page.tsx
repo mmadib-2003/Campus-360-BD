@@ -37,11 +37,11 @@ export default function SportsPage() {
   const [ledgerTarget, setLedgerTarget] = React.useState<Row | null>(null);
   const toast = useToast();
 
-  const teams = useRealtimeModuleList('sports-teams', { limit: 40, enabled: !!session.authenticated });
-  const challenges = useRealtimeModuleList('sports-challenges', { limit: 40, enabled: !!session.authenticated });
-  const venues = useRealtimeModuleList('sports-venues', { limit: 40, enabled: !!session.authenticated });
+  const teams = useRealtimeModuleList('sports-teams', { limit: 40 });
+  const challenges = useRealtimeModuleList('sports-challenges', { limit: 40 });
+  const venues = useRealtimeModuleList('sports-venues', { limit: 40 });
   const bookings = useRealtimeModuleList('venue-bookings', { limit: 60, enabled: !!session.authenticated });
-  const campaigns = useRealtimeModuleList('campaigns', { limit: 40, enabled: !!session.authenticated });
+  const campaigns = useRealtimeModuleList('campaigns', { limit: 40 });
   const ledger = useRealtimeModuleList('donation-ledger', { limit: 100, enabled: !!session.authenticated });
   const teamMutation = useModuleMutation('sports-teams');
   const challengeMutation = useModuleMutation('sports-challenges');
