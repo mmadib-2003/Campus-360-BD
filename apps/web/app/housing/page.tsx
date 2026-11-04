@@ -42,9 +42,8 @@ export default function HousingPage() {
   const housing = useRealtimeModuleList('housing', {
     filters: { kind },
     limit: 60,
-    enabled: !!session.authenticated,
   });
-  const rides = useRealtimeModuleList('rideshare', { limit: 60, enabled: !!session.authenticated });
+  const rides = useRealtimeModuleList('rideshare', { limit: 60 });
   const rideRequests = useRealtimeModuleList('ride-requests', { limit: 60, enabled: !!session.authenticated });
   const tickets = useRealtimeModuleList('ticket-exchange', { limit: 60, enabled: !!session.authenticated });
   const housingMutation = useModuleMutation('housing');

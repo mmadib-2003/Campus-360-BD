@@ -53,9 +53,8 @@ export default function MarketplacePage() {
     filters: { kind: kindFilter, category: categoryFilter },
     search,
     limit: 60,
-    enabled: !!session.authenticated,
   });
-  const pickupPoints = useRealtimeModuleList('marketplace-pickup-points', { enabled: !!session.authenticated });
+  const pickupPoints = useRealtimeModuleList('marketplace-pickup-points', {});
   const orders = useRealtimeModuleList('marketplace-orders', { limit: 10, enabled: !!session.authenticated });
   const { create } = useModuleMutation('marketplace');
   const orderMutation = useModuleMutation('marketplace-orders');

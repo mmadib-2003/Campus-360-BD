@@ -38,7 +38,6 @@ export default function DiningPage() {
   const menus = useRealtimeModuleList('cafeteria-menus', {
     filters: { meal },
     limit: 40,
-    enabled: !!session.authenticated,
   });
   const homeFood = useRealtimeModuleList('home-food', { limit: 40, enabled: !!session.authenticated });
   const orders = useRealtimeModuleList('food-orders', { limit: 40, enabled: !!session.authenticated });

@@ -34,8 +34,8 @@ export default function MentorshipPage() {
   const [bookingTarget, setBookingTarget] = React.useState<Row | null>(null);
   const toast = useToast();
 
-  const mentors = useRealtimeModuleList('mentors', { limit: 50, enabled: !!session.authenticated });
-  const slots = useRealtimeModuleList('mentorship-slots', { limit: 60, enabled: !!session.authenticated });
+  const mentors = useRealtimeModuleList('mentors', { limit: 50 });
+  const slots = useRealtimeModuleList('mentorship-slots', { limit: 60 });
   const bookings = useRealtimeModuleList('mentorship-bookings', { limit: 40, enabled: !!session.authenticated });
   const mentorMutation = useModuleMutation('mentors');
   const slotMutation = useModuleMutation('mentorship-slots');

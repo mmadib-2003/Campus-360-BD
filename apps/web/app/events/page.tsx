@@ -33,9 +33,9 @@ export default function EventsPage() {
   const rows = events.data;
   const { loading, demo, error, refresh } = events;
   const setRows = events.setData;
-  const clubs = useRealtimeModuleList('clubs', { enabled: !!session.authenticated });
+  const clubs = useRealtimeModuleList('clubs', {});
   const rsvps = useRealtimeModuleList('event-rsvps', { limit: 100, enabled: !!session.authenticated });
-  const notices = useRealtimeModuleList('club-notices', { limit: 20, enabled: !!session.authenticated });
+  const notices = useRealtimeModuleList('club-notices', { limit: 20 });
   const rsvpMutation = useModuleMutation('event-rsvps');
   const clubMutation = useModuleMutation('club-members');
   const noticeMutation = useModuleMutation('club-notices');

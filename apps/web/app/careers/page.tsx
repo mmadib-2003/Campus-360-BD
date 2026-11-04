@@ -42,7 +42,6 @@ export default function CareersPage() {
     filters: { kind },
     search,
     limit: 60,
-    enabled: !!session.authenticated,
   });
   const alumni = useRealtimeModuleList('alumni', { limit: 50, enabled: !!session.authenticated });
   const applications = useRealtimeModuleList('career-applications', { limit: 40, enabled: !!session.authenticated });
