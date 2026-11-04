@@ -100,6 +100,48 @@ which used to answer a dead database with **`200 []`** and render as an empty
 dropdown — go through `registryRead()` + `registryFailure()`. `Cache-Control:
 no-store, max-age=0` and `force-dynamic` are unchanged.
 
+## Confirmed from the deployed runtime
+
+`GET /api/health/registry` on the fixed deployment answered `503` with:
+
+```json
+{"success":false,
+ "endpoint":{"url":null,"host":"your-project-ref.supabase.co",
+   "problem":"NEXT_PUBLIC_SUPABASE_URL still points at the template host \"your-project-ref.supabase.co\" (it contains \"your-project\"). Set it to your project URL, e.g. https://xxxxxxxxxxxxxxxxxxxx.supabase.co"},
+ "env":{"supabaseUrlPresent":true,"serverSupabaseConfigured":true,"serviceRolePresent":true,"authMode":"production"},
+ "tables":[],"allOk":false}
+```
+
+That is the outage in one line: **the variable was present, non-empty, and still
+the `.env.example` template**, so `isSupabaseServerConfigured()` said "configured",
+`createServerClient()` said "fine", and undici said `fetch failed` after a DNS
+lookup for a host that does not exist. `tables: []` is deliberate — with an
+unusable endpoint the probe does not bother issuing four doomed queries.
+
+## Remediation (Vercel, not the code)
+
+In Vercel → project `campus-360-bd` → Settings → Environment Variables, production
+(and preview, and the Supabase project's own secrets for the edge functions):
+
+| variable | must be |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://lxdovryeidayxfsqkwbg.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | this project's anon / `sb_publishable_…` key (Settings → API keys) |
+| `SUPABASE_SERVICE_ROLE_KEY` | this project's service-role / `sb_secret_…` key — server-side only, never a `NEXT_PUBLIC_` name |
+| `SUPABASE_DB_URL`, `SUPABASE_JWT_SECRET` | the project's own values, if the routes/crons that read them are in use |
+| `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` | same pair, for `apps/mobile` |
+
+`NEXT_PUBLIC_API_URL` is **not** one of them: no file in this repository reads it.
+Redeploy afterwards (an environment change does not rebuild the function, and
+`NEXT_PUBLIC_*` values are read into the bundle at build time).
+
+Because a placeholder *key* is the very next failure of the same shape, the probe
+also reports `env.anonKey` / `env.serviceRoleKey` as **shape** only —
+`present`, `shape` (`missing | placeholder | legacy-jwt | publishable | secret-format | malformed`),
+`role`, `ref`, `refMatchesProject`, `problem` — and answers `503` before running any
+query when either is the `.env.example` sample, has the wrong `role`, or was minted
+for a different project ref. The values themselves are never read into the response.
+
 ## Diagnosing it yourself
 
 ```bash
