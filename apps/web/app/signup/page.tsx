@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { UniversityCombobox, type UniversityOption } from '@/components/auth/UniversityCombobox';
+import { HallCombobox, type HallOption } from '@/components/auth/HallCombobox';
 
 type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
 
@@ -22,6 +23,9 @@ export default function SignUpPage() {
   const [loadingUniversities, setLoadingUniversities] = React.useState(true);
   const [role, setRole] = React.useState<DemoRole | ''>('');
   const [universityId, setUniversityId] = React.useState('');
+  const [halls, setHalls] = React.useState<HallOption[]>([]);
+  const [hallId, setHallId] = React.useState('');
+  const [loadingHalls, setLoadingHalls] = React.useState(false);
   const [fullName, setFullName] = React.useState('');
   const [studentId, setStudentId] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -50,6 +54,32 @@ export default function SignUpPage() {
     };
   }, []);
 
+  // Residential halls for the selected university (mandatory for students).
+  React.useEffect(() => {
+    setHallId('');
+    if (!universityId) {
+      setHalls([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingHalls(true);
+    fetch(`/api/halls?universityId=${encodeURIComponent(universityId)}`)
+      .then((response) => response.json())
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload?.success && Array.isArray(payload.data)) {
+          setHalls(payload.data as HallOption[]);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoadingHalls(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [universityId]);
+
   const selectedUniversity = universities.find((university) => university.id === universityId);
   const emailDomain = email.includes('@') ? email.split('@')[1]?.toLowerCase() ?? '' : '';
   const domainApproved = Boolean(
@@ -62,6 +92,9 @@ export default function SignUpPage() {
 
     if (!role) return setErrorMsg(t('Select your role to continue'));
     if (!universityId) return setErrorMsg(t('Select your university to continue'));
+    if (role === 'student' && !hallId) {
+      return setErrorMsg(t('Select your residential hall to continue'));
+    }
     if (!fullName.trim()) return setErrorMsg(t('Enter your full name'));
     if (!studentId.trim()) return setErrorMsg(t('Enter your student ID'));
     if (!email.trim()) return setErrorMsg(t('Enter your university email'));
@@ -79,7 +112,7 @@ export default function SignUpPage() {
           email,
           universityId,
           role,
-          signupPayload: { fullName, studentId, role },
+          signupPayload: { fullName, studentId, role, hallId: role === 'student' ? hallId : '' },
         }),
       });
       const payload = await response.json();
@@ -96,6 +129,7 @@ export default function SignUpPage() {
             role,
             fullName,
             studentId,
+            hallId: role === 'student' ? hallId : '',
             demoCode: payload.data?.demoCode ?? null,
             demo: Boolean(payload.data?.demo),
           })
@@ -180,6 +214,24 @@ export default function SignUpPage() {
               />
             )}
           </div>
+
+          {role === 'student' && universityId && (
+            <div>
+              {loadingHalls ? (
+                <div className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+              ) : (
+                <HallCombobox
+                  halls={halls}
+                  value={hallId}
+                  onChange={setHallId}
+                  label={t('Residential Hall')}
+                  placeholder={t('Search your residential hall…')}
+                  hint={t('Required for students — your hall allocation is verified by the hall office.')}
+                  invalid={Boolean(errorMsg && !hallId)}
+                />
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

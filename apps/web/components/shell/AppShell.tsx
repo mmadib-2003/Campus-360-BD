@@ -14,6 +14,7 @@ import {
   type DemoRole,
 } from '@/lib/modules/demo-data';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const MODULES = [
   { href: '/', key: 'moduleFeed', icon: '🏠' },
@@ -39,7 +40,8 @@ const ROLE_OPTIONS: Array<{ value: DemoRole; key: string }> = [
   { value: 'student', key: 'Student' },
   { value: 'faculty', key: 'Faculty / Staff' },
   { value: 'alumni', key: 'Alumni' },
-  { value: 'admin', key: 'University Admin' },
+  { value: 'admin', key: 'Platform Admin' },
+  { value: 'governance', key: 'University Governance' },
 ];
 
 export function AppShell({ children }: { profile?: unknown; children: React.ReactNode }) {
@@ -52,7 +54,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         full_name?: string;
         universities?: { code: string; name_en: string; name_bn: string };
         departments?: { code: string };
-        halls?: { name_en: string };
+        halls?: { name?: string; name_en?: string };
         trust_level?: string;
       }
     | null;
@@ -130,6 +132,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
           </button>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               type="button"
               onClick={toggleLocale}
@@ -177,7 +180,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🎓 {profile.departments.code}</span>
               )}
               {profile.halls && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🏠 {profile.halls.name_en}</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🏠 {profile.halls.name ?? profile.halls.name_en}</span>
               )}
               <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-400 font-mono text-[11px]">
                 ROLE: {session.roles[0] ?? 'STUDENT'}

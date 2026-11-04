@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import en from '../messages/en.json';
 import bn from '../messages/bn.json';
 import { LOCALE_COOKIE, resolveLocale } from '@/i18n';
+import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/AppShell';
 import { sanitizeMessages } from '@/lib/messages';
 import './globals.css';
@@ -26,9 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang={locale} suppressHydrationWarning>
       <body>
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <AppShell profile={null}>{children}</AppShell>
-        </NextIntlClientProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <AppShell profile={null}>{children}</AppShell>
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

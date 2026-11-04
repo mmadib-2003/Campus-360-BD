@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { IdVerificationCard, type IdVerificationOutcome } from '@/components/auth/IdVerificationCard';
+import { DemoOtpPanel } from '@/components/auth/DemoOtpPanel';
 import { getDemoUniversity, setDemoSession, setDemoSignedOut, type DemoRole } from '@/lib/modules/demo-data';
 
 interface SignupContext {
@@ -128,12 +129,8 @@ function VerifyEmailForm() {
             {t('Email')}: <strong>{email}</strong>
           </p>
         )}
-        {demoCode && (
-          <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
-            <span className="font-semibold text-emerald-700 dark:text-emerald-300">{t('Demo code')}:</span>{' '}
-            <span className="font-mono text-base font-bold tracking-[0.3em] text-emerald-700 dark:text-emerald-300">{demoCode}</span>
-          </div>
-        )}
+        {/* Track B — Demo OTP panel. Renders only when NEXT_PUBLIC_AUTH_MODE === 'demo'. */}
+        <DemoOtpPanel email={email} code={demoCode} />
 
         <form onSubmit={handleVerify} className="mt-5 space-y-4">
           <input

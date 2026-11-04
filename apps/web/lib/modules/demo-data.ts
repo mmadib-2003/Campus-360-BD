@@ -13,7 +13,7 @@
  * within a couple of seconds — the same contract as Supabase Realtime.
  */
 
-export type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
+export type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin' | 'governance';
 
 export interface DemoUniversity {
   id: string;
@@ -170,6 +170,117 @@ export const DEMO_UNIVERSITIES: DemoUniversity[] = [
 ];
 
 export const DEMO_UNIVERSITY_ID = 'demo-univ-du';
+
+/**
+ * Canonical demo credentials — mirrors supabase/seed/seed_users_demo_accounts.sql.
+ * Password-based (Demo#1234) so the DevSignInPanel can use signInWithPassword
+ * and bypass the Supabase OTP email limits entirely. One account per role per
+ * university for DU, BUET, SUST, RU and CU.
+ */
+export interface DemoAccount {
+  email: string;
+  password: string;
+  role: Exclude<DemoRole, 'faculty' | 'alumni'>;
+  universityCode: string;
+  fullName: string;
+}
+
+const DEMO_PASSWORD = 'Demo#1234';
+
+function buildDemoAccounts(): DemoAccount[] {
+  const accounts: DemoAccount[] = [];
+  for (const code of ['DU', 'BUET', 'SUST', 'RU', 'CU']) {
+    const university = getDemoUniversity(code);
+    if (!university) continue;
+    const domain = demoDomainFor(university);
+    accounts.push(
+      {
+        email: `student.${code.toLowerCase()}@${domain}`,
+        password: DEMO_PASSWORD,
+        role: 'student',
+        universityCode: code,
+        fullName: `Demo Student (${code})`,
+      },
+      {
+        email: `admin.${code.toLowerCase()}@${domain}`,
+        password: DEMO_PASSWORD,
+        role: 'admin',
+        universityCode: code,
+        fullName: `Platform Admin (${code})`,
+      },
+      {
+        email: `governance.${code.toLowerCase()}@${domain}`,
+        password: DEMO_PASSWORD,
+        role: 'governance',
+        universityCode: code,
+        fullName: `University Governance (${code})`,
+      }
+    );
+  }
+  return accounts;
+}
+
+export const DEMO_ACCOUNTS: DemoAccount[] = buildDemoAccounts();
+
+export function findDemoAccount(email: string): DemoAccount | undefined {
+  const normalized = email.trim().toLowerCase();
+  return DEMO_ACCOUNTS.find((account) => account.email === normalized);
+}
+
+/**
+ * Residential halls — mirrors supabase/seed/seed_university_halls.sql
+ * (real halls for DU, RU, CU, BUET, SUST, plus JU for the campus switcher).
+ */
+export interface DemoHall {
+  id: string;
+  universityCode: string;
+  name: string;
+  name_bn: string;
+  type: 'RESIDENTIAL' | 'DAY_SCHOLAR';
+}
+
+const DEMO_HALL_ROWS: Array<[string, string, string, 'RESIDENTIAL' | 'DAY_SCHOLAR']> = [
+  ['DU', 'Salimullah Muslim Hall', 'সলিমুল্লাহ মুসলিম হল', 'RESIDENTIAL'],
+  ['DU', 'Shahidullah Hall', 'শহীদুল্লাহ হল', 'RESIDENTIAL'],
+  ['DU', 'Jagannath Hall', 'জগন্নাথ হল', 'RESIDENTIAL'],
+  ['DU', 'Fazlul Huq Muslim Hall', 'ফজলুল হক মুসলিম হল', 'RESIDENTIAL'],
+  ['DU', 'Sergeant Zahurul Haq Hall', 'সার্জেন্ট জহুরুল হক হল', 'RESIDENTIAL'],
+  ['DU', 'Rokeya Hall', 'রোকেয়া হল', 'RESIDENTIAL'],
+  ['DU', 'Masterda Surja Sen Hall', 'মাস্টারদা সূর্যসেন হল', 'RESIDENTIAL'],
+  ['DU', 'Haji Muhammad Mohsin Hall', 'হাজী মোহাম্মদ মোহসিন হল', 'RESIDENTIAL'],
+  ['DU', 'Shamsun Nahar Hall', 'শামসুন নাহার হল', 'RESIDENTIAL'],
+  ['RU', 'Shah Makhdum Hall', 'শাহ মখদুম হল', 'RESIDENTIAL'],
+  ['RU', 'Nawab Abdul Latif Hall', 'নবাব আবদুল লতিফ হল', 'RESIDENTIAL'],
+  ['RU', 'Syed Ameer Ali Hall', 'সৈয়দ আমীর আলী হল', 'RESIDENTIAL'],
+  ['RU', 'Shahid Shamsuzzoha Hall', 'শহীদ শামসুজ্জোহা হল', 'RESIDENTIAL'],
+  ['RU', 'Shahid Habibur Rahman Hall', 'শহীদ হাবিবুর রহমান হল', 'RESIDENTIAL'],
+  ['RU', 'Mother Box Hall', 'মাদার বক্স হল', 'RESIDENTIAL'],
+  ['CU', 'Shahid Farhad Hossain Hall', 'শহীদ ফরহাদ হোসেন হল', 'RESIDENTIAL'],
+  ['CU', 'Amanat Hall', 'আমানত হল', 'RESIDENTIAL'],
+  ['CU', 'Shah Abdur Rab Hall', 'শাহ আবদুর রাব হল', 'RESIDENTIAL'],
+  ['CU', 'Shahjalal Hall', 'শাহজালাল হল', 'RESIDENTIAL'],
+  ['CU', 'Suhrawardy Hall', 'সোহরাওয়ার্দী হল', 'RESIDENTIAL'],
+  ['CU', 'Atish Dipankar Hall', 'আতিশ দীপঙ্কর হল', 'RESIDENTIAL'],
+  ['BUET', 'Sherebangla Hall', 'শেরেবাংলা হল', 'RESIDENTIAL'],
+  ['BUET', 'Ahsanullah Hall', 'আহসানউল্লাহ হল', 'RESIDENTIAL'],
+  ['BUET', 'Titumir Hall', 'তিতুমীর হল', 'RESIDENTIAL'],
+  ['BUET', 'Rashid Hall', 'রশীদ হল', 'RESIDENTIAL'],
+  ['BUET', 'Nazrul Hall', 'নজরুল হল', 'RESIDENTIAL'],
+  ['SUST', 'Shahjalal Hall', 'শাহজালাল হল', 'RESIDENTIAL'],
+  ['SUST', 'Academic Building B', 'একাডেমিক ভবন বি (দিবাকালীন শিক্ষার্থী)', 'DAY_SCHOLAR'],
+  ['JU', 'Al-Beruni Hall', 'আল বেরুনী হল', 'RESIDENTIAL'],
+  ['JU', 'Mir Mosharraf Hossain Hall', 'মীর মশাররফ হোসেন হল', 'RESIDENTIAL'],
+  ['JU', 'Nawab Faizunnesa Hall', 'নওয়াব ফয়জুন্নেসা হল', 'RESIDENTIAL'],
+  ['JU', 'Jahanara Imam Hall', 'জাহানারা ইমাম হল', 'RESIDENTIAL'],
+];
+
+export const DEMO_UNIVERSITY_HALLS: DemoHall[] = DEMO_HALL_ROWS.map(([code, name, name_bn, type]) => ({
+  id: `hall-${code.toLowerCase()}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+  universityCode: code,
+  name,
+  name_bn,
+  type,
+}));
 export const DEFAULT_DEMO_SESSION: DemoSession = {
   universityId: DEMO_UNIVERSITY_ID,
   role: 'student',
@@ -193,6 +304,7 @@ const ROLE_NAMES: Record<DemoRole, string> = {
   faculty: 'Dr. Md. Kamrul Hasan',
   alumni: 'Farhana Rahman',
   admin: 'University Admin',
+  governance: 'University Governance',
 };
 
 const ROLE_EMAILS: Record<DemoRole, (domain: string) => string> = {
@@ -200,6 +312,7 @@ const ROLE_EMAILS: Record<DemoRole, (domain: string) => string> = {
   faculty: (d) => `faculty@${d}`,
   alumni: (d) => `alumni@${d}`,
   admin: (d) => `admin@${d}`,
+  governance: (d) => `governance@${d}`,
 };
 
 const ROLE_IDS: Record<DemoRole, (code: string) => string> = {
@@ -207,14 +320,18 @@ const ROLE_IDS: Record<DemoRole, (code: string) => string> = {
   faculty: (code) => `${code}-FAC-0142`,
   alumni: (code) => `${code}-ALM-2019-088`,
   admin: (code) => `${code}-ADM-001`,
+  governance: (code) => `${code}-GOV-001`,
 };
 
 const ROLE_ROLES: Record<DemoRole, string[]> = {
   student: ['STUDENT'],
   faculty: ['FACULTY'],
   alumni: ['ALUMNI'],
-  admin: ['UNIVERSITY_ADMIN'],
+  admin: ['ADMIN'],
+  governance: ['GOVERNANCE'],
 };
+
+const ALL_DEMO_ROLES: DemoRole[] = ['student', 'faculty', 'alumni', 'admin', 'governance'];
 
 export function getDemoSession(): DemoSession {
   if (typeof window === 'undefined') return DEFAULT_DEMO_SESSION;
@@ -223,7 +340,7 @@ export function getDemoSession(): DemoSession {
     if (!raw) return DEFAULT_DEMO_SESSION;
     const parsed = JSON.parse(raw) as Partial<DemoSession>;
     const university = getDemoUniversity(parsed.universityId) ?? getDemoUniversity(DEFAULT_DEMO_SESSION.universityId)!;
-    const role: DemoRole = ['student', 'faculty', 'alumni', 'admin'].includes(String(parsed.role))
+    const role: DemoRole = ALL_DEMO_ROLES.includes(String(parsed.role) as DemoRole)
       ? (parsed.role as DemoRole)
       : 'student';
     return {
@@ -290,6 +407,7 @@ export function subscribeDemoSession(callback: (session: DemoSession) => void): 
 export function getDemoProfile(session: DemoSession = getDemoSession()) {
   const university = getDemoUniversity(session.universityId) ?? DEMO_UNIVERSITIES[1];
   const role = session.role;
+  const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code);
   return {
     id: `demo-user-${university.code.toLowerCase()}-${role}`,
     university_id: university.id,
@@ -299,12 +417,15 @@ export function getDemoProfile(session: DemoSession = getDemoSession()) {
     student_id: ROLE_IDS[role](university.code),
     roles: ROLE_ROLES[role],
     isAdmin: role === 'admin',
+    isGovernance: role === 'governance',
     universities: {
       code: university.code,
       name_en: university.name_en,
       name_bn: university.name_bn,
     },
-    halls: { name_en: `${university.code} Residential Hall`, name_bn: `${university.code} আবাসিক হল` },
+    halls: hall
+      ? { name: hall.name, name_en: hall.name, name_bn: hall.name_bn, type: hall.type }
+      : { name: `${university.code} Residential Hall`, name_en: `${university.code} Residential Hall`, name_bn: `${university.code} আবাসিক হল` },
     departments: { code: 'CSE', name_en: 'Computer Science and Engineering', name_bn: 'কম্পিউটার সায়েন্স' },
   };
 }
@@ -634,6 +755,10 @@ function buildTables(): Record<string, Row[]> {
   const tables: Record<string, Row[]> = {
     universities: [],
     university_email_domains: [],
+    university_halls: [],
+    profiles: [],
+    hall_allocations: [],
+    governance_notices: [],
     campus_pickup_points: [],
     marketplace_listings: [],
     skill_postings: [],
@@ -661,6 +786,35 @@ function buildTables(): Record<string, Row[]> {
   };
 
   for (const university of DEMO_UNIVERSITIES) {
+    const code = university.code;
+    const uid = university.id;
+
+    // Canonical directory data (mirrors supabase/seed/*.sql).
+    for (const hall of DEMO_UNIVERSITY_HALLS.filter((h) => h.universityCode === code)) {
+      tables.university_halls.push({
+        id: hall.id,
+        university_id: uid,
+        name: hall.name,
+        name_bn: hall.name_bn,
+        type: hall.type,
+        is_active: true,
+        created_at: daysAgo(120),
+      });
+    }
+    for (const account of DEMO_ACCOUNTS.filter((a) => a.universityCode === code)) {
+      tables.profiles.push({
+        id: `demo-user-${code.toLowerCase()}-${account.role}`,
+        university_id: uid,
+        email: account.email,
+        full_name: account.fullName,
+        student_id: ROLE_IDS[account.role](code),
+        trust_level: 'ID_VERIFIED',
+        roles: ROLE_ROLES[account.role],
+        role: account.role,
+        onboarding_completed: true,
+        created_at: daysAgo(90),
+      });
+    }
     tables.universities.push({
       id: university.id,
       code: university.code,
@@ -963,6 +1117,55 @@ function buildTables(): Record<string, Row[]> {
     ],
   });
 
+  // Governance dashboard backing rows (hall allocation queue + broadcasts).
+  for (const [code, rows] of Object.entries({
+    DU: [
+      ['Rokeya Hall', 'Tasnim Chowdhury', 'tasnim.chowdhury@students.du.ac.bd', 'DU-2026-10231', 'PENDING', 'First-year honours — needs a seat before the hall admission deadline.'],
+      ['Salimullah Muslim Hall', 'Rafid Hasan', 'rafid.hasan@students.du.ac.bd', 'DU-2026-10876', 'APPROVED', 'Verified against the hall admission list.'],
+    ],
+    BUET: [['Ahsanullah Hall', 'Sabbir Ahmed', 'sabbir.ahmed@ug.buet.ac.bd', 'BUET-2026-142', 'PENDING', 'Transfer from Titumir Hall requested.']],
+    RU: [['Shah Makhdum Hall', 'Maliha Akter', 'maliha.akter@student.ru.ac.bd', 'RU-2026-20114', 'PENDING', 'Awaiting medical board note.']],
+    CU: [['Amanat Hall', 'Nusrat Jahan', 'nusrat.jahan@std.cu.ac.bd', 'CU-2026-30117', 'APPROVED', 'Seat confirmed for the 2026 session.']],
+  } as Record<string, string[][]>)) {
+    const university = getDemoUniversity(code);
+    if (!university) continue;
+    rows.forEach(([hallName, studentName, studentEmail, studentId, status, note], index) => {
+      const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === code && h.name === hallName);
+      tables.hall_allocations.push({
+        id: `hall-alloc-${code.toLowerCase()}-${index + 1}`,
+        university_id: university.id,
+        hall_id: hall?.id ?? null,
+        hall_name: hallName,
+        student_name: studentName,
+        student_email: studentEmail,
+        student_id: studentId,
+        status,
+        note,
+        decided_at: status === 'APPROVED' ? iso(-120) : null,
+        created_at: daysAgo(3),
+      });
+    });
+    tables.governance_notices.push({
+      id: `gov-notice-${code.toLowerCase()}-1`,
+      university_id: university.id,
+      title:
+        code === 'DU'
+          ? 'Hall seat applications open for the 2026 session'
+          : code === 'BUET'
+            ? 'Ahsanullah Hall dining schedule updated'
+            : 'Campus governance broadcast',
+      body:
+        code === 'DU'
+          ? 'Submit your residential hall application through the Governance Dashboard before the 30th. Approvals are published within 72 hours.'
+          : code === 'BUET'
+            ? 'The evening meal window moves to 7:30–9:00 PM starting next week. Report issues through the civic board.'
+            : 'Generator support will cover the reading hours (8 PM–12 AM) in all residential halls from Sunday.',
+      audience: 'STUDENTS',
+      created_by: `demo-user-${code.toLowerCase()}-governance`,
+      created_at: daysAgo(2),
+    });
+  }
+
   return tables;
 }
 
@@ -1008,7 +1211,15 @@ function readStore(): Record<string, Row[]> {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Record<string, Row[]>;
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        // Backfill tables added after this store version was cached, so new
+        // surfaces (profiles, university_halls, governance_*) always have rows.
+        const merged: Record<string, Row[]> = { ...DEMO_TABLES };
+        for (const [key, value] of Object.entries(parsed)) {
+          if (Array.isArray(value)) merged[key] = value;
+        }
+        return merged;
+      }
     }
   } catch {
     /* corrupted store — fall back to the seed */

@@ -35,6 +35,7 @@ export function issueDemoChallenge(input: {
   role?: unknown;
   fullName?: string;
   studentId?: string;
+  code?: string;
 }): { ok: true; challenge: DemoChallenge } | { ok: false; error: string; errorBn: string; status: number } {
   const email = String(input.email ?? '').trim().toLowerCase();
   const domain = email.split('@')[1] ?? '';
@@ -56,7 +57,9 @@ export function issueDemoChallenge(input: {
     };
   }
   const role = normalizeDemoRole(input.role);
-  const code = DEMO_UNIVERSAL_OTP;
+  // Track B — unique deterministic code per email (falls back to the legacy
+  // universal demo code when the caller does not supply one).
+  const code = input.code?.trim() || DEMO_UNIVERSAL_OTP;
   const challenge: DemoChallenge = {
     email,
     universityId: byDomain.id,
@@ -156,7 +159,9 @@ export function clearDemoSession() {
 export function demoNextStep(role: DemoRole): string {
   switch (role) {
     case 'admin':
-      return '/admin/console';
+      return '/admin/panel';
+    case 'governance':
+      return '/governance/dashboard';
     case 'faculty':
       return '/faculty';
     case 'alumni':
