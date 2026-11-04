@@ -25,6 +25,7 @@ import { useApiList, useModuleMutation, useRealtimeModuleList, useRealtimeTable,
 import { formatDateTime, timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 export default function EventsPage() {
   const session = useSession();
@@ -68,7 +69,7 @@ export default function EventsPage() {
 
   const myRsvps = React.useMemo(() => {
     const map = new Map<string, string>();
-    rsvps.data.forEach((rsvp) => {
+    asArray(rsvps.data).forEach((rsvp) => {
       if (String(rsvp.user_id) === String(session.userId)) map.set(String(rsvp.event_id), String(rsvp.status));
     });
     return map;
@@ -145,19 +146,6 @@ export default function EventsPage() {
     }
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="📅"
-          title="Events & Club Connect"
-          titleBn="ইভেন্ট ও ক্লাব কানেক্ট"
-          blurb="A single real-time calendar for every departmental and club event, with live RSVP counts and club dashboards."
-        />
-        <SignInPrompt moduleName="the events calendar" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -180,11 +168,14 @@ export default function EventsPage() {
         </Button>
         <Button onClick={() => setCreateEventOpen(true)}>+ Create event</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="events and clubs" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Upcoming events" value={grouped.upcoming.length} />
-        <Stat label="Clubs active" value={clubs.data.length} />
-        <Stat label="Recruiting clubs" value={clubs.data.filter((club) => club.is_recruiting).length} tone="amber" />
+        <Stat label="Clubs active" value={asArray(clubs.data).length} />
+        <Stat label="Recruiting clubs" value={asArray(clubs.data).filter((club) => club.is_recruiting).length} tone="amber" />
         <Stat
           label="My RSVPs"
           value={[...myRsvps.values()].filter((status) => status !== 'CANCELLED').length}
@@ -279,7 +270,7 @@ export default function EventsPage() {
           <Card className="p-4 space-y-2">
             <SectionHeader icon="🎭" title="Clubs & societies" subtitle="Live membership counters" />
             <div className="space-y-2">
-              {clubs.data.map((club) => (
+              {asArray(clubs.data).map((club) => (
                 <div key={String(club.id)} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-xs truncate">{club.name_en}</span>
@@ -298,16 +289,16 @@ export default function EventsPage() {
                   </div>
                 </div>
               ))}
-              {clubs.data.length === 0 && <p className="text-xs text-slate-400">No clubs registered yet.</p>}
+              {asArray(clubs.data).length === 0 && <p className="text-xs text-slate-400">No clubs registered yet.</p>}
             </div>
           </Card>
 
           <Card className="p-4 space-y-2">
             <SectionHeader icon="📢" title="Club notices" subtitle="Newest first" />
-            {notices.data.length === 0 ? (
+            {asArray(notices.data).length === 0 ? (
               <p className="text-xs text-slate-400">No notices published.</p>
             ) : (
-              notices.data.slice(0, 5).map((notice) => (
+              asArray(notices.data).slice(0, 5).map((notice) => (
                 <div key={String(notice.id)} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs">
                   <div className="font-semibold">{notice.title}</div>
                   <p className="text-slate-400 line-clamp-2">{notice.body}</p>
@@ -343,7 +334,7 @@ export default function EventsPage() {
         <ClubDashboard
           club={activeClub}
           onClose={() => setActiveClub(null)}
-          notices={notices.data.filter((notice) => String(notice.club_id) === String(activeClub.id))}
+          notices={asArray(notices.data).filter((notice) => String(notice.club_id) === String(activeClub.id))}
           onNotice={async (values) => {
             const result = await noticeMutation.create({ ...values, club_id: activeClub.id });
             if (result.ok) {

@@ -25,6 +25,7 @@ import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
 import { formatBdt, formatDateTime, toStringArray} from '@/lib/utils';
+import { asArray } from '@/lib/render-safe';
 
 export default function SportsPage() {
   const session = useSession();
@@ -49,22 +50,9 @@ export default function SportsPage() {
   const campaignMutation = useModuleMutation('campaigns');
   const donationMutation = useModuleMutation('donations');
 
-  const totalRaised = campaigns.data.reduce((sum, campaign) => sum + Number(campaign.raised_bdt ?? 0), 0);
-  const totalTarget = campaigns.data.reduce((sum, campaign) => sum + Number(campaign.target_bdt ?? 0), 0);
+  const totalRaised = asArray(campaigns.data).reduce((sum, campaign) => sum + Number(campaign.raised_bdt ?? 0), 0);
+  const totalTarget = asArray(campaigns.data).reduce((sum, campaign) => sum + Number(campaign.target_bdt ?? 0), 0);
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🏆"
-          title="Sports & Crowdfunding"
-          titleBn="খেলাধুলা ও ক্রাউডফান্ডিং"
-          blurb="Find teammates or opponents, book fields and gyms in real time, and follow every taka in a transparent donation tracker."
-        />
-        <SignInPrompt moduleName="sports and fundraising" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -78,12 +66,15 @@ export default function SportsPage() {
       >
         <Button onClick={() => setTeamOpen(true)}>+ Create a team</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="sports and campaigns" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Open teams" value={teams.data.filter((team) => String(team.status) === 'OPEN').length} />
-        <Stat label="Challenges" value={challenges.data.length} tone="teal" />
+        <Stat label="Open teams" value={asArray(teams.data).filter((team) => String(team.status) === 'OPEN').length} />
+        <Stat label="Challenges" value={asArray(challenges.data).length} tone="teal" />
         <Stat label="Raised (BDT)" value={formatBdt(totalRaised)} tone="amber" hint={`of ${formatBdt(totalTarget)}`} />
-        <Stat label="Ledger entries" value={ledger.data.length} />
+        <Stat label="Ledger entries" value={asArray(ledger.data).length} />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -111,10 +102,10 @@ export default function SportsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="space-y-2">
             <SectionHeader icon="⚽" title="Teams looking for players" subtitle="Live roster needs" />
-            {teams.data.length === 0 ? (
+            {asArray(teams.data).length === 0 ? (
               <EmptyState icon="⚽" title="No teams yet" description="Create a team and list the roles you need." action={<Button onClick={() => setTeamOpen(true)}>Create a team</Button>} />
             ) : (
-              teams.data.map((team) => (
+              asArray(teams.data).map((team) => (
                 <Card key={String(team.id)} className="p-4 text-xs space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-sm">{team.name}</span>
@@ -161,7 +152,7 @@ export default function SportsPage() {
                 + Post a challenge
               </Button>
             </div>
-            {challenges.data.map((challenge) => (
+            {asArray(challenges.data).map((challenge) => (
               <Card key={String(challenge.id)} className="p-4 text-xs space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-sm">{challenge.title}</span>
@@ -176,7 +167,7 @@ export default function SportsPage() {
                 {challenge.description && <p className="text-slate-500 dark:text-slate-400">{challenge.description}</p>}
               </Card>
             ))}
-            {challenges.data.length === 0 && <p className="text-xs text-slate-400">No open challenges.</p>}
+            {asArray(challenges.data).length === 0 && <p className="text-xs text-slate-400">No open challenges.</p>}
           </div>
         </div>
       )}
@@ -187,7 +178,7 @@ export default function SportsPage() {
             <SkeletonList rows={2} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {venues.data.map((venue) => {
+              {asArray(venues.data).map((venue) => {
                 const venueBookings = bookings.data
                   .filter((booking) => String(booking.venue_id) === String(venue.id) && String(booking.status) === 'CONFIRMED')
                   .sort((a, b) => new Date(String(a.starts_at)).getTime() - new Date(String(b.starts_at)).getTime());
@@ -218,7 +209,7 @@ export default function SportsPage() {
                   </Card>
                 );
               })}
-              {venues.data.length === 0 && (
+              {asArray(venues.data).length === 0 && (
                 <EmptyState icon="🏟️" title="No venues listed" description="Your university admin can publish fields and gyms." />
               )}
             </div>
@@ -232,12 +223,12 @@ export default function SportsPage() {
             <Button onClick={() => setCampaignOpen(true)}>+ Start a campaign</Button>
             <Badge tone="emerald">Every disbursement is published with proof</Badge>
           </div>
-          {campaigns.data.length === 0 ? (
+          {asArray(campaigns.data).length === 0 ? (
             <EmptyState icon="💝" title="No campaigns yet" description="Raise funds transparently for medical emergencies or events." action={<Button onClick={() => setCampaignOpen(true)}>Start a campaign</Button>} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {campaigns.data.map((campaign) => {
-                const entries = ledger.data.filter((entry) => String(entry.campaign_id) === String(campaign.id));
+              {asArray(campaigns.data).map((campaign) => {
+                const entries = asArray(ledger.data).filter((entry) => String(entry.campaign_id) === String(campaign.id));
                 return (
                   <Card key={String(campaign.id)} className="p-4 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">

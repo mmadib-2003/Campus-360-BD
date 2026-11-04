@@ -25,6 +25,7 @@ import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession,
 import { formatDateTime, initials, timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 export default function CareersPage() {
   const session = useSession();
@@ -51,17 +52,17 @@ export default function CareersPage() {
   const applicationMutation = useModuleMutation('career-applications');
   const conversationMutation = useModuleMutation('conversations');
 
-  const myAlumniProfile = alumni.data.find((profile) => String(profile.user_id) === String(session.userId));
-  const myApplications = applications.data.filter((application) => String(application.applicant_id) === String(session.userId));
+  const myAlumniProfile = asArray(alumni.data).find((profile) => String(profile.user_id) === String(session.userId));
+  const myApplications = asArray(applications.data).filter((application) => String(application.applicant_id) === String(session.userId));
 
-  const alumniOptions = alumni.data.map((profile) => ({
+  const alumniOptions = asArray(alumni.data).map((profile) => ({
     value: String(profile.id),
     label: `${(profile.profiles as Row)?.full_name ?? 'Alumnus'} — ${profile.job_title} @ ${profile.employer}`,
   }));
 
   async function startConversation(profile: Row) {
     const counterpartId = String(profile.user_id);
-    const existing = conversations.data.find(
+    const existing = asArray(conversations.data).find(
       (conversation) =>
         String(conversation.user_a) === counterpartId ||
         String(conversation.user_b) === counterpartId
@@ -84,19 +85,6 @@ export default function CareersPage() {
     }
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="💼"
-          title="Alumni Network & Career Hub"
-          titleBn="অ্যালামনাই নেটওয়ার্ক ও ক্যারিয়ার হাব"
-          blurb="Internships, referrals and real-time messaging with verified alumni of your university."
-        />
-        <SignInPrompt moduleName="the career hub" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -113,11 +101,14 @@ export default function CareersPage() {
         </Button>
         <Button onClick={() => setJobFormOpen(true)}>+ Post an opportunity</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="the career hub" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Open opportunities" value={opportunities.data.length} />
-        <Stat label="Alumni network" value={alumni.data.length} tone="teal" />
-        <Stat label="Offering referrals" value={alumni.data.filter((profile) => profile.offers_referrals).length} tone="amber" />
+        <Stat label="Open opportunities" value={asArray(opportunities.data).length} />
+        <Stat label="Alumni network" value={asArray(alumni.data).length} tone="teal" />
+        <Stat label="Offering referrals" value={asArray(alumni.data).filter((profile) => profile.offers_referrals).length} tone="amber" />
         <Stat label="My applications" value={myApplications.length} />
       </div>
 
@@ -125,7 +116,7 @@ export default function CareersPage() {
         {[
           { key: 'jobs', label: '💼 Opportunities' },
           { key: 'alumni', label: '🤝 Alumni network' },
-          { key: 'messages', label: `💬 Messages (${conversations.data.length})` },
+          { key: 'messages', label: `💬 Messages (${asArray(conversations.data).length})` },
         ].map((item) => (
           <button
             key={item.key}
@@ -167,7 +158,7 @@ export default function CareersPage() {
 
           {opportunities.loading ? (
             <SkeletonList rows={3} />
-          ) : opportunities.data.length === 0 ? (
+          ) : asArray(opportunities.data).length === 0 ? (
             <EmptyState
               icon="💼"
               title="No opportunities posted yet"
@@ -175,7 +166,7 @@ export default function CareersPage() {
               action={<Button onClick={() => setJobFormOpen(true)}>Post an opportunity</Button>}
             />
           ) : (
-            opportunities.data.map((opportunity) => {
+            asArray(opportunities.data).map((opportunity) => {
               const owner = (opportunity.alumni_profiles as Row) ?? {};
               const applied = myApplications.some((application) => String(application.opportunity_id) === String(opportunity.id));
               return (
@@ -216,7 +207,7 @@ export default function CareersPage() {
                       size="sm"
                       variant="secondary"
                       onClick={async () => {
-                        const profile = alumni.data.find((item) => String(item.id) === String(opportunity.alumni_id));
+                        const profile = asArray(alumni.data).find((item) => String(item.id) === String(opportunity.alumni_id));
                         if (profile) await startConversation(profile);
                       }}
                     >
@@ -232,10 +223,10 @@ export default function CareersPage() {
 
       {tab === 'alumni' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {alumni.data.length === 0 && (
+          {asArray(alumni.data).length === 0 && (
             <EmptyState icon="🤝" title="No alumni profiles yet" description="Invite graduates of your university to join the network." />
           )}
-          {alumni.data.map((profile) => (
+          {asArray(alumni.data).map((profile) => (
             <Card key={String(profile.id)} className="p-4 space-y-2">
               <div className="flex items-center gap-3">
                 <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold text-xs">
@@ -270,13 +261,13 @@ export default function CareersPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="space-y-2">
             <SectionHeader icon="💬" title="Conversations" subtitle="Realtime direct messages" />
-            {conversations.data.length === 0 && (
+            {asArray(conversations.data).length === 0 && (
               <EmptyState icon="💬" title="No conversations yet" description="Open an alumnus profile and start a chat." />
             )}
-            {conversations.data.map((conversation) => {
+            {asArray(conversations.data).map((conversation) => {
               const counterpartId =
                 String(conversation.user_a) === String(session.userId) ? conversation.user_b : conversation.user_a;
-              const payload = alumni.data.find((profile) => String(profile.user_id) === String(counterpartId));
+              const payload = asArray(alumni.data).find((profile) => String(profile.user_id) === String(counterpartId));
               return (
                 <button
                   key={String(conversation.id)}
@@ -455,7 +446,7 @@ function MessageThread({ conversation }: { conversation: Row }) {
 
   React.useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.data.length]);
+  }, [asArray(messages.data).length]);
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
@@ -472,10 +463,10 @@ function MessageThread({ conversation }: { conversation: Row }) {
   return (
     <Card className="p-4 flex flex-col h-[520px]">
       <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-        {messages.data.length === 0 && (
+        {asArray(messages.data).length === 0 && (
           <p className="text-xs text-slate-400">No messages yet — say hello and mention the role you are interested in.</p>
         )}
-        {messages.data.map((message) => {
+        {asArray(messages.data).map((message) => {
           const mine = String(message.sender_id) === String(session.userId);
           return (
             <div

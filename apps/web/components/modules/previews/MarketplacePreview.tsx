@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { useRealtimeModuleList } from '@/lib/modules/client';
 import { Badge, EmptyState, SkeletonList, statusTone } from '../ui';
 import { formatBdt, timeAgo } from '@/lib/utils';
+import { asArray } from '@/lib/render-safe';
 
 export default function MarketplacePreview() {
   const listings = useRealtimeModuleList('marketplace', { limit: 3 });
 
   if (listings.loading) return <SkeletonList rows={1} />;
-  if (listings.data.length === 0) {
+  if (asArray(listings.data).length === 0) {
     return (
       <EmptyState
         icon="🛍️"
@@ -22,7 +23,7 @@ export default function MarketplacePreview() {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-      {listings.data.map((listing) => (
+      {asArray(listings.data).map((listing) => (
         <Link
           key={String(listing.id)}
           href="/marketplace"

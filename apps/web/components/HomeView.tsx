@@ -11,7 +11,19 @@ interface RegistryUniversity {
   name_en: string;
   name_bn: string;
   city?: string;
+  /** Both optional: the demo payload and 0014 provide them, older rows may not. */
+  logo_url?: string | null;
+  cover_image_url?: string | null;
   university_email_domains?: Array<{ domain: string; is_primary?: boolean }>;
+}
+
+/**
+ * A 404 on a campus image must never take the section down: the element hides
+ * itself and the gradient behind it stays as the artwork. `visibility` (not
+ * `remove()`) so React still owns the node it is unmounting later.
+ */
+function hideOnBrokenImage(event: React.SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.style.visibility = 'hidden';
 }
 
 export function HomeView({ compact = false }: { compact?: boolean }) {
@@ -75,18 +87,48 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
             {(universities.length ? universities : []).slice(0, 12).map((university) => (
               <div
                 key={university.id}
-                className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5"
+                className="overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
               >
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-bold text-xs">
-                    {university.code}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    {(university.university_email_domains ?? []).map((domain) => `@${domain.domain}`).join(', ')}
-                  </span>
+                <div className="relative h-24 bg-gradient-to-br from-emerald-900/70 via-slate-900 to-teal-950">
+                  {university.cover_image_url ? (
+                    <img
+                      src={university.cover_image_url}
+                      alt=""
+                      loading="lazy"
+                      onError={hideOnBrokenImage}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : null}
+                  <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-slate-950/85 to-transparent" />
+                  <div className="absolute bottom-2 left-3 right-3 flex items-center gap-2">
+                    {university.logo_url ? (
+                      <img
+                        src={university.logo_url}
+                        alt=""
+                        loading="lazy"
+                        width={28}
+                        height={28}
+                        onError={hideOnBrokenImage}
+                        className="h-7 w-7 rounded-lg ring-1 ring-white/25"
+                      />
+                    ) : null}
+                    <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 font-bold text-xs">
+                      {university.code}
+                    </span>
+                  </div>
                 </div>
-                <div className="font-semibold text-sm">{locale === 'bn' ? university.name_bn : university.name_en}</div>
-                <div className="text-xs text-slate-400">{locale === 'bn' ? university.name_en : university.name_bn}</div>
+                <div className="p-4 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-400 font-mono truncate">
+                      {(university.university_email_domains ?? []).map((domain) => `@${domain.domain}`).join(', ')}
+                    </span>
+                    {university.city ? (
+                      <span className="text-[11px] text-slate-400 shrink-0">{university.city}</span>
+                    ) : null}
+                  </div>
+                  <div className="font-semibold text-sm">{locale === 'bn' ? university.name_bn : university.name_en}</div>
+                  <div className="text-xs text-slate-400">{locale === 'bn' ? university.name_en : university.name_bn}</div>
+                </div>
               </div>
             ))}
           </div>

@@ -3,17 +3,26 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { asNum } from '@/lib/render-safe';
+import { SafeSection } from '@/components/SafeSection';
 import { useUi } from '@/lib/i18n-client';
 
 export function Card({
   children,
   className,
   as: Tag = 'div',
+  label,
 }: {
   children: React.ReactNode;
   className?: string;
   as?: React.ElementType;
+  /** Names this section in the crash card and the console. Worth passing. */
+  label?: string;
 }) {
+  // Every module page composes its sections out of this one component, so the
+  // boundary lives here: a card whose rows throw used to unmount the page (and
+  // with the root layout rendering AppShell, the header and nav too). Now only
+  // this card is replaced -- see components/SafeSection.tsx for the trade-off.
   return (
     <Tag
       className={cn(
@@ -21,7 +30,7 @@ export function Card({
         className
       )}
     >
-      {children}
+      <SafeSection label={label ?? 'This section'}>{children}</SafeSection>
     </Tag>
   );
 }
@@ -463,7 +472,11 @@ export function useToast() {
 }
 
 export function Progress({ value, max, tone = 'emerald' }: { value: number; max: number; tone?: 'emerald' | 'amber' }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  // A JSONB counter can be NULL and a ratio divisor can be 0 -- both used to
+  // render `NaN%` (and, before this file, sometimes throw).
+  const v = asNum(value);
+  const m = Math.max(asNum(max, 1), 1);
+  const pct = Math.min(100, Math.round((v / m) * 100));
   return (
     <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
       <div
@@ -477,10 +490,15 @@ export function Progress({ value, max, tone = 'emerald' }: { value: number; max:
 export function SignInPrompt({ moduleName }: { moduleName: string }) {
   return (
     <Card className="p-5 space-y-3">
-      <h3 className="font-bold text-sm">Sign in to use {moduleName}</h3>
+      <h3 className="font-bold text-sm">
+        Browsing {moduleName} is open. Sign in to post, book and contact.
+      </h3>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Campus360 modules are limited to verified students of your university. Sign in with your institutional
-        email to post, book and chat.
+        Anyone can read the listings. Posting, booking, messaging and the contact details students share with each
+        other need a verified campus account — sign in with your institutional email for those.
+      </p>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+        তালিকা দেখা সবার জন্য উন্মুক্ত। পোস্ট করতে, বুক করতে ও যোগাযোগের বিবরণ দেখতে বিশ্ববিদ্যালয়ের ইমেইলে সাইন-ইন করুন।
       </p>
       <div className="flex gap-2">
         <a
