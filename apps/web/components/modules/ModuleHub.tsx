@@ -3,11 +3,13 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { MODULE_META } from '@/lib/modules/labels';
 import dynamic from 'next/dynamic';
 import { useSession } from '@/lib/modules/client';
 import { Badge, Card, SkeletonList } from './ui';
 import { useUi } from '@/lib/i18n-client';
+import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
 
 // Code-split embeds keep the campus feed's first-load JS unchanged.
 const MarketplacePreview = dynamic(() => import('./previews/MarketplacePreview'), {
@@ -60,31 +62,41 @@ export function ModuleHub() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <StaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {ORDER.map((key) => {
           const meta = MODULE_META[key];
           if (!meta) return null;
           return (
-            <Link
-              key={key}
-              href={meta.href}
-              className="group p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:shadow-md transition"
-            >
-              <div className="flex items-start gap-3">
-                <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center text-lg shrink-0">
-                  {meta.icon}
-                </span>
-                <div className="min-w-0">
-                  <div className="font-semibold text-sm group-hover:text-emerald-500 transition truncate">
-                    {locale === 'bn' ? meta.titleBn : meta.title}
+            <StaggerItem key={key} className="h-full">
+              <motion.div {...cardHover} className="h-full">
+                <Link
+                  href={meta.href}
+                  className="group card-glow flex h-full flex-col justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center text-lg shrink-0 transition-transform duration-200 group-hover:scale-110">
+                      {meta.icon}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm group-hover:text-emerald-500 transition truncate">
+                        {locale === 'bn' ? meta.titleBn : meta.title}
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{locale === 'bn' ? meta.blurbBn : meta.blurb}</p>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{locale === 'bn' ? meta.blurbBn : meta.blurb}</p>
-                </div>
-              </div>
-            </Link>
+                  <div className="mt-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {t('Live module')}
+                    </span>
+                    <span className="transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+                  </div>
+                </Link>
+              </motion.div>
+            </StaggerItem>
           );
         })}
-      </div>
+      </StaggerGroup>
 
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">

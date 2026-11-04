@@ -23,3 +23,28 @@ plus `/admin/console` for staff.
 3. **Grievance & Complaint Case Management:** Anonymous-by-default for harassment/ragging with cryptographic `tracking_code` + device-bound secret, category-to-governing-unit SLA routing, automatic escalation cron, two-way messaging, and CRITICAL 999 crisis interstitial.
 4. **Live Campus Events & Google Maps Geofencing:** Places Autocomplete, live organizer GPS broadcast, Haversine geofence check-in, and accessible text directions.
 5. **Real-Time Polymorphic Reviews:** Instant Supabase Realtime channel updates and database trigger-maintained `review_aggregates`.
+
+## Quick Demo Login
+
+`/signin` has a **Quick Demo Login** panel with four one-click identities — Student, Faculty,
+Admin and Alumni. No OTP email is needed:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Student | `student@demo.campus360.test` | `Demo#1234` |
+| Faculty | `faculty@demo.campus360.test` | `Demo#1234` |
+| Admin | `admin@demo.campus360.test` | `Demo#1234` |
+| Alumni | `alumni@demo.campus360.test` | `Demo#1234` |
+
+They are provisioned by `supabase/seed/seed_quick_demo_accounts.sql` (hardcoded bcrypt hash,
+idempotent) and are included in `supabase db reset` via `supabase/config.toml`. With Supabase
+configured the buttons use `signInWithPassword`; without it they fall back to the offline demo
+store, so a fresh preview is always explorable.
+
+## Authentic campus imagery
+
+The six flagship universities use real Wikimedia Commons campus photographs and real
+institutional logos: DU (Curzon Hall), JU (Shaheed Minar), BUET, SUST, CU and RU. The URLs live
+in `supabase/seed/seed.sql`, migration `0016_university_real_images.sql`, and the offline demo
+payload in `apps/web/lib/demo-auth.ts`. Attribution and licences are in
+[`docs/IMAGE_ATTRIBUTION.md`](docs/IMAGE_ATTRIBUTION.md).

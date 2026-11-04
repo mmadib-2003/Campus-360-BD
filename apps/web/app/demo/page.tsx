@@ -18,6 +18,8 @@ import {
 
 const ROLE_LABELS: Record<string, string> = {
   student: 'Student',
+  faculty: 'Faculty',
+  alumni: 'Alumni',
   admin: 'Platform Admin',
   governance: 'University Governance',
 };
@@ -25,6 +27,8 @@ const ROLE_LABELS: Record<string, string> = {
 function landingFor(role: DemoRole): string {
   if (role === 'admin') return '/admin/panel';
   if (role === 'governance') return '/governance/dashboard';
+  if (role === 'faculty') return '/faculty';
+  if (role === 'alumni') return '/careers';
   return '/feed';
 }
 

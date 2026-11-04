@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
+import { subscribeToTable } from '@/lib/realtime';
 import { timeAgo } from '@/lib/utils';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, SkeletonList, useToast } from '@/components/modules/ui';
 import { useSession } from '@/lib/modules/client';
@@ -80,25 +81,29 @@ export function RealtimeReviewWidget({
   }, [load, tick]);
 
   // Supabase Realtime: new reviews appear instantly on every open tab.
+  // The helper registers .on() before .subscribe(), uses a unique topic per
+  // effect run and calls removeChannel on cleanup (see lib/realtime.ts).
   useEffect(() => {
     const supabase = trySupabaseBrowser();
     if (!supabase) return;
 
-    const channel = supabase
-      .channel(`reviews:${type}:${target}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'reviews', filter: `target_id=eq.${target}` },
-        (payload: { new: ReviewItem }) => {
-          const inserted = payload.new;
+    return subscribeToTable(
+      supabase,
+      'reviews',
+      {
+        onInsert: (row) => {
+          const inserted = row as unknown as ReviewItem;
+          if (!inserted?.id) return;
           setReviews((prev) => (prev.some((r) => r.id === inserted.id) ? prev : [inserted, ...prev]));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+        },
+        onError: (error) => console.warn('[campus360:realtime] review subscription failed', error),
+      },
+      {
+        event: 'INSERT',
+        filter: `target_id=eq.${target}`,
+        topicBase: `campus360:reviews:${type}:${target}`,
+      }
+    );
   }, [type, target]);
 
   async function submit(event: React.FormEvent) {

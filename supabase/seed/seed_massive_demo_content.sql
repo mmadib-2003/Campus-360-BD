@@ -662,14 +662,12 @@ END
 $hallfix$;
 
 -- · campus imagery for the home feed.
--- seed.sql has pointed universities.logo_url at /logos/<code>.svg since the
--- registry was seeded, and that directory was never created -- so every campus
--- image in the product has been a 404 and every component using it has been
--- hiding a broken <img>. Both columns are filled here from generated assets that
--- do exist in apps/web/public: a monogram crest per university, and one wide
--- placeholder cover. These are illustrations, not photographs of the
--- institutions, and that is the honest default for a demo; a university that
--- wants its own picture updates this one column.
+-- seed.sql (and migration 0016) now point the six flagship campuses at real
+-- Wikimedia Commons photographs and real institutional logos. This pass is the
+-- fallback for every *other* campus: a monogram crest per university and one
+-- wide local placeholder cover, both of which exist in apps/web/public. The
+-- WHERE clauses only touch rows that are still NULL or still a local
+-- `/campuses/*.jpg` path, so the authentic flagship URLs are never overwritten.
 UPDATE public.universities
    SET logo_url = '/logos/' || lower(code) || '.svg'
  WHERE is_active AND (logo_url IS NULL OR logo_url LIKE '/logos/%.svg');
