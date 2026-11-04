@@ -37,9 +37,11 @@ Admin and Alumni. No OTP email is needed:
 | Alumni | `alumni@demo.campus360.test` | `Demo#1234` |
 
 They are provisioned by `supabase/seed/seed_quick_demo_accounts.sql` (hardcoded bcrypt hash,
-idempotent) and are included in `supabase db reset` via `supabase/config.toml`. With Supabase
-configured the buttons use `signInWithPassword`; without it they fall back to the offline demo
-store, so a fresh preview is always explorable.
+idempotent) and are included in `supabase db reset` via `supabase/config.toml`. The seed also
+creates an `auth.identities` row per account — GoTrue's password grant resolves the email
+through `auth.identities`, so `auth.users` alone is not enough. With Supabase configured the
+buttons use `signInWithPassword`; without it they fall back to the offline demo store, so a
+fresh preview is always explorable.
 
 ## Authentic campus imagery
 
