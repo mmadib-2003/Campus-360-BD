@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { DEMO_OTP_TTL_MS } from '@/lib/demo-otp';
 import { DEMO_UNIVERSITIES, demoFindUniversity, demoFindUniversityByDomain, type DemoRole } from '@/lib/modules/demo-data';
 
 export const DEMO_OTP_COOKIE = 'campus360_demo_otp';
@@ -74,7 +75,8 @@ export function issueDemoChallenge(input: {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    maxAge: 600,
+    // Same 5-minute window as a real email OTP (DEMO_OTP_TTL_MS).
+    maxAge: Math.round(DEMO_OTP_TTL_MS / 1000),
   });
   return { ok: true, challenge };
 }
@@ -86,7 +88,7 @@ export function readDemoChallenge(): DemoChallenge | null {
   try {
     const parsed = JSON.parse(raw) as DemoChallenge;
     if (!parsed?.email || !parsed?.code) return null;
-    if (Date.now() - parsed.createdAt > 10 * 60 * 1000) return null;
+    if (Date.now() - parsed.createdAt > DEMO_OTP_TTL_MS) return null;
     return parsed;
   } catch {
     return null;

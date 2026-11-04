@@ -6,6 +6,11 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ['@campus360/shared', '@campus360/ui'],
+  // The Resend SDK is server-only and pulls in Node built-ins (crypto, http).
+  // Keeping it external stops the bundler from walking it into a client graph.
+  experimental: {
+    serverComponentsExternalPackages: ['resend'],
+  },
   async headers() {
     return [
       {

@@ -64,6 +64,7 @@ export default function AdminLoginPage() {
             studentId: `${selected?.code ?? 'BD'}-ADM-001`,
             demoCode: payload.data?.demoCode ?? null,
             demo: Boolean(payload.data?.demo),
+            expiresAt: payload.data?.expiresAt ?? null,
           })
         );
       }

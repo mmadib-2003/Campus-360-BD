@@ -15,6 +15,22 @@ interface SignupContext {
   studentId: string;
   demoCode?: string | null;
   demo?: boolean;
+  /** ISO deadline of the emailed OTP (generation time + 5 minutes). */
+  expiresAt?: string | null;
+}
+
+function formatClock(totalSeconds: number): string {
+  const safe = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function secondsUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const time = new Date(iso).getTime();
+  if (Number.isNaN(time)) return null;
+  return Math.max(0, Math.round((time - Date.now()) / 1000));
 }
 
 function readContext(): SignupContext | null {
@@ -40,6 +56,10 @@ function VerifyEmailForm() {
   const [nextStep, setNextStep] = React.useState('/feed');
   const [outcome, setOutcome] = React.useState<IdVerificationOutcome | null>(null);
   const [demoCode, setDemoCode] = React.useState<string | null>(null);
+  // Real email OTP: TTL countdown + resend cooldown, both driven by the
+  // /api/auth/request-otp response (secondsRemaining / cooldownSeconds).
+  const [expiresIn, setExpiresIn] = React.useState<number | null>(null);
+  const [cooldown, setCooldown] = React.useState(0);
 
   React.useEffect(() => {
     const stored = readContext();
@@ -47,8 +67,19 @@ function VerifyEmailForm() {
       setContext(stored);
       setEmail(stored.email);
       setDemoCode(stored.demoCode ?? null);
+      setExpiresIn(secondsUntil(stored.expiresAt));
     }
   }, []);
+
+  const countdownActive = expiresIn !== null || cooldown > 0;
+  React.useEffect(() => {
+    if (!countdownActive) return;
+    const timer = window.setInterval(() => {
+      setExpiresIn((value) => (value === null ? value : Math.max(0, value - 1)));
+      setCooldown((value) => Math.max(0, value - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [countdownActive]);
 
   const university = getDemoUniversity(context?.universityId ?? '');
   const role = context?.role ?? 'student';
@@ -88,21 +119,41 @@ function VerifyEmailForm() {
   }
 
   async function resend() {
-    if (!context) return;
+    const targetEmail = context?.email ?? email;
+    if (!targetEmail) return;
     setLoading(true);
     try {
       const response = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: context.email,
-          universityId: context.universityId,
-          role: context.role,
-          signupPayload: { fullName: context.fullName, studentId: context.studentId, role: context.role },
+          email: targetEmail,
+          universityId: context?.universityId,
+          role: context?.role,
+          signupPayload: {
+            fullName: context?.fullName,
+            studentId: context?.studentId,
+            role: context?.role ?? 'student',
+          },
         }),
       });
       const payload = await response.json();
-      if (payload?.data?.demoCode) setDemoCode(payload.data.demoCode);
+      if (payload?.success) {
+        // Demo mode only: the server hands back the code to show in the panel.
+        setDemoCode(payload?.data?.demoCode ?? null);
+        const fromSeconds = Number(payload?.data?.secondsRemaining);
+        setExpiresIn(
+          Number.isFinite(fromSeconds) && fromSeconds > 0
+            ? fromSeconds
+            : secondsUntil(payload?.data?.expiresAt)
+        );
+        setCooldown(Number(payload?.data?.cooldownSeconds) || 0);
+        setErrorMsg(null);
+      } else {
+        setErrorMsg(payload?.error?.message_en ?? t('Verification failed'));
+      }
+    } catch {
+      setErrorMsg(t('Verification failed'));
     } finally {
       setLoading(false);
     }
@@ -129,8 +180,26 @@ function VerifyEmailForm() {
             {t('Email')}: <strong>{email}</strong>
           </p>
         )}
-        {/* Track B — Demo OTP panel. Renders only when NEXT_PUBLIC_AUTH_MODE === 'demo'. */}
+        {/* Track B — Demo OTP panel. Renders only when the server issued a demo code. */}
         <DemoOtpPanel email={email} code={demoCode} />
+
+        {!demoCode && (
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            {t('A 6-digit code has been emailed to your university address. It expires 5 minutes after it is sent.')}
+          </p>
+        )}
+        {expiresIn !== null && (
+          <p
+            className={`mt-2 text-[11px] font-semibold ${
+              expiresIn === 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'
+            }`}
+            data-testid="otp-countdown"
+          >
+            {expiresIn === 0
+              ? t('Session expired')
+              : t('Code expires in {time}', { time: formatClock(expiresIn) })}
+          </p>
+        )}
 
         <form onSubmit={handleVerify} className="mt-5 space-y-4">
           <input
@@ -157,8 +226,13 @@ function VerifyEmailForm() {
           >
             {loading ? t('Verifying…') : t('Verify & Continue')}
           </button>
-          <button type="button" onClick={resend} className="w-full text-xs text-emerald-600 dark:text-emerald-400 hover:underline">
-            {t('Resend code')}
+          <button
+            type="button"
+            onClick={resend}
+            disabled={loading || cooldown > 0}
+            className="w-full text-xs text-emerald-600 dark:text-emerald-400 hover:underline disabled:text-slate-400 disabled:no-underline dark:disabled:text-slate-500"
+          >
+            {cooldown > 0 ? t('Resend code in {seconds}s', { seconds: cooldown }) : t('Resend code')}
           </button>
         </form>
       </div>
