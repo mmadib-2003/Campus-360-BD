@@ -36,6 +36,8 @@ const PLACEHOLDER_MARKERS = [
 ];
 
 export interface ResolvedSupabaseUrl {
+  /** The 20-char project ref taken from a `*.supabase.co` host, else null. */
+  projectRef?: string | null;
   /** Absolute, scheme-corrected, no trailing slash. Null when unusable. */
   url: string | null;
   /** Bare hostname, for logs and error messages. */
@@ -157,7 +159,14 @@ export function resolveSupabaseUrl(raw?: string | null): ResolvedSupabaseUrl {
   }
 
   const url = `${parsed.protocol}//${parsed.host}`;
-  return { url, host, problem: null, repaired: repairNote(notes), looksLikeProject };
+  return {
+    url,
+    host,
+    projectRef: looksLikeProject ? ref : null,
+    problem: null,
+    repaired: repairNote(notes),
+    looksLikeProject,
+  };
 }
 
 export interface SupabaseFault {
@@ -233,6 +242,132 @@ export function scrubRegistrySecrets(text: unknown): string {
   out = out.replace(/([a-z][a-z0-9+.-]*:\/\/)([^/@\s]*:[^/@\s]*)@/gi, '$1[redacted-credentials]@');
   out = out.replace(/(Bearer\s+)[A-Za-z0-9._-]{20,}/gi, '$1[redacted-token]');
   return out;
+}
+
+/**
+ * Shape check for a Supabase credential, safe to call from a public endpoint:
+ * it reports *what kind* of value is configured and never the value itself.
+ *
+ * The registry outage proved up that `Boolean(process.env.X)` is a useless check
+ * — `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example-anon` from `.env.example` is
+ * truthy, and every code path that trusts "truthy" then dies somewhere else with
+ * a message about the wrong layer. So: a legacy key must decode to a JSON payload
+ * carrying `role`, and if the project ref is known the payload's `ref` must agree
+ * with it. The newer `sb_publishable_…` / `sb_secret_…` format is not a JWT, so it
+ * is accepted on its prefix instead.
+ */
+export type KeyShape =
+  | 'missing'
+  | 'placeholder'
+  | 'legacy-jwt'
+  | 'publishable'
+  | 'secret-format'
+  | 'malformed';
+
+export interface KeyReport {
+  present: boolean;
+  shape: KeyShape;
+  /** `anon` / `service_role` for a decodable legacy JWT, else null. */
+  role: string | null;
+  /** The `ref` inside a legacy JWT, else null — public information. */
+  ref: string | null;
+  /** True when a legacy JWT's ref matches the configured project's host ref. */
+  refMatchesProject: boolean | null;
+  /** Actionable text, safe to show: never contains the value. */
+  problem: string | null;
+}
+
+// Deliberately specific: a real key is high-entropy base64url, and a loose
+// marker like `xxx` would false-positive on one run of random characters and
+// hand back a "placeholder" verdict on a working deployment.
+const PLACEHOLDER_KEY_MARKERS = [
+  'example-anon',
+  'example-service-role',
+  'your-key',
+  'your-',
+  'replace-with',
+  'change-me',
+  'changeme',
+  'placeholder',
+  'sample',
+];
+const PLACEHOLDER_RUN = /x{6,}/i;
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const padded = parts[1].replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(parts[1].length / 4) * 4, '=');
+    const json = Buffer.from(padded, 'base64').toString('utf8');
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** @param value the raw env value; @param expectedRef project ref from the URL, if any */
+export function describeSupabaseKey(
+  value: string | undefined,
+  expected?: { role?: 'anon' | 'service_role'; projectRef?: string | null }
+): KeyReport {
+  const raw = String(value ?? '').trim();
+  const empty: KeyReport = {
+    present: false,
+    shape: 'missing',
+    role: null,
+    ref: null,
+    refMatchesProject: null,
+    problem: `${expected?.role === 'service_role' ? 'SUPABASE_SERVICE_ROLE_KEY' : 'NEXT_PUBLIC_SUPABASE_ANON_KEY'} is not set in this runtime`,
+  };
+  if (!raw) return empty;
+
+  const placeholder = PLACEHOLDER_RUN.test(raw)
+    ? 'a run of x characters'
+    : PLACEHOLDER_KEY_MARKERS.find((marker) => raw.toLowerCase().includes(marker));
+  if (placeholder) {
+    return {
+      present: true,
+      shape: 'placeholder',
+      role: null,
+      ref: null,
+      refMatchesProject: null,
+      problem: `still contains the .env.example placeholder fragment "${placeholder}"`,
+    };
+  }
+
+  if (raw.startsWith('sb_publishable_')) {
+    return { present: true, shape: 'publishable', role: 'anon', ref: null, refMatchesProject: null, problem: null };
+  }
+  if (raw.startsWith('sb_secret_')) {
+    return { present: true, shape: 'secret-format', role: 'service_role', ref: null, refMatchesProject: null, problem: null };
+  }
+
+  const payload = decodeJwtPayload(raw);
+  if (!payload) {
+    return {
+      present: true,
+      shape: 'malformed',
+      role: null,
+      ref: null,
+      refMatchesProject: null,
+      problem: 'is neither an sb_publishable_/sb_secret_ key nor a decodable JWT',
+    };
+  }
+
+  const role = typeof payload.role === 'string' ? payload.role : null;
+  const ref = typeof payload.ref === 'string' ? payload.ref : null;
+  const projectRef = expected?.projectRef ?? null;
+  const refMatchesProject = projectRef && ref ? ref === projectRef : null;
+
+  let problem: string | null = null;
+  if (expected?.role && role !== expected.role) {
+    problem = `carries role "${role ?? 'unknown'}" but this runtime needs "${expected.role}" — the two clients are not interchangeable`;
+  } else if (refMatchesProject === false) {
+    problem = `was issued for project "${ref}" while NEXT_PUBLIC_SUPABASE_URL points at "${projectRef}" — a key from a different project`;
+  }
+
+  return { present: true, shape: 'legacy-jwt', role, ref, refMatchesProject, problem };
 }
 
 /**

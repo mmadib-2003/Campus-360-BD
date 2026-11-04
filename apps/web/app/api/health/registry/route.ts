@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, createSupabaseRouteClient, supabaseTarget } from '@/lib/supabase-server';
 import { REGISTRY_NO_STORE, registryMessage, registryRead } from '@/lib/registry-cache';
+import { describeSupabaseKey } from '@/lib/supabase-url';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 
 // Never cache a health probe — a cached answer is a false answer.
@@ -52,6 +53,13 @@ export async function GET() {
       serverSupabaseConfigured: boolean;
       serviceRolePresent: boolean;
       authMode: string;
+      /**
+       * Shape only — never a value. A placeholder or wrong-project key is the
+       * next thing to go wrong after a placeholder URL, and `non-empty` was not
+       * enough of a check for the URL either.
+       */
+      anonKey: ReturnType<typeof describeSupabaseKey>;
+      serviceRoleKey: ReturnType<typeof describeSupabaseKey>;
     };
     tables: TableProbe[];
     allOk: boolean;
@@ -65,15 +73,34 @@ export async function GET() {
       serverSupabaseConfigured: isSupabaseServerConfigured(),
       serviceRolePresent: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
       authMode: process.env.NEXT_PUBLIC_AUTH_MODE ?? 'unset',
+      anonKey: describeSupabaseKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+        role: 'anon',
+        projectRef: target.projectRef ?? null,
+      }),
+      serviceRoleKey: describeSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY, {
+        role: 'service_role',
+        projectRef: target.projectRef ?? null,
+      }),
     },
     tables: [],
     allOk: false,
     hint: null,
   };
 
+  const keyProblems = [
+    body.env.anonKey.problem ? `NEXT_PUBLIC_SUPABASE_ANON_KEY ${body.env.anonKey.problem}` : null,
+    body.env.serviceRoleKey.problem ? `SUPABASE_SERVICE_ROLE_KEY ${body.env.serviceRoleKey.problem}` : null,
+  ].filter(Boolean) as string[];
+
   if (target.problem) {
     // Don't even attempt the queries: say precisely what is wrong with the URL.
     body.hint = `Fix NEXT_PUBLIC_SUPABASE_URL. ${target.problem}`;
+    return NextResponse.json(body, { status: 503, headers: { ...REGISTRY_NO_STORE } });
+  }
+  if (keyProblems.length) {
+    // Same reasoning for the credentials: report it before PostgREST answers with
+    // a 401 that mentions neither the variable name nor the project.
+    body.hint = `Fix the Supabase credentials for this deployment: ${keyProblems.join(' | ')}`;
     return NextResponse.json(body, { status: 503, headers: { ...REGISTRY_NO_STORE } });
   }
 
