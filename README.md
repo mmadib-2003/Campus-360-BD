@@ -43,8 +43,10 @@ store, so a fresh preview is always explorable.
 
 ## Authentic campus imagery
 
-The six flagship universities use real Wikimedia Commons campus photographs and real
-institutional logos: DU (Curzon Hall), JU (Shaheed Minar), BUET, SUST, CU and RU. The URLs live
-in `supabase/seed/seed.sql`, migration `0016_university_real_images.sql`, and the offline demo
-payload in `apps/web/lib/demo-auth.ts`. Attribution and licences are in
+24 public universities use real Wikimedia Commons campus photographs and real institutional
+logos: DU (Curzon Hall), JU (Shaheed Minar), BUET, SUST, CU, RU, IU, KU, JNU, COU, BRUR, BUP,
+BU, JUST, BAU, CUET, KUET, RUET, MBSTU, PSTU, NSTU, PUST, BSMRAU and SAU. The URLs live in
+`supabase/seed/seed.sql`, migrations `0016_university_real_images.sql` and
+`0017_university_real_images_expanded.sql`, and the offline demo payload in
+`apps/web/lib/demo-auth.ts`. Attribution and licences are in
 [`docs/IMAGE_ATTRIBUTION.md`](docs/IMAGE_ATTRIBUTION.md).

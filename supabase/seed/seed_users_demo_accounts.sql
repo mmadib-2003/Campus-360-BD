@@ -21,6 +21,10 @@
 --
 -- ⚠️  Never run this against production with a publicly known password.
 -- Runs after seed.sql + seed_university_halls.sql. Idempotent.
+--
+-- Every account also gets an auth.identities row: GoTrue's password grant
+-- resolves the email through auth.identities, so auth.users alone is not
+-- enough for signInWithPassword to work.
 -- ============================================================================
 
 BEGIN;
@@ -126,6 +130,20 @@ BEGIN
         END
       )
       ON CONFLICT (user_id, university_id, role) DO NOTHING;
+
+      -- GoTrue resolves the email through auth.identities for the password
+      -- grant. Without this row signInWithPassword returns "Invalid login
+      -- credentials" even though auth.users has the right bcrypt hash.
+      INSERT INTO auth.identities (
+        user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+      ) VALUES (
+        v_user_id,
+        v_user_id::text,
+        jsonb_build_object('email', v_email, 'email_verified', true, 'sub', v_user_id::text),
+        'email',
+        now(), now(), now()
+      )
+      ON CONFLICT (provider_id, provider) DO NOTHING;
     END LOOP;
   END LOOP;
 

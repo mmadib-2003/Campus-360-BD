@@ -204,6 +204,12 @@ const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   SUST: 'https://commons.wikimedia.org/wiki/Special:FilePath/Sust_campus_5.JPG?width=1600',
   CU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Campus,_University_of_Chittagong_1.jpg?width=1600',
   RU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Rajshahi_University_Campus.jpg?width=1600',
+  JNU: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/Jagannath_University_Bird_View.jpg/1920px-Jagannath_University_Bird_View.jpg',
+  BUP: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/BUP_Campus_Aerial_View_2.jpg/1920px-BUP_Campus_Aerial_View_2.jpg',
+  JUST: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg/1920px-Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg',
+  KUET: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/86/KUET_Central_field.jpg/1920px-KUET_Central_field.jpg',
+  CUET: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/CUET_GATE.jpg/1920px-CUET_GATE.jpg',
+  BAU: 'https://upload.wikimedia.org/wikipedia/commons/e/ed/Bangladesh_Agricultural_University_%28BAU%29.jpg',
 };
 
 /** Real institutional logo files (Wikipedia/Wikimedia), keyed by code. */
@@ -214,6 +220,12 @@ const DEMO_CAMPUS_LOGOS: Record<string, string> = {
   SUST: 'https://upload.wikimedia.org/wikipedia/en/d/d9/Shahjalal_University_of_Science_and_Technology_logo.png',
   CU: 'https://upload.wikimedia.org/wikipedia/en/8/86/University_of_Chittagong_logo.svg',
   RU: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/%E0%A6%B0%E0%A6%BE%E0%A6%9C%E0%A6%B6%E0%A6%BE%E0%A6%B9%E0%A7%80_%E0%A6%AC%E0%A6%BF%E0%A6%B6%E0%A7%8D%E0%A6%AC%E0%A6%AC%E0%A6%BF%E0%A6%A6%E0%A7%8D%E0%A6%AF%E0%A6%BE%E0%A6%B2%E0%A6%AF%E0%A6%BC%E0%A7%87%E0%A6%B0_%E0%A6%B2%E0%A7%8B%E0%A6%97%E0%A7%8B.svg',
+  JNU: 'https://upload.wikimedia.org/wikipedia/en/4/47/Logo_of_Jagannath_University.svg',
+  BUP: 'https://upload.wikimedia.org/wikipedia/en/9/95/Bangladesh_University_of_Professionals_%28BUP%29_Logo.svg',
+  JUST: 'https://upload.wikimedia.org/wikipedia/commons/7/74/Jashore_University_Of_Science_and_Technology_logo.png',
+  KUET: 'https://upload.wikimedia.org/wikipedia/en/7/74/Logo_KUET.svg',
+  CUET: 'https://upload.wikimedia.org/wikipedia/en/0/0e/CUET_Vector_Logo.svg',
+  BAU: 'https://upload.wikimedia.org/wikipedia/en/a/a2/Bangladesh_Agriculture_University_logo.svg',
 };
 
 export function demoUniversitiesPayload() {
