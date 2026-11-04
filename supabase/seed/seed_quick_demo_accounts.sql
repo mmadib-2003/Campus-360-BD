@@ -16,6 +16,11 @@
 -- /signin buttons can document the password. This is demo data only — never
 -- run this seed against a production project with real users.
 --
+-- IMPORTANT: the seed also inserts an `auth.identities` row for every account.
+-- GoTrue's password grant resolves the email through auth.identities; a user
+-- that exists only in auth.users gets "Invalid login credentials" even with a
+-- correct password. The identity row is what makes the one-click login work.
+--
 -- Idempotent: re-running updates the password/profile and keeps the same
 -- auth.users id. Requires migration 0015 (ALUMNI enum value) and seed.sql (DU).
 -- ============================================================================
@@ -112,6 +117,21 @@ BEGIN
     INSERT INTO public.user_roles (user_id, university_id, role)
     VALUES (v_user_id, v_university_id, v_app_role)
     ON CONFLICT (user_id, university_id, role) DO NOTHING;
+
+    -- GoTrue's password grant looks the user up through auth.identities.
+    -- A row in auth.users alone is NOT enough: signInWithPassword returns
+    -- "Invalid login credentials" for a user with no email identity. This
+    -- insert is what makes the one-click buttons work on a fresh project.
+    INSERT INTO auth.identities (
+      user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+    ) VALUES (
+      v_user_id,
+      v_user_id::text,
+      jsonb_build_object('email', v_account.email, 'email_verified', true, 'sub', v_user_id::text),
+      'email',
+      now(), now(), now()
+    )
+    ON CONFLICT (provider_id, provider) DO NOTHING;
   END LOOP;
 
   RAISE NOTICE 'Quick demo accounts ready (student/faculty/admin/alumni@demo.campus360.test) — password Demo#1234';
