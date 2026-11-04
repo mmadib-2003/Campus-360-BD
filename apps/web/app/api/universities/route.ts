@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
-import { REGISTRY_NO_STORE, registryError } from '@/lib/registry-cache';
+import { REGISTRY_NO_STORE, registryFailure, registryRead } from '@/lib/registry-cache';
 import { demoUniversitiesPayload } from '@/lib/demo-auth';
 
 export const dynamic = 'force-dynamic';
@@ -32,18 +32,18 @@ export async function GET(req: NextRequest) {
     query = query.or(`name_en.ilike.%${q}%,name_bn.ilike.%${q}%,code.ilike.%${q}%`);
   }
 
-  const { data, error } = await query;
-  if (error) {
-    // The one place a registry outage became invisible: the body carried
-    // `error.message`, the client discarded it, and the combobox rendered
-    // "No options found". Log the PostgREST fault under a grep-able prefix.
-    registryError('universities.fetch', error, {
-      category: category ?? null,
-      q: q ?? null,
-      project: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '(unset)',
-    });
-    return apiError('FETCH_FAILED', error.message, 'বিশ্ববিদ্যালয়ের তালিকা লোড করা যায়নি।', 500, undefined, REGISTRY_NO_STORE);
-  }
+  // `registryRead` = validate/normalize the Supabase endpoint, retry the
+  // transient transport faults, log the errno. The outage signature was
+  // `message_en: "TypeError: fetch failed"` — that string is undici's wording
+  // from *this function's* call to Supabase, not a fault in the URL the browser
+  // used to reach this route. See docs/REGISTRY_CONNECTIVITY.md.
+  const read = await registryRead<any[]>('universities.fetch', () => query, {
+    category: category ?? null,
+    q: q ?? null,
+  });
+  if (!read.ok) return registryFailure(read, 'বিশ্ববিদ্যালয়ের তালিকা লোড করা যায়নি।');
+
+  const data = read.data;
   return apiSuccess(data ?? [], 200, { count: (data ?? []).length }, REGISTRY_NO_STORE);
 }
 

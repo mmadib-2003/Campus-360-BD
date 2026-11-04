@@ -33,24 +33,43 @@ interface ProgramOption {
  * the runtime logs. This returns the *reason* so the form can show it and offer
  * a retry. `cache: 'no-store'` mirrors the server's own Cache-Control.
  */
-async function fetchRegistry<T>(
+async function fetchRegistryOnce<T>(
   url: string,
   locale: string
-): Promise<{ data: T[]; error: string | null }> {
+): Promise<{ data: T[]; error: string | null; retryable: boolean }> {
   try {
     const response = await fetch(url, { cache: 'no-store' });
     const payload = await response.json().catch(() => null);
     if (payload?.success && Array.isArray(payload.data)) {
-      return { data: payload.data as T[], error: null };
+      return { data: payload.data as T[], error: null, retryable: false };
     }
     const err = payload?.error;
     const message = err
       ? (locale === 'bn' ? err.message_bn || err.message_en : err.message_en || err.message_bn)
       : `HTTP ${response.status}`;
-    return { data: [], error: String(message || 'Request failed') };
+    // FETCH_FAILED / SUPABASE_URL_INVALID are the route telling us *its* upstream
+    // call did not complete. That is worth exactly one more try from here, and
+    // nothing else is (a 400 or an empty list will not change by asking again).
+    const retryable = err?.code === 'FETCH_FAILED';
+    return { data: [], error: String(message || 'Request failed'), retryable };
   } catch (cause) {
-    return { data: [], error: cause instanceof Error ? cause.message : 'Network error' };
+    // A rejected `fetch()` is a browser-side transport failure (offline, DNS,
+    // TLS, an aborted cold start). Distinct from the server's own upstream
+    // failure, which arrives as a JSON envelope above.
+    return {
+      data: [],
+      error: cause instanceof Error ? cause.message : 'Network error',
+      retryable: true,
+    };
   }
+}
+
+async function fetchRegistry<T>(url: string, locale: string): Promise<{ data: T[]; error: string | null }> {
+  const first = await fetchRegistryOnce<T>(url, locale);
+  if (!first.error || !first.retryable) return { data: first.data, error: first.error };
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const second = await fetchRegistryOnce<T>(url, locale);
+  return { data: second.data, error: second.error };
 }
 
 const CYCLE_LABEL: Record<ProgramOption['cycle'], string> = {

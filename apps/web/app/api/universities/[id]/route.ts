@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
-import { REGISTRY_NO_STORE, registryError } from '@/lib/registry-cache';
+import { REGISTRY_NO_STORE, registryFailure, registryRead } from '@/lib/registry-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,8 +20,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 
   const supabase = createSupabaseRouteClient();
-  const { data, error } = await supabase
-    .from('universities')
+  const read = await registryRead<any>('university.fetch', () =>
+    supabase
+      .from('universities')
     .select(`
       *,
       university_email_domains(*),
@@ -29,12 +30,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       halls(*),
       governing_units(*)
     `)
-    .eq('id', params.id)
-    .single();
-
-  if (error || !data) {
-    registryError('university.fetch', error, { id: params.id });
+      .eq('id', params.id)
+      .single(),
+    { id: params.id }
+  );
+  // A transport/config fault must not masquerade as "not found", which is how
+  // this route used to answer every failure.
+  if (!read.ok) return registryFailure(read, 'বিশ্ববিদ্যালয়টি পাওয়া যায়নি।');
+  if (!read.data) {
     return apiError('NOT_FOUND', 'University not found.', 'বিশ্ববিদ্যালয়টি পাওয়া যায়নি।', 404, undefined, REGISTRY_NO_STORE);
   }
-  return apiSuccess(data, 200, undefined, REGISTRY_NO_STORE);
+  return apiSuccess(read.data, 200, undefined, REGISTRY_NO_STORE);
 }
