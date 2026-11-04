@@ -24,7 +24,7 @@ import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
-import { formatBdt, formatDateTime } from '@/lib/utils';
+import { formatBdt, formatDateTime, toStringArray} from '@/lib/utils';
 
 export default function SportsPage() {
   const session = useSession();
@@ -126,7 +126,7 @@ export default function SportsPage() {
                   </div>
                   {team.description && <p className="text-slate-500 dark:text-slate-400">{team.description}</p>}
                   <div className="flex flex-wrap gap-1">
-                    {((team.needed_roles as string[]) ?? []).map((role) => (
+                    {toStringArray(team.needed_roles).map((role) => (
                       <span key={role} className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[10px]">
                         Need: {role}
                       </span>

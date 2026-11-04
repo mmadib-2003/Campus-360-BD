@@ -24,7 +24,7 @@ import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
-import { formatDateTime, timeAgo } from '@/lib/utils';
+import { formatDateTime, timeAgo, toStringArray} from '@/lib/utils';
 
 export default function MentorshipPage() {
   const session = useSession();
@@ -216,7 +216,7 @@ export default function MentorshipPage() {
                 </div>
                 <div className="text-slate-400">{mentor.headline}</div>
                 <div className="flex flex-wrap gap-1">
-                  {((mentor.expertise as string[]) ?? []).slice(0, 3).map((tag) => (
+                  {toStringArray(mentor.expertise).slice(0, 3).map((tag) => (
                     <span key={tag} className="px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-700 text-[10px]">
                       {tag}
                     </span>
