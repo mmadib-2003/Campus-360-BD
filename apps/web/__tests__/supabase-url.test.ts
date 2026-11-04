@@ -27,6 +27,7 @@ import {
   resolveSupabaseUrl,
 } from '@/lib/supabase-url';
 import { registryMessage, registryRead } from '@/lib/registry-cache';
+import { describeClientKey } from '@/lib/supabase-client-config';
 
 const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const read = (rel: string) => readFileSync(path.join(WEB_ROOT, rel), 'utf8');
@@ -554,5 +555,60 @@ describe('registry route failure paths are all structured', () => {
     expect(src).toContain('if (!payload?.error) {');
     expect(src).toContain('/api/health/registry names the exact cause');
     expect(src).toContain('retryable: response.status >= 500');
+  });
+});
+
+/**
+ * The browser half of the same lesson.
+ *
+ * `/skills` came down with "Application error: a client-side exception has
+ * occurred" on a deployment whose NEXT_PUBLIC_* values were still the
+ * `.env.example` template: `Boolean(process.env.X)` said "configured", so every
+ * module hook skipped its offline fallback and handed a nonexistent host to
+ * @supabase/ssr. Presence is not the property that matters, on either side of
+ * the wire.
+ */
+describe('client-side Supabase configuration (supabase-client-config)', () => {
+  it('accepts a publishable key and a real project host', () => {
+    expect(resolveSupabaseUrl('https://lxdovryeidayxfsqkwbg.supabase.co').problem).toBeNull();
+    expect(describeClientKey('sb_publishable_AbCdEf1234567890-_xY')).toEqual({ shape: 'publishable', problem: null });
+  });
+
+  it('rejects the .env.example anon key instead of trusting that it is truthy', () => {
+    const report = describeClientKey('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example-anon');
+    expect(report.shape).toBe('placeholder');
+    expect(report.problem).toContain('.env.example placeholder fragment');
+  });
+
+  it('refuses to run a browser session on a service-role or malformed key', () => {
+    expect(describeClientKey('sb_secret_Miqj0ExampleSecretValue').problem).toContain('publishable');
+    expect(describeClientKey('not-a-jwt-at-all').shape).toBe('malformed');
+    const wrongRole = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
+      Buffer.from(JSON.stringify({ role: 'service_role' })).toString('base64url') + '.sig';
+    expect(describeClientKey(wrongRole).problem).toContain('needs "anon"');
+    const anon = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
+      Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url') + '.sig';
+    expect(describeClientKey(anon)).toEqual({ shape: 'legacy-jwt', problem: null });
+  });
+
+  it('keeps the browser client behind the validated check, not a presence check', () => {
+    const browser = read('lib/supabase-browser.ts');
+    expect(browser).toContain('isSupabaseClientUsable');
+    expect(browser).not.toMatch(/return Boolean\(process\.env\.NEXT_PUBLIC_SUPABASE_URL &&/);
+    // atob on the client: Buffer is not defined in a browser bundle
+    const config = read('lib/supabase-client-config.ts');
+    expect(config).toContain('atob');
+    expect(config).not.toContain('Buffer.from');
+  });
+
+  it('never lets a non-array payload reach .map/.find in the module pages', () => {
+    const client = read('lib/modules/client.ts');
+    expect(client).toContain('function toList<T>(value: unknown): T[]');
+    expect(client).toContain('toList<T>(payload.data)');
+    const badge = read('components/CampusBadge.tsx');
+    expect(badge).toContain('if (!Array.isArray(payload.data)) return;');
+    const skills = read('app/skills/page.tsx');
+    expect(skills).toContain('toStringArray(');
+    expect(skills).not.toContain('as string[]) ?? []');
   });
 });

@@ -22,7 +22,7 @@ import {
 } from '@/components/modules/ui';
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
-import { formatBdt, formatDateTime, toDateInputValue } from '@/lib/utils';
+import { formatBdt, formatDateTime, toDateInputValue, toStringArray} from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
 
@@ -164,7 +164,7 @@ export default function HousingPage() {
                     <span>• 🛏 {listing.seat_count} seat(s)</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {((listing.amenities as string[]) ?? []).map((amenity) => (
+                    {toStringArray(listing.amenities).map((amenity) => (
                       <span key={amenity} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-300">
                         {amenity}
                       </span>

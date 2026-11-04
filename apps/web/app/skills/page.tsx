@@ -21,7 +21,7 @@ import {
 } from '@/components/modules/ui';
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession, Row } from '@/lib/modules/client';
-import { formatBdt, timeAgo } from '@/lib/utils';
+import { formatBdt, timeAgo, toStringArray} from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
 
@@ -90,10 +90,10 @@ export default function SkillsPage() {
     const result = await alertMutation.create({
       keywords: alertKeywords
         ? alertKeywords
-        : (((myAlert?.keywords as string[]) ?? []).join(', ')),
+        : (toStringArray(myAlert?.keywords).join(', ')),
       categories: alertCategories
         ? alertCategories
-        : (((myAlert?.categories as string[]) ?? []).join(', ')),
+        : (toStringArray(myAlert?.categories).join(', ')),
     });
     setAlertPending(false);
     if (result.ok) {
@@ -147,8 +147,8 @@ export default function SkillsPage() {
           variant="secondary"
           onClick={() => {
             if (!alertPrefilled && myAlert) {
-              setAlertKeywords(((myAlert.keywords as string[]) ?? []).join(', '));
-              setAlertCategories(((myAlert.categories as string[]) ?? []).join(', '));
+              setAlertKeywords(toStringArray(myAlert.keywords).join(', '));
+              setAlertCategories(toStringArray(myAlert.categories).join(', '));
               setAlertPrefilled(true);
             }
             setAlertOpen(true);
@@ -168,17 +168,17 @@ export default function SkillsPage() {
       {myAlert && (
         <Card className="p-3 text-xs flex flex-wrap items-center gap-2">
           <span className="font-semibold">Active alert:</span>
-          {((myAlert.keywords as string[]) ?? []).map((keyword) => (
+          {toStringArray(myAlert.keywords).map((keyword) => (
             <Badge key={keyword} tone="teal">
               {keyword}
             </Badge>
           ))}
-          {((myAlert.categories as string[]) ?? []).map((category) => (
+          {toStringArray(myAlert.categories).map((category) => (
             <Badge key={category} tone="amber">
               {category}
             </Badge>
           ))}
-          {!((myAlert.keywords as string[]) ?? []).length && !((myAlert.categories as string[]) ?? []).length && (
+          {!toStringArray(myAlert.keywords).length && !toStringArray(myAlert.categories).length && (
             <span className="text-slate-400">Add keywords to start matching.</span>
           )}
           <button type="button" onClick={() => setAlertOpen(true)} className="ml-auto text-emerald-500 font-semibold">
@@ -251,7 +251,7 @@ export default function SkillsPage() {
                 <h3 className="font-bold text-sm">{posting.title}</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{posting.description}</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {((posting.skills as string[]) ?? []).map((skill) => (
+                  {toStringArray(posting.skills).map((skill) => (
                     <span key={skill} className="px-2 py-0.5 rounded-lg text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300">
                       {skill}
                     </span>

@@ -20,7 +20,7 @@ import {
 } from '@/components/modules/ui';
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession, Row } from '@/lib/modules/client';
-import { timeAgo } from '@/lib/utils';
+import { timeAgo, toStringArray} from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
 
@@ -182,7 +182,7 @@ export default function LostFoundPage() {
                   <span>• 👤 {(item.profiles as Row)?.full_name ?? 'Student'}</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {((item.keywords as string[]) ?? []).map((keyword) => (
+                  {toStringArray(item.keywords).map((keyword) => (
                     <span key={keyword} className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-300">
                       #{keyword}
                     </span>
