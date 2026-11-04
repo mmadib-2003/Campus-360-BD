@@ -173,10 +173,29 @@ export function demoNextStep(role: DemoRole): string {
   }
 }
 
+/**
+ * Campus cover photography is only produced for the campuses the demo data is
+ * rich enough to fill (see supabase/seed/seed_massive_demo_content.sql); every
+ * other university falls back to the shared banner so a card never renders a
+ * broken image. The live path reads both columns from the database (0014 added
+ * `cover_image_url`), and derives `logo_url` from the code the same way.
+ */
+const DEMO_CAMPUS_COVERS: Record<string, string> = {
+  DU: '/campuses/du.jpg',
+  JU: '/campuses/ju.jpg',
+  BUET: '/campuses/buet.jpg',
+  RU: '/campuses/ru.jpg',
+  CU: '/campuses/cu.jpg',
+  SUST: '/campuses/sust.jpg',
+  JUST: '/campuses/just.jpg',
+};
+
 export function demoUniversitiesPayload() {
   return DEMO_UNIVERSITIES.map((university) => ({
     id: university.id,
     code: university.code,
+    logo_url: `/logos/${university.code.toLowerCase()}.svg`,
+    cover_image_url: DEMO_CAMPUS_COVERS[university.code] ?? '/campuses/campus.jpg',
     name_en: university.name_en,
     name_bn: university.name_bn,
     category: university.category,

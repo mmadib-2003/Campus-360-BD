@@ -6,6 +6,7 @@ import { useUi } from '@/lib/i18n-client';
 import { useModuleList, useSession } from '@/lib/modules/client';
 import { Badge, Card, ModuleHeader, SkeletonList, Stat } from '@/components/modules/ui';
 import { getDemoUniversity } from '@/lib/modules/demo-data';
+import { asArray } from '@/lib/render-safe';
 
 export default function FeedPage() {
   const { locale, t } = useUi();
@@ -49,8 +50,8 @@ export default function FeedPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label={t('Verification status')} value={t('ID verified')} hint={t('Email verified')} />
-        <Stat label={t('My tickets')} value={tickets.data.length} hint={t('Open')} tone="amber" />
-        <Stat label={t('My listings')} value={listings.data.length} hint={t('Marketplace')} />
+        <Stat label={t('My tickets')} value={asArray(tickets.data).length} hint={t('Open')} tone="amber" />
+        <Stat label={t('My listings')} value={asArray(listings.data).length} hint={t('Marketplace')} />
         <Stat label={t('Tenant isolation')} value="RLS" hint={t('Your campus only')} tone="emerald" />
       </div>
 

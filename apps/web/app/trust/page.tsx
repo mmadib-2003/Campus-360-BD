@@ -26,6 +26,7 @@ import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
 import { timeAgo } from '@/lib/utils';
+import { asArray } from '@/lib/render-safe';
 
 const STEPS = [
   { key: 'EMAIL_VERIFIED', label: 'University email verified', hint: 'Institutional domain + 6-digit OTP' },
@@ -48,7 +49,7 @@ export default function TrustPage() {
   const disputeMutation = useModuleMutation('disputes');
 
   const trustLevel = String(session.profile?.trust_level ?? 'UNVERIFIED');
-  const myReviews = reviews.data.filter((review) => String(review.author_id) === String(session.userId));
+  const myReviews = asArray(reviews.data).filter((review) => String(review.author_id) === String(session.userId));
   const avgGiven =
     myReviews.length > 0 ? myReviews.reduce((sum, review) => sum + Number(review.rating ?? 0), 0) / myReviews.length : 0;
 
@@ -91,19 +92,6 @@ export default function TrustPage() {
     }
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="✅"
-          title="Trust & Verification Panel"
-          titleBn="ট্রাস্ট ও ভেরিফিকেশন প্যানেল"
-          blurb="Verify your student identity, build a reputation through reviews, and open a dispute if a campus transaction goes wrong."
-        />
-        <SignInPrompt moduleName="the Trust panel" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -120,12 +108,15 @@ export default function TrustPage() {
         </Button>
         <Button onClick={() => setDisputeOpen(true)}>Open a dispute</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="the Trust panel" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Trust level" value={trustLevel.replace('_', ' ')} tone="emerald" />
         <Stat label="Reviews written" value={myReviews.length} />
         <Stat label="Average rating given" value={avgGiven > 0 ? avgGiven.toFixed(1) : '—'} tone="teal" />
-        <Stat label="Open disputes" value={disputes.data.filter((dispute) => String(dispute.status) === 'OPEN').length} tone="amber" />
+        <Stat label="Open disputes" value={asArray(disputes.data).filter((dispute) => String(dispute.status) === 'OPEN').length} tone="amber" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -172,7 +163,7 @@ export default function TrustPage() {
             />
             {disputes.loading ? (
               <SkeletonList rows={2} />
-            ) : disputes.data.length === 0 ? (
+            ) : asArray(disputes.data).length === 0 ? (
               <EmptyState
                 icon="⚖️"
                 title="No disputes opened"
@@ -181,7 +172,7 @@ export default function TrustPage() {
               />
             ) : (
               <div className="space-y-2">
-                {disputes.data.map((dispute) => (
+                {asArray(disputes.data).map((dispute) => (
                   <button
                     key={String(dispute.id)}
                     type="button"
@@ -315,8 +306,8 @@ function DisputeThread({ dispute }: { dispute: Row }) {
         {dispute.resolution && <p className="text-emerald-500 font-semibold">Resolution: {dispute.resolution}</p>}
       </div>
       <div className="space-y-2 max-h-64 overflow-y-auto">
-        {messages.data.length === 0 && <p className="text-xs text-slate-400">No messages yet.</p>}
-        {messages.data.map((message) => (
+        {asArray(messages.data).length === 0 && <p className="text-xs text-slate-400">No messages yet.</p>}
+        {asArray(messages.data).map((message) => (
           <div
             key={String(message.id)}
             className={`p-2.5 rounded-xl text-xs ${message.is_admin ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-slate-100 dark:bg-slate-800'}`}

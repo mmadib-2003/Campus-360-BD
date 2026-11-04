@@ -25,6 +25,7 @@ import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
 import { formatDateTime, timeAgo, toStringArray} from '@/lib/utils';
+import { asArray } from '@/lib/render-safe';
 
 export default function MentorshipPage() {
   const session = useSession();
@@ -42,7 +43,7 @@ export default function MentorshipPage() {
   const bookingMutation = useModuleMutation('mentorship-bookings');
 
   const myBookings = React.useMemo(
-    () => bookings.data.filter((booking) => String(booking.mentee_id) === String(session.userId)),
+    () => asArray(bookings.data).filter((booking) => String(booking.mentee_id) === String(session.userId)),
     [bookings.data, session.userId]
   );
 
@@ -93,21 +94,8 @@ export default function MentorshipPage() {
     return { ok: false };
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="📖"
-          title="Academic Archive & Mentorship"
-          titleBn="একাডেমিক আর্কাইভ ও মেন্টরশিপ"
-          blurb="Book real-time mentorship sessions with seniors and browse the virus-scanned academic archive."
-        />
-        <SignInPrompt moduleName="mentorship" />
-      </div>
-    );
-  }
 
-  const mentorOptions = mentors.data.map((mentor) => ({
+  const mentorOptions = asArray(mentors.data).map((mentor) => ({
     value: String(mentor.id),
     label: `${(mentor.profiles as Row)?.full_name ?? 'Mentor'} — ${mentor.headline}`,
   }));
@@ -133,14 +121,17 @@ export default function MentorshipPage() {
         </Button>
         <Button onClick={() => setSlotOpen(true)}>+ Offer a slot</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="mentorship" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Active mentors" value={mentors.data.length} />
+        <Stat label="Active mentors" value={asArray(mentors.data).length} />
         <Stat label="Open slots" value={available.length} tone="teal" />
         <Stat label="My sessions" value={myBookings.length} tone="amber" />
         <Stat
           label="Free sessions"
-          value={mentors.data.filter((mentor) => Number(mentor.session_rate_bdt ?? 0) === 0).length}
+          value={asArray(mentors.data).filter((mentor) => Number(mentor.session_rate_bdt ?? 0) === 0).length}
         />
       </div>
 
@@ -204,8 +195,8 @@ export default function MentorshipPage() {
         <div className="space-y-4">
           <Card className="p-4 space-y-2">
             <SectionHeader icon="🧑‍🏫" title="Mentor directory" subtitle="Seniors who can help" />
-            {mentors.data.length === 0 && <p className="text-xs text-slate-400">No mentors yet — be the first.</p>}
-            {mentors.data.map((mentor) => (
+            {asArray(mentors.data).length === 0 && <p className="text-xs text-slate-400">No mentors yet — be the first.</p>}
+            {asArray(mentors.data).map((mentor) => (
               <div key={String(mentor.id)} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">{(mentor.profiles as Row)?.full_name ?? 'Mentor'}</span>

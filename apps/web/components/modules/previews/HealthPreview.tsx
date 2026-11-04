@@ -5,18 +5,19 @@ import Link from 'next/link';
 import { useRealtimeModuleList } from '@/lib/modules/client';
 import { Badge, EmptyState, SkeletonList, statusTone } from '../ui';
 import { formatDateTime } from '@/lib/utils';
+import { asArray } from '@/lib/render-safe';
 
 export default function HealthPreview() {
   const requests = useRealtimeModuleList('blood-requests', { limit: 3 });
 
   if (requests.loading) return <SkeletonList rows={1} />;
-  if (requests.data.length === 0) {
+  if (asArray(requests.data).length === 0) {
     return <EmptyState icon="🩸" title="No open blood requests" description="Requests broadcast to matching donors instantly." />;
   }
 
   return (
     <div className="space-y-2">
-      {requests.data.map((request) => (
+      {asArray(requests.data).map((request) => (
         <Link
           key={String(request.id)}
           href="/health"

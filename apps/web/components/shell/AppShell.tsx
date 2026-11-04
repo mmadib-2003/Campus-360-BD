@@ -15,6 +15,7 @@ import {
 } from '@/lib/modules/demo-data';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { asArray, asRow, asText } from '@/lib/render-safe';
 
 const MODULES = [
   { href: '/', key: 'moduleFeed', icon: '🏠' },
@@ -106,6 +107,17 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         : t('Unverified')
     : '';
 
+  // `universities`, `departments` and `halls` are PostgREST embeds and are NULL
+  // whenever the FK is NULL -- a faculty account with no hall, a profile created
+  // before the hall link existed, an alumnus whose department was renamed away.
+  // This component renders above every page, so reading through one of those
+  // directly is the difference between "a chip is missing" and "the deployment
+  // is down"; asRow() makes the null case a row with nothing in it.
+  const univ = asRow(profile?.universities);
+  const dept = asRow(profile?.departments);
+  const hall = asRow(profile?.halls);
+  const roles = asArray(session.roles);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
       <header className="sticky top-0 z-40 backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800">
@@ -173,17 +185,19 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
           <div className="bg-emerald-950/40 border-t border-emerald-800/30 px-4 py-1.5">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2 text-xs">
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
-                🏛️ {locale === 'bn' ? profile.universities?.name_bn : profile.universities?.name_en} ({profile.universities?.code})
+                🏛️ {asText(locale === 'bn' ? univ.name_bn : univ.name_en, 'CAMPUS')} ({asText(univ.code, '—')})
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-medium">✓ {trustLabel}</span>
-              {profile.departments && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🎓 {profile.departments.code}</span>
+              {asText(dept.code) && (
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🎓 {asText(dept.code)}</span>
               )}
-              {profile.halls && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🏠 {profile.halls.name ?? profile.halls.name_en}</span>
+              {(asText(hall.name) || asText(hall.name_en)) && (
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                  🏠 {asText(hall.name) || asText(hall.name_en)}
+                </span>
               )}
               <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-400 font-mono text-[11px]">
-                ROLE: {session.roles[0] ?? 'STUDENT'}
+                ROLE: {asText(roles[0], 'STUDENT')}
               </span>
 
               {session.demo && (

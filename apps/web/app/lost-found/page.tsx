@@ -23,6 +23,7 @@ import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession,
 import { timeAgo, toStringArray} from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 const CATEGORIES = ['ID Card', 'Bag', 'Phone', 'Laptop', 'Keys', 'Wallet', 'Books', 'Cycle', 'Gadget', 'Other'];
 
@@ -60,9 +61,9 @@ export default function LostFoundPage() {
 
   const stats = React.useMemo(
     () => ({
-      lost: items.data.filter((item) => String(item.kind) === 'LOST' && String(item.status) === 'OPEN').length,
-      found: items.data.filter((item) => String(item.kind) === 'FOUND' && String(item.status) === 'OPEN').length,
-      resolved: items.data.filter((item) => String(item.status) === 'RESOLVED').length,
+      lost: asArray(items.data).filter((item) => String(item.kind) === 'LOST' && String(item.status) === 'OPEN').length,
+      found: asArray(items.data).filter((item) => String(item.kind) === 'FOUND' && String(item.status) === 'OPEN').length,
+      resolved: asArray(items.data).filter((item) => String(item.status) === 'RESOLVED').length,
     }),
     [items.data]
   );
@@ -77,19 +78,6 @@ export default function LostFoundPage() {
     }
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🔍"
-          title={t('Lost & Found')}
-          titleBn={t('Lost & Found')}
-          blurb={t('Report lost items and reunite them with verified campus finders.')}
-        />
-        <SignInPrompt moduleName="Lost & Found" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -103,6 +91,9 @@ export default function LostFoundPage() {
       >
         <Button onClick={() => setPostOpen(true)}>+ Post an item</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="lost & found" />}
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Lost (open)" value={stats.lost} tone="amber" />
@@ -156,7 +147,7 @@ export default function LostFoundPage() {
         <div className="lg:col-span-2 space-y-3">
           {items.loading ? (
             <SkeletonList rows={3} />
-          ) : items.data.length === 0 ? (
+          ) : asArray(items.data).length === 0 ? (
             <EmptyState
               icon="🔍"
               title={`${t('No listings found')}`}
@@ -164,7 +155,7 @@ export default function LostFoundPage() {
               action={<Button onClick={() => setPostOpen(true)}>{t('New listing')}</Button>}
             />
           ) : (
-            items.data.map((item) => (
+            asArray(items.data).map((item) => (
               <Card key={String(item.id)} className="p-4 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={String(item.kind) === 'LOST' ? 'amber' : 'emerald'}>{String(item.kind)}</Badge>
@@ -217,11 +208,11 @@ export default function LostFoundPage() {
               Every new post is tokenised against open reports of the opposite type. A match needs two shared keywords
               or one shared keyword plus the same category — then both students get a notification.
             </p>
-            {matches.data.length === 0 ? (
+            {asArray(matches.data).length === 0 ? (
               <p className="text-[11px] text-slate-400">No matches recorded yet.</p>
             ) : (
               <div className="space-y-1.5">
-                {matches.data.slice(0, 6).map((match) => (
+                {asArray(matches.data).slice(0, 6).map((match) => (
                   <div key={String(match.id)} className="p-2 rounded-xl bg-emerald-500/10 text-[11px] flex items-center justify-between">
                     <span>Possible match (score {match.score})</span>
                     <Badge tone="emerald">Notified</Badge>

@@ -26,6 +26,7 @@ import { trySupabaseBrowser } from '@/lib/supabase-browser';
 import { timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { demoUpdate } from '@/lib/modules/demo-data';
+import { asArray } from '@/lib/render-safe';
 
 const CATEGORIES = [
   'INFRASTRUCTURE',
@@ -105,7 +106,7 @@ export default function CivicPage() {
 
   const filtered = React.useMemo(
     () =>
-      tickets.data.filter((ticket) => {
+      asArray(tickets.data).filter((ticket) => {
         if (ticket.is_public_issue === false) return false;
         if (category !== 'ALL' && String(ticket.category) !== category) return false;
         if (severity !== 'ALL' && String(ticket.severity) !== severity) return false;
@@ -120,10 +121,10 @@ export default function CivicPage() {
   );
 
   const stats = React.useMemo(() => {
-    const open = tickets.data.filter((ticket) => !['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
-    const resolved = tickets.data.filter((ticket) => ['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
-    const critical = tickets.data.filter((ticket) => String(ticket.severity) === 'CRITICAL').length;
-    const upvotes = tickets.data.reduce((sum, ticket) => sum + Number(ticket.upvotes_count ?? 0), 0);
+    const open = asArray(tickets.data).filter((ticket) => !['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
+    const resolved = asArray(tickets.data).filter((ticket) => ['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
+    const critical = asArray(tickets.data).filter((ticket) => String(ticket.severity) === 'CRITICAL').length;
+    const upvotes = asArray(tickets.data).reduce((sum, ticket) => sum + Number(ticket.upvotes_count ?? 0), 0);
     return { open, resolved, critical, upvotes };
   }, [tickets.data]);
 

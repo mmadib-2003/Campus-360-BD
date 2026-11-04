@@ -25,6 +25,7 @@ import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib
 import { formatBdt, timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 const KIND_LABEL: Record<string, string> = {
   SELL: 'For sale',
@@ -61,7 +62,7 @@ export default function MarketplacePage() {
 
   const categories = React.useMemo(() => {
     const set = new Set<string>();
-    listings.data.forEach((row) => {
+    asArray(listings.data).forEach((row) => {
       if (row.category) set.add(String(row.category));
     });
     return [...set].sort();
@@ -69,7 +70,7 @@ export default function MarketplacePage() {
 
   const pickupOptions = React.useMemo(
     () =>
-      pickupPoints.data.map((point) => ({
+      asArray(pickupPoints.data).map((point) => ({
         value: String(point.id),
         label: `${point.name_en} — ${point.location_en}`,
       })),
@@ -117,19 +118,6 @@ export default function MarketplacePage() {
     }
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🛍️"
-          title={t('Campus Economy & Marketplace')}
-          titleBn={t('Campus Economy & Marketplace')}
-          blurb={t('Buy, sell and rent verified student items with monitored campus handover points.')}
-        />
-        <SignInPrompt moduleName="the marketplace" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -144,6 +132,9 @@ export default function MarketplacePage() {
         <Badge tone="emerald">{listings.total} listings</Badge>
         <Button onClick={() => setCreateOpen(true)}>+ Post a listing</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="the marketplace" />}
 
       <Card className="p-4 space-y-3">
         <div className="flex flex-col md:flex-row gap-2 md:items-center">
@@ -181,7 +172,7 @@ export default function MarketplacePage() {
             <SkeletonList rows={3} />
           ) : listings.error ? (
             <EmptyState icon="⚠️" title={t('No listings found')} description={listings.error} action={<Button onClick={listings.refresh}>{t('Loading…')}</Button>} />
-          ) : listings.data.length === 0 ? (
+          ) : asArray(listings.data).length === 0 ? (
             <EmptyState
               icon="🛍️"
               title={t('No listings found')}
@@ -189,7 +180,7 @@ export default function MarketplacePage() {
               action={<Button onClick={() => setCreateOpen(true)}>{t('New listing')}</Button>}
             />
           ) : (
-            listings.data.map((listing) => {
+            asArray(listings.data).map((listing) => {
               const seller = (listing.profiles ?? {}) as Row;
               const pickup = (listing.campus_pickup_points ?? {}) as Row;
               return (
@@ -243,13 +234,13 @@ export default function MarketplacePage() {
           <Card className="p-4 space-y-2">
             <SectionHeader icon="📦" title={t('Campus pickup point')} subtitle={t('Campus pickup point')} />
             <ul className="space-y-2">
-              {pickupPoints.data.map((point) => (
+              {asArray(pickupPoints.data).map((point) => (
                 <li key={String(point.id)} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs">
                   <div className="font-semibold">{point.name_en}</div>
                   <div className="text-slate-400">{point.location_en}</div>
                 </li>
               ))}
-              {pickupPoints.data.length === 0 && (
+              {asArray(pickupPoints.data).length === 0 && (
                 <li className="text-xs text-slate-400">
                   {t('No listings found')}
                 </li>
@@ -259,11 +250,11 @@ export default function MarketplacePage() {
 
           <Card className="p-4 space-y-2">
             <SectionHeader icon="🧾" title={t('My orders')} subtitle={t('My listings')} />
-            {orders.data.length === 0 ? (
+            {asArray(orders.data).length === 0 ? (
               <p className="text-xs text-slate-400">No orders yet. Reserve a listing to see live status here.</p>
             ) : (
               <ul className="space-y-2">
-                {orders.data.map((order) => (
+                {asArray(orders.data).map((order) => (
                   <li key={String(order.id)} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-[11px]">{order.order_code}</span>
@@ -367,9 +358,9 @@ function ListingChat({
 
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.data.length]);
+  }, [asArray(messages.data).length]);
 
-  const visible = messages.data.filter(
+  const visible = asArray(messages.data).filter(
     (message) =>
       String(message.sender_id) === String(session.userId) || String(message.recipient_id) === String(session.userId)
   );
