@@ -7,6 +7,7 @@ import { LOCALE_COOKIE, resolveLocale } from '@/i18n';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/AppShell';
 import { sanitizeMessages } from '@/lib/messages';
+import { SafeSection } from '@/components/SafeSection';
 import './globals.css';
 
 export const metadata = {
@@ -29,7 +30,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            <AppShell profile={null}>{children}</AppShell>
+            {/* The boundary sits inside the shell on purpose: a page that throws --
+                a null embed, a JSONB array that arrived as a string -- used to take
+                the header, the nav and every other section down with it. Now the
+                module area degrades and the campus stays navigable. */}
+            <AppShell profile={null}>
+              <SafeSection label="This page">{children}</SafeSection>
+            </AppShell>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

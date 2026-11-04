@@ -22,6 +22,7 @@ import { useApiList, useModuleMutation, useRealtimeModuleList, useSession, Row }
 import { timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { demoUpdate } from '@/lib/modules/demo-data';
+import { asArray } from '@/lib/render-safe';
 
 const RESOLUTION_STATUSES = ['ACKNOWLEDGED', 'IN_REVIEW', 'ACTION_TAKEN', 'RESOLVED', 'CLOSED', 'REJECTED_WITH_REASON'];
 
@@ -77,10 +78,10 @@ export default function AdminConsolePage() {
   }
 
   const stats = React.useMemo(() => {
-    const open = tickets.data.filter((ticket) => !['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
-    const breached = tickets.data.filter((ticket) => ticket.sla_breached).length;
-    const critical = tickets.data.filter((ticket) => String(ticket.severity) === 'CRITICAL').length;
-    return { open, breached, critical, total: tickets.data.length };
+    const open = asArray(tickets.data).filter((ticket) => !['RESOLVED', 'CLOSED'].includes(String(ticket.status))).length;
+    const breached = asArray(tickets.data).filter((ticket) => ticket.sla_breached).length;
+    const critical = asArray(tickets.data).filter((ticket) => String(ticket.severity) === 'CRITICAL').length;
+    return { open, breached, critical, total: asArray(tickets.data).length };
   }, [tickets.data]);
 
   async function updateStatus() {
@@ -260,11 +261,11 @@ export default function AdminConsolePage() {
         <SectionHeader icon="🎫" title="Civic ticket queue" subtitle="Sorted by most recent activity" />
         {tickets.loading ? (
           <SkeletonList rows={4} />
-        ) : tickets.data.length === 0 ? (
+        ) : asArray(tickets.data).length === 0 ? (
           <EmptyState icon="✅" title="No tickets in the queue" description="Students have not reported any issues yet." />
         ) : (
           <div className="space-y-2">
-            {tickets.data.map((ticket) => (
+            {asArray(tickets.data).map((ticket) => (
               <Card key={String(ticket.id)} className="p-4">
                 <div className="flex flex-col md:flex-row md:items-center gap-3">
                   <div className="flex-1 min-w-0 space-y-1">
@@ -299,11 +300,11 @@ export default function AdminConsolePage() {
 
       <section className="space-y-3">
         <SectionHeader icon="⚖️" title="Dispute support tickets" subtitle="Moderation & dispute resolution" />
-        {disputes.data.length === 0 ? (
+        {asArray(disputes.data).length === 0 ? (
           <EmptyState icon="⚖️" title="No open disputes" description="Students can open a dispute from the Trust panel." />
         ) : (
           <div className="space-y-2">
-            {disputes.data.map((dispute) => (
+            {asArray(disputes.data).map((dispute) => (
               <Card key={String(dispute.id)} className="p-4 flex flex-col md:flex-row md:items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

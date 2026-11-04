@@ -24,6 +24,7 @@ import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib
 import { formatBdt, toDateInputValue } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 export default function DiningPage() {
   const session = useSession();
@@ -60,21 +61,8 @@ export default function DiningPage() {
     return false;
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🍛"
-          title={t('Cafeteria & Home Food')}
-          titleBn={t('Cafeteria & Home Food')}
-          blurb={t("Today's hall menu, mess seats and home-made food from verified students.")}
-        />
-        <SignInPrompt moduleName="campus dining" />
-      </div>
-    );
-  }
 
-  const todayOrders = orders.data.filter(
+  const todayOrders = asArray(orders.data).filter(
     (order) => new Date(String(order.created_at)).toDateString() === new Date().toDateString()
   );
 
@@ -90,14 +78,17 @@ export default function DiningPage() {
       >
         <Button onClick={() => setListFoodOpen(true)}>+ Sell home-made food</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="campus dining" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Menus today" value={menus.data.length} />
-        <Stat label="Home kitchens" value={homeFood.data.length} tone="teal" />
+        <Stat label="Menus today" value={asArray(menus.data).length} />
+        <Stat label="Home kitchens" value={asArray(homeFood.data).length} tone="teal" />
         <Stat label="My orders today" value={todayOrders.length} tone="amber" />
         <Stat
           label="Ready for pickup"
-          value={orders.data.filter((order) => String(order.status) === 'READY').length}
+          value={asArray(orders.data).filter((order) => String(order.status) === 'READY').length}
         />
       </div>
 
@@ -105,7 +96,7 @@ export default function DiningPage() {
         {[
           { key: 'cafeteria', label: t('Dining') },
           { key: 'homefood', label: t('Dining') },
-          { key: 'orders', label: `${t('My orders')} (${orders.data.length})` },
+          { key: 'orders', label: `${t('My orders')} (${asArray(orders.data).length})` },
         ].map((item) => (
           <button
             key={item.key}
@@ -144,11 +135,11 @@ export default function DiningPage() {
 
           {menus.loading ? (
             <SkeletonList rows={2} />
-          ) : menus.data.length === 0 ? (
+          ) : asArray(menus.data).length === 0 ? (
             <EmptyState icon="🍽️" title={t('No listings found')} description={t('No listings found')} />
           ) : (
             <div className="space-y-3">
-              {menus.data.map((menu) => {
+              {asArray(menus.data).map((menu) => {
                 const items = ((menu.cafeteria_items as Row[]) ?? []).filter((item) => item.is_available !== false);
                 return (
                   <Card key={String(menu.id)} className="p-4 space-y-2">
@@ -193,10 +184,10 @@ export default function DiningPage() {
 
       {tab === 'homefood' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {homeFood.data.length === 0 && (
+          {asArray(homeFood.data).length === 0 && (
             <EmptyState icon="🏠" title="No home kitchens listed" description="Student cooks can list home-made food with campus delivery." action={<Button onClick={() => setListFoodOpen(true)}>List your kitchen</Button>} />
           )}
-          {homeFood.data.map((listing) => (
+          {asArray(homeFood.data).map((listing) => (
             <Card key={String(listing.id)} className="p-4 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="orange">{String(listing.cuisine)}</Badge>
@@ -225,10 +216,10 @@ export default function DiningPage() {
       {tab === 'orders' && (
         <div className="space-y-2">
           <SectionHeader icon="🧾" title="My food orders" subtitle="Live status from kitchen to counter" />
-          {orders.data.length === 0 ? (
+          {asArray(orders.data).length === 0 ? (
             <EmptyState icon="🧾" title={t('My orders')} description={t('Reserve') + ' a cafeteria meal or a home-made dish.'} />
           ) : (
-            orders.data.map((order) => (
+            asArray(orders.data).map((order) => (
               <Card key={String(order.id)} className="p-3 text-xs flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-semibold">

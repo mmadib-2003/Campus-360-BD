@@ -198,7 +198,14 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
     (session.authenticated || session.demo || spec?.publicRead === true);
 
   useEffect(() => {
-    if (!spec || !enabled || session.loading) return;
+    if (!spec || session.loading) return;
+    if (!enabled) {
+      // `enabled: false` means "this list belongs to a session", not "still loading".
+      // Without this the guest view of a mixed page (careers, dining, sports) would
+      // sit on a skeleton in every member-only section forever.
+      setLoading(false);
+      return;
+    }
     const activeSpec = spec;
     let cancelled = false;
 

@@ -25,6 +25,7 @@ import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib
 import { formatBdt, formatDateTime, toDateInputValue, toStringArray} from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 export default function HousingPage() {
   const session = useSession();
@@ -51,9 +52,9 @@ export default function HousingPage() {
   const rideRequestMutation = useModuleMutation('ride-requests');
   const ticketMutation = useModuleMutation('ticket-exchange');
 
-  const openRides = rides.data.filter((ride) => String(ride.status) === 'OPEN');
-  const openRequests = rideRequests.data.filter((request) => String(request.status) === 'OPEN');
-  const openTickets = tickets.data.filter((ticket) => String(ticket.status) === 'AVAILABLE');
+  const openRides = asArray(rides.data).filter((ride) => String(ride.status) === 'OPEN');
+  const openRequests = asArray(rideRequests.data).filter((request) => String(request.status) === 'OPEN');
+  const openTickets = asArray(tickets.data).filter((ticket) => String(ticket.status) === 'AVAILABLE');
 
   function findMatches(request: Row) {
     const targetDate = new Date(String(request.depart_at)).getTime();
@@ -72,19 +73,6 @@ export default function HousingPage() {
     setMatches(result);
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🏢"
-          title={t('Housing')}
-          titleBn={t('Housing')}
-          blurb={t('Find a hall seat or a verified off-campus mess near your campus.')}
-        />
-        <SignInPrompt moduleName="housing and commute" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -98,9 +86,12 @@ export default function HousingPage() {
       >
         <Button onClick={() => setCreateOpen(true)}>+ Post a seat</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="housing and commute" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Vacant seats" value={housing.data.filter((row) => String(row.status) === 'AVAILABLE').length} />
+        <Stat label="Vacant seats" value={asArray(housing.data).filter((row) => String(row.status) === 'AVAILABLE').length} />
         <Stat label="Open rides" value={openRides.length} tone="teal" />
         <Stat label="Looking to join" value={openRequests.length} tone="amber" />
         <Stat label="Tickets for exchange" value={openTickets.length} />
@@ -143,11 +134,11 @@ export default function HousingPage() {
           />
           {housing.loading ? (
             <SkeletonList rows={2} />
-          ) : housing.data.length === 0 ? (
+          ) : asArray(housing.data).length === 0 ? (
             <EmptyState icon="🏠" title={t('No listings found')} description={t('Find a hall seat or a verified off-campus mess near your campus.')} action={<Button onClick={() => setCreateOpen(true)}>{t('New listing')}</Button>} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {housing.data.map((listing) => (
+              {asArray(housing.data).map((listing) => (
                 <Card key={String(listing.id)} className="p-4 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="cyan">{String(listing.kind).replace(/_/g, ' ')}</Badge>
@@ -238,10 +229,10 @@ export default function HousingPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-2">
               <SectionHeader icon="🚌" title={t('Available')} subtitle={t('Available')} />
-              {rides.data.length === 0 ? (
+              {asArray(rides.data).length === 0 ? (
                 <EmptyState icon="🚌" title={t('No listings found')} description={t('No listings found')} />
               ) : (
-                rides.data.map((ride) => (
+                asArray(rides.data).map((ride) => (
                   <Card key={String(ride.id)} className="p-4 text-xs space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-sm">
@@ -317,11 +308,11 @@ export default function HousingPage() {
       {tab === 'tickets' && (
         <div className="space-y-4">
           <Button onClick={() => setTicketOpen(true)}>+ Post a ticket for exchange</Button>
-          {tickets.data.length === 0 ? (
+          {asArray(tickets.data).length === 0 ? (
             <EmptyState icon="🎫" title={t('No listings found')} description={t('No listings found')} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {tickets.data.map((ticket) => (
+              {asArray(tickets.data).map((ticket) => (
                 <Card key={String(ticket.id)} className="p-4 text-xs space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-sm">

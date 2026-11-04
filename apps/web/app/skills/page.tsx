@@ -24,6 +24,7 @@ import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession,
 import { formatBdt, timeAgo, toStringArray} from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 const TYPE_META: Record<string, { icon: string; label: string }> = {
   TUTORING: { icon: '📘', label: 'Tutoring' },
@@ -117,19 +118,6 @@ export default function SkillsPage() {
     return { ok: false };
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🎓"
-          title={t('Skill Hub & Jobs')}
-          titleBn={t('Skill Hub & Jobs')}
-          blurb={t('Peer tutoring, freelance skills and part-time campus jobs.')}
-        />
-        <SignInPrompt moduleName="the Skill Hub" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -157,6 +145,9 @@ export default function SkillsPage() {
         </Button>
         <Button onClick={() => setCreateOpen(true)}>+ Post an opportunity</Button>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="the Skill Hub" />}
 
       {liveBanner && (
         <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
@@ -228,7 +219,7 @@ export default function SkillsPage() {
             <SkeletonList rows={3} />
           ) : postings.error ? (
             <EmptyState icon="⚠️" title="Could not load postings" description={postings.error} action={<Button onClick={postings.refresh}>Retry</Button>} />
-          ) : postings.data.length === 0 ? (
+          ) : asArray(postings.data).length === 0 ? (
             <EmptyState
               icon="🎓"
               title="No postings match your filters"
@@ -236,7 +227,7 @@ export default function SkillsPage() {
               action={<Button onClick={() => setCreateOpen(true)}>Post an opportunity</Button>}
             />
           ) : (
-            postings.data.map((posting) => (
+            asArray(postings.data).map((posting) => (
               <Card key={String(posting.id)} className="p-4 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="teal">

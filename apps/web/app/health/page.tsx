@@ -25,6 +25,7 @@ import { readDemoRows, demoInsertRow } from '@/lib/modules/client';
 import { formatDateTime, timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { asArray } from '@/lib/render-safe';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -156,19 +157,6 @@ export default function HealthPage() {
     }
   }
 
-  if (!session.loading && !session.authenticated) {
-    return (
-      <div className="space-y-6">
-        <ModuleHeader
-          icon="🩸"
-          title="Emergency, Mental & Physical Health"
-          titleBn="জরুরি, মানসিক ও শারীরিক স্বাস্থ্য"
-          blurb="Smart blood bank with emergency broadcasts, campus ambulance helplines and fully anonymous counselling."
-        />
-        <SignInPrompt moduleName="health services" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -187,6 +175,10 @@ export default function HealthPage() {
           <Button onClick={() => setRequestOpen(true)}>+ Request blood</Button>
         </div>
       </ModuleHeader>
+      {/* Browsing is public now, so the sign-in path sits *below* the listings
+          instead of replacing them: guests read, members post, book and chat. */}
+      {!session.authenticated && <SignInPrompt moduleName="the health module" />}
+
 
       <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex flex-wrap items-center gap-3 text-xs">
         <span className="font-bold text-rose-600 dark:text-rose-300">Life-threatening emergency?</span>
@@ -258,7 +250,7 @@ export default function HealthPage() {
 
           {requests.loading ? (
             <SkeletonList rows={2} />
-          ) : requests.data.length === 0 ? (
+          ) : asArray(requests.data).length === 0 ? (
             <EmptyState
               icon="🩸"
               title="No open blood requests"
@@ -266,7 +258,7 @@ export default function HealthPage() {
               action={<Button onClick={() => setRequestOpen(true)}>Post a request</Button>}
             />
           ) : (
-            requests.data.map((request) => (
+            asArray(requests.data).map((request) => (
               <Card key={String(request.id)} className="p-4 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-lg bg-rose-600 text-white text-xs font-extrabold">
@@ -307,10 +299,10 @@ export default function HealthPage() {
       {tab === 'donors' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Stat label="Available donors" value={donors.data.length} hint="Opted in" />
-            <Stat label="O+" value={donors.data.filter((donor) => donor.blood_group === 'O+').length} />
-            <Stat label="B+" value={donors.data.filter((donor) => donor.blood_group === 'B+').length} />
-            <Stat label="A+" value={donors.data.filter((donor) => donor.blood_group === 'A+').length} />
+            <Stat label="Available donors" value={asArray(donors.data).length} hint="Opted in" />
+            <Stat label="O+" value={asArray(donors.data).filter((donor) => donor.blood_group === 'O+').length} />
+            <Stat label="B+" value={asArray(donors.data).filter((donor) => donor.blood_group === 'B+').length} />
+            <Stat label="A+" value={asArray(donors.data).filter((donor) => donor.blood_group === 'A+').length} />
           </div>
           <Card className="p-4 space-y-2">
             <SectionHeader
@@ -323,7 +315,7 @@ export default function HealthPage() {
               <SkeletonList rows={2} />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {donors.data.map((donor) => (
+                {asArray(donors.data).map((donor) => (
                   <div key={String(donor.id)} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold">{(donor.profiles as Row)?.full_name ?? 'Student donor'}</span>
@@ -342,7 +334,7 @@ export default function HealthPage() {
                     </div>
                   </div>
                 ))}
-                {donors.data.length === 0 && (
+                {asArray(donors.data).length === 0 && (
                   <p className="text-xs text-slate-400 p-2">No donors match this blood group yet.</p>
                 )}
               </div>
@@ -378,11 +370,11 @@ export default function HealthPage() {
           </div>
 
           <SectionHeader icon="🗓️" title="Available counselling slots" subtitle="Book anonymously — no account linkage" />
-          {slots.data.length === 0 ? (
+          {asArray(slots.data).length === 0 ? (
             <EmptyState icon="🗓️" title="No counselling slots published" description="Your university counseling cell has not opened slots yet. Call the helpline above." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {slots.data.map((slot) => {
+              {asArray(slots.data).map((slot) => {
                 const full = Number(slot.booked_count ?? 0) >= Number(slot.capacity ?? 1);
                 return (
                   <Card key={String(slot.id)} className="p-4 space-y-1.5">
