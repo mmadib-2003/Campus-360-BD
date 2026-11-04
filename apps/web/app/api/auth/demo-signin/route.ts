@@ -91,31 +91,65 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Supabase mode: real password verification against the pre-seeded users.
-  const supabase = createSupabaseRouteClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  // Supabase mode: clear any visitor's previous local session before making
+  // the role switch, then authenticate with the seeded account credentials.
+  try {
+    const supabase = createSupabaseRouteClient();
+    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+    if (signOutError) {
+      console.error('[demo-signin] Existing-session sign-out failed; refusing role switch', {
+        email, code: signOutError.code, status: signOutError.status,
+        message: signOutError.message,
+      });
+      return apiError(
+        'DEMO_SIGNOUT_FAILED',
+        'Could not clear the existing session. Refresh the page and try again.',
+        'আগের সেশনটি বন্ধ করা যায়নি। পৃষ্ঠা রিফ্রেশ করে আবার চেষ্টা করুন।',
+        500
+      );
+    }
 
-  if (error || !data?.user) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data?.user || !data.session) {
+      console.error('[demo-signin] Supabase password sign-in rejected', {
+        email,
+        code: error?.code ?? 'MISSING_SESSION',
+        status: error?.status ?? null,
+        name: error?.name ?? null,
+        message: error?.message ?? 'Auth returned no user/session without an error.',
+      });
+      return apiError(
+        'INVALID_CREDENTIALS',
+        'Demo sign-in failed. Use one of the accounts listed on /demo.',
+        'ডেমো সাইন-ইন ব্যর্থ হয়েছে। /demo পাতায় তালিকাভুক্ত অ্যাকাউন্ট ব্যবহার করুন।',
+        401
+      );
+    }
+
+    return apiSuccess({
+      demo: false,
+      userId: data.user.id,
+      account: {
+        email: account.email,
+        role: account.role satisfies DemoRole,
+        fullName: account.fullName,
+        universityCode: account.universityCode,
+        universityId: getDemoUniversity(account.universityCode)?.id ?? '',
+      },
+      sessionExpiresAt: data.session.expires_at ?? null,
+    });
+  } catch (error) {
+    console.error('[demo-signin] Unexpected demo authentication exception', {
+      email,
+      error: error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : String(error),
+    });
     return apiError(
-      'INVALID_CREDENTIALS',
-      'Demo sign-in failed. Use one of the accounts listed on /demo.',
-      'ডেমো সাইন-ইন ব্যর্থ হয়েছে। /demo পাতায় তালিকাভুক্ত অ্যাকাউন্ট ব্যবহার করুন।',
-      401
+      'DEMO_SIGNIN_ERROR',
+      'Demo sign-in is temporarily unavailable. Please try again.',
+      'ডেমো সাইন-ইন সাময়িকভাবে অনুপলব্ধ। আবার চেষ্টা করুন।',
+      500
     );
   }
-
-  return apiSuccess({
-    demo: false,
-    userId: data.user.id,
-    account: account
-      ? {
-          email: account.email,
-          role: account.role satisfies DemoRole,
-          fullName: account.fullName,
-          universityCode: account.universityCode,
-          universityId: getDemoUniversity(account.universityCode)?.id ?? '',
-        }
-      : null,
-    sessionExpiresAt: data.session?.expires_at ?? null,
-  });
 }
