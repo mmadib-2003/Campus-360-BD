@@ -13,6 +13,9 @@ interface SignupContext {
   role: DemoRole;
   fullName: string;
   studentId: string;
+  hallId?: string;
+  departmentId?: string;
+  programId?: string;
   demoCode?: string | null;
   demo?: boolean;
   /** ISO deadline of the emailed OTP (generation time + 5 minutes). */
@@ -134,6 +137,11 @@ function VerifyEmailForm() {
             fullName: context?.fullName,
             studentId: context?.studentId,
             role: context?.role ?? 'student',
+            // The profile row is created from the *latest* challenge payload,
+            // so a resend that drops these silently loses them for good.
+            hallId: context?.hallId,
+            departmentId: context?.departmentId,
+            programId: context?.programId,
           },
         }),
       });
