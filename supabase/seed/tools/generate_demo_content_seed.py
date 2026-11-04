@@ -419,12 +419,16 @@ CAREERS = [
 # ---------------------------------------------------------------- dining
 MENUS_F = ['actor', 'campus', 'hall_name', 'name_en', 'name_bn', 'meal', 'window', 'date_off', 'items']
 MENUS = [
-    ('tanvir.du', 'DU', 'Fazlul Huq Muslim Hall', 'Fazlul Huq Muslim Hall Mess — Lunch', 'ফজলুল হক মুসলিম হল মেস — দুপুরের খাবার',
+    # hall text below must match public.halls.name_en for that university, or hall_id
+    # stays NULL: DU -> Salimullah Muslim Hall / Rokeya Hall, BUET -> Ahsanullah Hall /
+    # Sabekun Nahar Sony Hall, JU -> Al-Beruni / Mir Mosharraf Hossain / Nawab
+    # Faizunnesa / Jahanara Imam. No other campus has a public.halls row yet.
+    ('tanvir.du', 'DU', 'Salimullah Muslim Hall', 'Salimullah Muslim Hall Mess — Lunch', 'সলিমুল্লাহ মুসলিম হল মেস — দুপুরের খাবার',
      'LUNCH', '13:00 - 15:00', '+1 day',
      [('Sada bhat (rice, 400g)', 'সাদা ভাত', 12, True, True), ('Daal', 'ডাল', 8, True, True),
       ('Beef curry with aloo', 'গরুর মাংস (আলু সহ)', 45, True, False), ('Salad and green chilli', 'সালাদ ও কাঁচা মরিচ', 5, True, True),
       ('Mishti (roshomalai)', 'মিষ্টি (রসমালাই)', 12, True, True)]),
-    ('sabbir.buet', 'BUET', 'Shahid Smriti Hall', 'Shahid Smriti Hall Cafeteria — Dinner', 'শহীদ স্মৃতি হল ক্যাফেটেরিয়া — রাতের খাবার',
+    ('sabbir.buet', 'BUET', 'Ahsanullah Hall', 'Ahsanullah Hall Cafeteria — Dinner', 'আহসানুল্লাহ হল ক্যাফেটেরিয়া — রাতের খাবার',
      'DINNER', '19:00 - 21:30', '+1 day',
      [('Chicken biryani (hall rate)', 'চিকেন বিরিয়ানি (হল রেট)', 90, True, False),
       ('Tehari with egg', 'তেহারি (ডিম সহ)', 70, True, False), ('Soup and salad', 'স্যুপ ও সালাদ', 15, True, True),
@@ -1106,7 +1110,11 @@ build('cafeteria_menus',
       ['actor', 'campus', 'hall', 'name_en', 'name_bn', 'meal', 'window', 'date_off'], menu_rows, [
     ('hall', 'txt', 'hall'), ('name_en', 'txt', 'name_en'), ('name_bn', 'txt', 'name_bn'),
     ('meal', 'txt', 'meal'), ('window', 'txt', 'window'), ('date_off', 'off', 'date_off')], [
-    ('hall_id', "(select h.id from public.university_halls h where h.university_id = u.id and h.name = v.hall limit 1)"),
+    # cafeteria_menus.hall_id -> public.halls (name_en), which is a DIFFERENT table from
+    # the university_halls directory that profiles.hall_id points at. Resolving against
+    # the wrong one is an FK violation at runtime, and generation cannot see it, so the
+    # table names are spelled out. Campuses without a public.halls row keep hall_id NULL.
+    ('hall_id', "(select h.id from public.halls h where h.university_id = u.id and h.name_en = v.hall limit 1)"),
     ('name_en', 'v.name_en'), ('name_bn', 'v.name_bn'),
     ('serving_date', "(current_date + v.date_off::interval)::date"),
     ('meal', 'v.meal::text'), ('pickup_window', 'v.window'), ('is_active', 'true')], 'menu', author_col=None,
