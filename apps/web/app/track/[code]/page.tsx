@@ -21,8 +21,11 @@ function stageIndex(status: string): number {
 
 function findDemoTicket(code: string): Row | undefined {
   const needle = code.trim().toUpperCase();
+  // Complaints resolve by tracking_code; civic tickets also resolve by ticket ID.
   return demoTable('complaints_public').find(
-    (ticket) => String(ticket.tracking_code ?? '').toUpperCase() === needle
+    (ticket) =>
+      String(ticket.tracking_code ?? '').toUpperCase() === needle ||
+      String(ticket.id ?? '').toUpperCase() === needle
   );
 }
 

@@ -12,7 +12,7 @@ export interface SessionProfile {
   trust_level: 'UNVERIFIED' | 'EMAIL_VERIFIED' | 'ID_VERIFIED' | 'TRUSTED';
   student_id?: string;
   department_id?: string | null;
-  halls?: { name_en: string; name_bn: string } | { name_en: string; name_bn: string }[] | null;
+  halls?: { name?: string; name_en?: string; name_bn?: string; type?: string } | { name?: string; name_en?: string; name_bn?: string }[] | null;
   universities?: { code: string; name_en: string; name_bn: string } | null;
 }
 
@@ -66,7 +66,7 @@ export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Re
     const { data: profile } = await admin
       .from('profiles')
       .select(
-        'id, university_id, email, full_name, trust_level, student_id, department_id, universities(code, name_en, name_bn), halls(name_en, name_bn)'
+        'id, university_id, email, full_name, trust_level, student_id, department_id, universities(code, name_en, name_bn), halls:university_halls(name, name_bn)'
       )
       .eq('id', user.id)
       .maybeSingle();
@@ -88,8 +88,9 @@ export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Re
       .eq('user_id', user.id);
 
     const roles = (roleRows ?? []).map((r) => String(r.role));
-    const isAdmin =
-      roles.includes('UNIVERSITY_ADMIN') || roles.includes('SUPER_ADMIN') || roles.includes('GOVERNING_BODY');
+    const isAdmin = roles.some((r: string) =>
+      ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN', 'GOVERNING_BODY', 'GOVERNANCE'].includes(r)
+    );
 
     return {
       auth: {

@@ -3,8 +3,8 @@
 -- Creates a few verified demo students and sample rows across the 12 modules so
 -- every real-time surface can be exercised immediately after `supabase db reset`.
 --
--- ⚠️  Never run this against production: it inserts auth users with a known
---     password and demo content.
+  -- ⚠️  Never run this against production: it inserts auth users with the known
+  --     demo password (Demo#1234) and demo content.
 
 BEGIN;
 
@@ -14,7 +14,7 @@ DECLARE
   v_dept UUID;
   v_hall UUID;
   v_unit UUID;
-  v_demo_password TEXT := '$2a$10$demodemodemodemodemodemoabcdefghijklmnopqrstuvwxyz0123';
+  v_demo_password TEXT := crypt('Demo#1234', gen_salt('bf'));
   v_students UUID[] := ARRAY[]::UUID[];
   v_ids UUID[];
   v_student UUID;
@@ -40,7 +40,7 @@ BEGIN
   END IF;
 
   SELECT id INTO v_dept FROM public.departments WHERE university_id = v_univ ORDER BY code LIMIT 1;
-  SELECT id INTO v_hall FROM public.halls WHERE university_id = v_univ ORDER BY code LIMIT 1;
+  SELECT id INTO v_hall FROM public.university_halls WHERE university_id = v_univ ORDER BY name LIMIT 1;
   SELECT id INTO v_unit FROM public.governing_units WHERE university_id = v_univ AND unit_code = 'PROCTOR' LIMIT 1;
 
   -- 1. Demo auth users + profiles (email + id verified) --------------------

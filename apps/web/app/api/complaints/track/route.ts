@@ -17,9 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: complaint } = await admin
-    .from('complaints')
-    .select(`
+  const complaintSelect = `
       id,
       university_id,
       tracking_code,
@@ -39,9 +37,23 @@ export async function POST(req: NextRequest) {
       created_at,
       governing_units(name_en, name_bn, unit_code),
       complaint_status_history(from_status, to_status, reason, created_at)
-    `)
+    `;
+
+  // Complaints resolve by tracking_code; civic tickets also resolve by ticket ID.
+  let { data: complaint } = await admin
+    .from('complaints')
+    .select(complaintSelect)
     .eq('tracking_code', trackingCode)
     .maybeSingle();
+
+  if (!complaint && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trackingCode)) {
+    const { data: byId } = await admin
+      .from('complaints')
+      .select(complaintSelect)
+      .eq('id', trackingCode)
+      .maybeSingle();
+    complaint = byId;
+  }
 
   if (!complaint) {
     return apiError('NOT_FOUND', 'No complaint found matching that tracking code.', 'এই ট্র্যাকিং কোডে কোনো অভিযোগ পাওয়া যায়নি।', 404);
