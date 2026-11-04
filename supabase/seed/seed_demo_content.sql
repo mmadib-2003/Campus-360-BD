@@ -346,7 +346,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET topic = EXCLUDED.topic, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, capacity = EXCLUDED.capacity, booked_count = EXCLUDED.booked_count, is_active = EXCLUDED.is_active;
 
   -- · housing_listings (6 rows)
-  INSERT INTO public.housing_listings (id, university_id, author_id, kind, title, description, rent_bdt, seat_count, gender_policy, area_en, area_bn, distance_km, amenities, image_urls, contact_phone, status, created_at)
+  INSERT INTO public.housing_listings (id, university_id, owner_id, kind, title, description, rent_bdt, seat_count, gender_policy, area_en, area_bn, distance_km, amenities, image_urls, contact_phone, status, created_at)
   SELECT v.id, u.id, pr.id, v.kind::public.housing_kind, v.title, v.descr, v.rent, v.seats, v.gender, v.area_en, v.area_bn, v.dist, v.amen, '{}'::text[], v.phone, v.status, (now() - interval '2 days')
   FROM (VALUES
         ('DU', 'demo.nusrat.du@campus360.test', '7ca7547e-446c-5d01-bed9-84158ac2fb58'::uuid, 'MESS_SEAT', 'Girls'' mess seat, two-sharing near Mirpur 10', 'Registered mess for DU and Jahangirnagar women students, fourth floor with a working lift. Two-sharing room, terrace cooking allowed, and the mess committee posts the monthly accounts on the notice board. ID card and a guardian''s number required before moving in.', 6500, 2, 'FEMALE', 'Mirpur 10, Dhaka', U&'\09AE\09BF\09B0\09AA\09C1\09B0 \09E7\09E6, \09A2\09BE\0995\09BE', 1.2, ARRAY['WiFi', 'Geyser', 'Terrace cooking', 'CCTV', 'Mess accounts published']::text[], '+880 1715-660011', 'AVAILABLE'),
@@ -361,7 +361,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, rent_bdt = EXCLUDED.rent_bdt, seat_count = EXCLUDED.seat_count, gender_policy = EXCLUDED.gender_policy, area_en = EXCLUDED.area_en, area_bn = EXCLUDED.area_bn, distance_km = EXCLUDED.distance_km, amenities = EXCLUDED.amenities, image_urls = EXCLUDED.image_urls, contact_phone = EXCLUDED.contact_phone, status = EXCLUDED.status;
 
   -- · rideshare_offers (6 rows)
-  INSERT INTO public.rideshare_offers (id, university_id, author_id, mode, origin, destination, depart_at, seats_total, seats_available, fare_bdt, vehicle_details, notes, status, created_at)
+  INSERT INTO public.rideshare_offers (id, university_id, owner_id, mode, origin, destination, depart_at, seats_total, seats_available, fare_bdt, vehicle_details, notes, status, created_at)
   SELECT v.id, u.id, pr.id, v.mode::public.ride_mode, v.origin, v.dest, (now() + v.depart::interval), v.total, v.avail, v.fare, v.vehicle, (v.title || chr(10) || v.notes), v.status, (now() - interval '5 hours')
   FROM (VALUES
         ('DU', 'demo.tanvir.du@campus360.test', '272904b1-3be1-51b3-9cde-b0b46a3143e4'::uuid, 'CARPOOL', U&'Mirpur 10 to Nilphamar (DU gate) \2014 3 seats, morning', 'Mirpur 10 Bus Stand (opposite Shah Ali Mosque)', 'Dhaka University Central Students'' Hall (TSC)', '2 hours', 4, 3, 120, U&'Toyota Aqua \2014 \09A2\09BE\0995\09BE MA-KA 1123', 'Leaves exactly on time. One suitcase fits in the trunk; no smoking inside the car.', 'OPEN'),
@@ -453,7 +453,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, name_bn = EXCLUDED.name_bn, price_bdt = EXCLUDED.price_bdt, is_available = EXCLUDED.is_available, is_vegetarian = EXCLUDED.is_vegetarian;
 
   -- · lost_items (6 rows)
-  INSERT INTO public.lost_items (id, university_id, author_id, kind, title, description, category, keywords, location_en, occurred_on, image_urls, contact_note, status, created_at)
+  INSERT INTO public.lost_items (id, university_id, reporter_id, kind, title, description, category, keywords, location_en, occurred_on, image_urls, contact_note, status, created_at)
   SELECT v.id, u.id, pr.id, v.kind::public.lost_item_kind, v.title, v.descr, v.cat, v.kw, v.loc, (current_date - make_interval(days => v.age_days)), '{}'::text[], v.contact, v.status, (now() - make_interval(days => v.age_days))
   FROM (VALUES
         ('DU', 'demo.nusrat.du@campus360.test', '2c7e873c-87c3-5242-8eb5-291fce34cddb'::uuid, 'LOST', U&'DU student ID card \2014 CSE third year', U&'My university ID is missing since Saturday evening; last used at the central library issue counter. There is a photo on the card. If you found it, please hand it to the library desk or message me \2014 I need it for the exam form submission.', 'ID Card', ARRAY['DU ID', 'library', 'CSE']::text[], 'Central Library, Dhaka University', 2, 'Call 01712-345678, or leave it at the library return desk with my name.', 'OPEN'),
@@ -468,7 +468,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, keywords = EXCLUDED.keywords, location_en = EXCLUDED.location_en, occurred_on = EXCLUDED.occurred_on, image_urls = EXCLUDED.image_urls, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status;
 
   -- · sports_challenges (6 rows)
-  INSERT INTO public.sports_challenges (id, university_id, author_id, team_name, sport, title, description, preferred_date, venue, status, created_at)
+  INSERT INTO public.sports_challenges (id, university_id, challenger_id, team_name, sport, title, description, preferred_date, venue, status, created_at)
   SELECT v.id, u.id, pr.id, v.team, v.sport, v.title, v.descr, (now() + v.doff::interval), v.venue, v.status, (now() - interval '7 hours')
   FROM (VALUES
         ('DU', 'demo.tanvir.du@campus360.test', '01bfa357-2107-5a26-9a69-4e2984a8efb9'::uuid, 'DU Cricket Club', 'Cricket', 'Ten-over challenge: DU CC open to any campus team', 'We are one bowler short and looking for a full side for Sunday morning at the central playground. New ball, our umpire, tea break after five overs. Tell me your strongest batter honestly so we do not end up with a forty-run game.', '5 days', 'DU Central Playground', 'OPEN'),
@@ -483,7 +483,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET team_name = EXCLUDED.team_name, sport = EXCLUDED.sport, title = EXCLUDED.title, description = EXCLUDED.description, preferred_date = EXCLUDED.preferred_date, venue = EXCLUDED.venue, status = EXCLUDED.status;
 
   -- · sports_teams (6 rows)
-  INSERT INTO public.sports_teams (id, university_id, author_id, name, sport, skill_level, needed_roles, description, contact_note, status, created_at)
+  INSERT INTO public.sports_teams (id, university_id, captain_id, name, sport, skill_level, needed_roles, description, contact_note, status, created_at)
   SELECT v.id, u.id, pr.id, v.name, v.sport, v.level::text, v.roles, v.descr, v.contact, v.status, (now() - interval '3 days')
   FROM (VALUES
         ('DU', 'demo.tanvir.du@campus360.test', '3ecbd8f9-843a-5475-bfc9-e85f430174cd'::uuid, 'DUCC selection trial squad', 'Cricket', 'INTERMEDIATE', ARRAY['Opening batter', 'Left-arm pacer', 'Wicket-keeper']::text[], U&'Trials for the DUCC third team. Practice Tuesday and Thursday at 4pm on the central playground. Mention any inter-college tournament you have played \2014 that is the only thing separating the two lists right now.', 'Any time after 4pm on practice days', 'OPEN'),
@@ -498,7 +498,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sport = EXCLUDED.sport, skill_level = EXCLUDED.skill_level, needed_roles = EXCLUDED.needed_roles, description = EXCLUDED.description, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status;
 
   -- · donation_campaigns (6 rows)
-  INSERT INTO public.donation_campaigns (id, university_id, author_id, title, story, cause, target_bdt, raised_bdt, donors_count, deadline, cover_image_url, is_verified, status, created_at)
+  INSERT INTO public.donation_campaigns (id, university_id, organizer_id, title, story, cause, target_bdt, raised_bdt, donors_count, deadline, cover_image_url, is_verified, status, created_at)
   SELECT v.id, u.id, pr.id, v.title, v.story, v.cause, v.target, v.raised, v.donors, (case when v.sign = '-' then current_date - v.due::interval else current_date + v.due::interval end)::date, NULL, v.verified, v.status, (now() - interval '9 days')
   FROM (VALUES
         ('DU', 'demo.rifat.du@campus360.test', '6c4bc788-45df-5729-93d5-ac4aa4d7951d'::uuid, 'Monsoon relief for DU students from Kurigram', 'Flood relief', 'Twenty-one students in our department lost stored grain and furniture to Jamuna erosion. The hall union is sending Tk 5,000 per family, and the disbursement list stays on the notice board with each receipt photographed. Nobody is asked to post a sad photograph; donor names appear in the ledger only if the donor wants them there.', 350000, 214500, 96, '25 days', '+', true, 'ACTIVE'),
@@ -560,7 +560,7 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET amount_bdt = EXCLUDED.amount_bdt, description = EXCLUDED.description, proof_url = EXCLUDED.proof_url;
 
   -- · marketplace_listings (12 rows)
-  INSERT INTO public.marketplace_listings (id, university_id, author_id, kind, title, description, category, price_bdt, condition, images, keyword_tags, is_negotiable, rent_period, views_count, status, created_at)
+  INSERT INTO public.marketplace_listings (id, university_id, seller_id, kind, title, description, category, price_bdt, condition, images, keyword_tags, is_negotiable, rent_period, views_count, status, created_at)
   SELECT v.id, u.id, pr.id, v.kind::public.listing_kind, v.title, v.descr, v.cat, v.price, upper(replace(v.cond, ' ', '_')), '{}'::text[], v.tags, v.nego, case when v.kind = 'RENT' then 'MONTHLY' else NULL end, v.views, 'AVAILABLE', (now() - interval '2 days')
   FROM (VALUES
         ('DU', 'demo.tanvir.du@campus360.test', 'a18780cf-56d8-51cc-b97d-44856f0404d9'::uuid, 'SELL', 'Casio fx-991EX calculator (2025 exam edition)', 'Books & Stationery', 1400, 'Good', 'Used for one admission season. The screen has a small scratch at the bottom that does not affect reading, and the battery cover is tight with no rattle. Handover at the TSC shade after 1pm.', ARRAY['calculator', 'admission', 'Casio']::text[], false, 214),
@@ -611,8 +611,8 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET rating = EXCLUDED.rating, title = EXCLUDED.title, body = EXCLUDED.body, tags = EXCLUDED.tags, verified_participation = EXCLUDED.verified_participation;
 
   -- · governance_notices (6 rows)
-  INSERT INTO public.governance_notices (id, university_id, title, body, audience, created_at, updated_at)
-  SELECT v.id, u.id, v.title, v.body, v.audience::text, (now() - make_interval(days => v.age_days)), (now() - make_interval(days => v.age_days))
+  INSERT INTO public.governance_notices (id, university_id, created_by, title, body, audience, created_at, updated_at)
+  SELECT v.id, u.id, pr.id, v.title, v.body, v.audience::text, (now() - make_interval(days => v.age_days)), (now() - make_interval(days => v.age_days))
   FROM (VALUES
         ('DU', 'demo.tanvir.du@campus360.test', '09dafe33-8f7b-526e-8ff8-42dc07037fa7'::uuid, 'Autumn 2026 academic calendar and class start date', 'Classes for all honours and degree programmes begin on 6 December 2026. Registration for the shortened first semester runs 24 November to 3 December through the department office; no extension will be granted for late fee payment. Hall residents moving in on the notified dates must carry the hall allotment letter.', 'STUDENTS', 2),
         ('BUET', 'demo.sabbir.buet@campus360.test', 'b67ecf94-2742-5a3c-8b54-c19eb4b8b10e'::uuid, 'Hall mess ration rate revised effective 1 December', 'The hall administration committee has set the per-plate lunch rate at Tk 92 and dinner at Tk 88, with mess accounts published monthly on each hall notice board. Students in arrears beyond two months must clear the balance before next-term registration; an installment option exists at the accounts desk.', 'RESIDENTS', 4),
@@ -622,6 +622,7 @@ BEGIN
         ('JUST', 'demo.alamin.just@campus360.test', 'c5e25673-9c68-5f75-a528-3030f49e3507'::uuid, 'Day scholar card issuance and central library entry from 25 October', 'Day-scholar identity cards for the 2025-26 session are issued from the students'' office between 25 October and 8 November, 10:00am to 1:00pm. The card is required for central library entry and for the exam form. Students absent from the printed list should apply through the portal before the deadline.', 'STUDENTS', 12)
   ) AS v(campus_code, author_email, id, title, body, audience, age_days)
   JOIN public.universities u ON u.code = v.campus_code
+  JOIN public.profiles pr ON pr.email = v.author_email
   ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, audience = EXCLUDED.audience;
 
   -- · club_notices (6 rows)

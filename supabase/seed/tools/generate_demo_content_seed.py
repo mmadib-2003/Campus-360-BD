@@ -1059,7 +1059,7 @@ build('housing_listings', HOUSING_F, HOUSING, [
     ('rent_bdt', 'v.rent'), ('seat_count', 'v.seats'), ('gender_policy', 'v.gender'),
     ('area_en', 'v.area_en'), ('area_bn', 'v.area_bn'), ('distance_km', 'v.dist'),
     ('amenities', 'v.amen'), ('image_urls', "'{}'::text[]"), ('contact_phone', 'v.phone'),
-    ('status', 'v.status'), ('created_at', "(now() - interval '2 days')")], 'housing')
+    ('status', 'v.status'), ('created_at', "(now() - interval '2 days')")], 'housing', author_col='owner_id')
 
 build('rideshare_offers', RIDE_F, RIDE, [
     ('mode', 'txt', 'mode'), ('title', 'txt', 'title'), ('origin', 'txt', 'origin'),
@@ -1070,7 +1070,7 @@ build('rideshare_offers', RIDE_F, RIDE, [
     ('depart_at', '(now() + v.depart::interval)'), ('seats_total', 'v.total'),
     ('seats_available', 'v.avail'), ('fare_bdt', 'v.fare'), ('vehicle_details', 'v.vehicle'),
     ('notes', '(v.title || chr(10) || v.notes)'), ('status', 'v.status'),
-    ('created_at', "(now() - interval '5 hours')")], 'ride')
+    ('created_at', "(now() - interval '5 hours')")], 'ride', author_col='owner_id')
 
 # ---------------------------------------------------------------- 10 · alumni + careers
 build('alumni_profiles', ALUMNI_F, ALUMNI, [
@@ -1135,7 +1135,7 @@ build('lost_items', LOST_F, LOST, [
     ('category', 'v.cat'), ('keywords', 'v.kw'), ('location_en', 'v.loc'),
     ('occurred_on', '(current_date - make_interval(days => v.age_days))'),
     ('image_urls', "'{}'::text[]"), ('contact_note', 'v.contact'), ('status', 'v.status'),
-    ('created_at', '(now() - make_interval(days => v.age_days))')], 'lost')
+    ('created_at', '(now() - make_interval(days => v.age_days))')], 'lost', author_col='reporter_id')
 
 # ---------------------------------------------------------------- 13 · sports
 build('sports_challenges', CHALLENGES_F, CHALLENGES, [
@@ -1144,7 +1144,7 @@ build('sports_challenges', CHALLENGES_F, CHALLENGES, [
     ('status', 'txt', 'status')], [
     ('team_name', 'v.team'), ('sport', 'v.sport'), ('title', 'v.title'), ('description', 'v.desc'),
     ('preferred_date', PREFERRED_DATE), ('venue', 'v.venue'), ('status', 'v.status'),
-    ('created_at', "(now() - interval '7 hours')")], 'challenge')
+    ('created_at', "(now() - interval '7 hours')")], 'challenge', author_col='challenger_id')
 
 build('sports_teams', TEAMS_F, TEAMS, [
     ('name', 'txt', 'name'), ('sport', 'txt', 'sport'), ('level', 'txt', 'level'),
@@ -1152,7 +1152,7 @@ build('sports_teams', TEAMS_F, TEAMS, [
     ('status', 'txt', 'status')], [
     ('name', 'v.name'), ('sport', 'v.sport'), ('skill_level', 'v.level::text'), ('needed_roles', 'v.roles'),
     ('description', 'v.desc'), ('contact_note', 'v.contact'), ('status', 'v.status'),
-    ('created_at', "(now() - interval '3 days')")], 'team')
+    ('created_at', "(now() - interval '3 days')")], 'team', author_col='captain_id')
 
 # ---------------------------------------------------------------- 14 · donations
 camp_rows = []
@@ -1173,7 +1173,7 @@ build('donation_campaigns',
     ('deadline', "(case when v.sign = '-' then current_date - v.due::interval "
                   "else current_date + v.due::interval end)::date"),
     ('cover_image_url', 'NULL'), ('is_verified', 'v.verified'), ('status', 'v.status'),
-    ('created_at', "(now() - interval '9 days')")], 'campaign')
+    ('created_at', "(now() - interval '9 days')")], 'campaign', author_col='organizer_id')
 
 don_rows = []
 for i, raw in enumerate(CAMPAIGNS):
@@ -1218,7 +1218,7 @@ build('marketplace_listings', MARKET_F, MARKET, [
     ('images', "'{}'::text[]"), ('keyword_tags', 'v.tags'), ('is_negotiable', 'v.nego'),
     ('rent_period', "case when v.kind = 'RENT' then 'MONTHLY' else NULL end"),
     ('views_count', 'v.views'), ('status', "'AVAILABLE'"),
-    ('created_at', "(now() - interval '2 days')")], 'market')
+    ('created_at', "(now() - interval '2 days')")], 'market', author_col='seller_id')
 
 # ---------------------------------------------------------------- 16 · reviews
 TARGET_SUB = {
@@ -1298,7 +1298,7 @@ build('governance_notices', ['actor', 'campus', 'title', 'body', 'audience', 'ag
     ('age_days', 'num', 'age_days')], [
     ('title', 'v.title'), ('body', 'v.body'), ('audience', 'v.audience::text'),
     ('created_at', '(now() - make_interval(days => v.age_days))'),
-    ('updated_at', '(now() - make_interval(days => v.age_days))')], 'gov', author_col=None,
+    ('updated_at', '(now() - make_interval(days => v.age_days))')], 'gov', author_col='created_by',
     updates=['title', 'body', 'audience'])
 
 build('club_notices', CLUB_NOTICES_F, CLUB_NOTICES, [
