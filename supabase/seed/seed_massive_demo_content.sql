@@ -637,6 +637,26 @@ BEGIN
      AND EXISTS (SELECT 1 FROM public.halls h WHERE h.university_id = m.university_id);
   GET DIAGNOSTICS n = ROW_COUNT; tot := tot + n;
 
+  -- ...and a menu whose NAME names a hall has to point at THAT hall. The 'hall'
+  -- resolver (hall_id) and the hallname resolver (name_en/name_bn) pick
+  -- independently, so a ported menu could end up titled "Mir Mosharraf Hossain
+  -- Hall" while hall_id referenced another hall of the same campus -- locally
+  -- consistent, but visibly self-contradictory in the dining card.
+  WITH fix AS (
+    SELECT m.id AS menu, h.id AS hall,
+           row_number() OVER (PARTITION BY m.id ORDER BY length(h.name_en) DESC) AS rn
+    FROM public.cafeteria_menus m
+    JOIN public.halls h ON h.university_id = m.university_id
+    WHERE m.hall_id IS NOT NULL AND h.id <> m.hall_id
+      AND (position(h.name_en in m.name_en) > 0
+           OR position(coalesce(h.name_bn, '') in coalesce(m.name_bn, '')) > 0)
+  )
+  UPDATE public.cafeteria_menus m
+     SET hall_id = f.hall
+    FROM fix f
+   WHERE f.menu = m.id AND f.rn = 1;
+  GET DIAGNOSTICS n = ROW_COUNT; tot := tot + n;
+
   RAISE NOTICE 'hall repair touched % rows', tot;
 END
 $hallfix$;
