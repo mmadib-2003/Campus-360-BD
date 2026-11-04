@@ -1,25 +1,44 @@
 // apps/web/lib/otp-email.ts
 // ============================================================================
-// Real-time OTP delivery through the Resend API (`resend` npm SDK).
+// Real-time OTP delivery over SMTP with Nodemailer (Gmail service preset).
 //
-//   • Client is built from `process.env.RESEND_API_KEY` (server-only — the key
-//     must never appear in a `NEXT_PUBLIC_*` variable or in the bundle).
-//   • Sender comes from `EMAIL_FROM_ADDRESS` and must live on a Resend-verified
-//     domain (SPF/DKIM) or delivery is rejected / lands in spam.
+// Why Nodemailer + Gmail instead of a transactional provider API: providers such
+// as Resend only deliver to arbitrary inboxes once you have verified a custom
+// domain (SPF/DKIM). Gmail's SMTP relay needs no domain of your own, so any
+// institutional address can be reached on a free plan. Everything else in the
+// OTP flow — CSPRNG codes, HMAC digests in `verification_attempts`, the 5-minute
+// TTL, single-use consumption — is provider-agnostic and unchanged.
+//
+//   • Transport is configured with `service: 'gmail'` and authenticated from
+//     `process.env.GMAIL_USER` + `process.env.GMAIL_APP_PASSWORD` (server-only
+//     env; neither may ever be exposed as `NEXT_PUBLIC_*`).
+//   • `GMAIL_APP_PASSWORD` must be the 16-character app password from
+//     https://myaccount.google.com/apppasswords (2-Step Verification on). A real
+//     account password is rejected by Gmail — and must never be pasted here.
+//   • Gmail only sends *as* the authenticated account, so `EMAIL_FROM_ADDRESS`
+//     contributes the display name only (see `otpMailFrom()`).
 //   • The code is rendered as a per-digit tile table (email clients collapse
 //     `letter-spacing`, so tiles survive where a styled `<div>` would not).
 //   • The plaintext code is never logged, and it is deliberately kept out of
 //     the subject line — subject text is visible in lock-screen previews.
-//   • Delivery failures are returned to the caller so `request-otp` can roll
-//     the challenge back; they are never swallowed silently.
+//   • Delivery failures are classified and returned to the caller so
+//     `request-otp` can roll the challenge back; they are never swallowed.
+//
+// Gmail's own ceilings apply: ~500 recipients/day on a personal account (and a
+// lower effective rate while the address is new). See §6 of
+// docs/OTP_DIAGNOSIS.md for the escalation path.
 // ============================================================================
 
-import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import { OTP_TTL_SECONDS } from '@/lib/demo-otp';
 
+/**
+ * Result of one delivery attempt. `messageId` is the SMTP Message-ID, stored on
+ * `verification_attempts.email_message_id` so support can trace a message.
+ */
 export type OtpDeliveryResult =
-  | { ok: true; provider: 'resend'; emailId: string | null }
-  | { ok: false; provider: 'resend' | 'unconfigured'; error: string; retryable: boolean };
+  | { ok: true; provider: 'gmail'; messageId: string | null }
+  | { ok: false; provider: 'gmail' | 'unconfigured'; error: string; retryable: boolean };
 
 const BRAND = {
   name: 'Campus360 BD',
@@ -36,32 +55,117 @@ const BRAND = {
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL ?? 'support@campus360bd.com';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://campus360bd.com';
 
-let cachedClient: Resend | null = null;
-let cachedKey: string | null = null;
-
-/** True when a Resend API key is present — the switch that promotes Track B
- *  (demo) traffic onto real email delivery. */
-export function isResendConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY?.trim());
+/** Positive-integer env reader, so a typo in Vercel cannot yield NaN. */
+function envNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/** Lazily constructed, process-scoped Resend client. */
-export function getResendClient(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) return null;
-  if (!cachedClient || cachedKey !== apiKey) {
-    cachedClient = new Resend(apiKey);
-    cachedKey = apiKey;
+/** Milliseconds allowed for the SMTP handshake / greeting and for one send. */
+const SMTP_CONNECT_TIMEOUT_MS = envNumber(process.env.SMTP_TIMEOUT_MS, 15000);
+const SMTP_SOCKET_TIMEOUT_MS = envNumber(process.env.SMTP_SEND_TIMEOUT_MS, 20000);
+
+const DEFAULT_FROM = `${BRAND.name} Verification <no-reply@campus360bd.com>`;
+
+/**
+ * Both values are required — a missing one means "this deployment cannot mail",
+ * which is what puts Track B (demo codes) in play.
+ */
+export function gmailCredentials(): { user: string; pass: string } | null {
+  const user = process.env.GMAIL_USER?.trim();
+  const pass = process.env.GMAIL_APP_PASSWORD?.trim();
+  if (!user || !pass) return null;
+  return { user, pass };
+}
+
+/** True when Gmail SMTP credentials are present. */
+export function isSmtpConfigured(): boolean {
+  return gmailCredentials() !== null;
+}
+
+/**
+ * Pooling keeps SMTP sockets open between messages — the right trade-off for a
+ * long-running (Docker) server, the wrong one for a serverless function that can
+ * be frozen mid-command holding a half-used socket. So the default is a fresh
+ * connection per message, and `SMTP_POOL=1` opts in for persistent deployments
+ * (which also caches the transporter on the module).
+ */
+function smtpPoolingEnabled(): boolean {
+  return /^(1|true|yes|on)$/i.test(String(process.env.SMTP_POOL ?? '').trim());
+}
+
+/**
+ * The slice of a Nodemailer transporter this module needs. Structural on purpose:
+ * it puts the pooled and unpooled overloads behind one return type and lets a
+ * test inject a double without touching the network.
+ */
+export interface OtpMailer {
+  sendMail(options: nodemailer.SendMailOptions): Promise<nodemailer.SentMessageInfo>;
+}
+
+export function createOtpMailer(): OtpMailer | null {
+  const creds = gmailCredentials();
+  if (!creds) return null;
+
+  const base = {
+    service: 'gmail',
+    auth: { user: creds.user, pass: creds.pass },
+    connectionTimeout: SMTP_CONNECT_TIMEOUT_MS,
+    greetingTimeout: SMTP_CONNECT_TIMEOUT_MS,
+    socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
+  };
+
+  if (smtpPoolingEnabled()) {
+    return nodemailer.createTransport({
+      ...base,
+      pool: true,
+      maxConnections: envNumber(process.env.SMTP_MAX_CONNECTIONS, 3),
+      maxMessages: envNumber(process.env.SMTP_MAX_MESSAGES, 50),
+    });
   }
-  return cachedClient;
+  return nodemailer.createTransport(base);
 }
 
-export function otpFromAddress(): string {
-  return (
-    process.env.EMAIL_FROM_ADDRESS?.trim() ||
-    process.env.RESEND_FROM_EMAIL?.trim() ||
-    `${BRAND.name} Verification <no-reply@campus360bd.com>`
-  );
+let cachedMailer: OtpMailer | null = null;
+let cachedMailerKey: string | null = null;
+
+/** Cached pooled transporter in pooling mode; a fresh one per message otherwise. */
+export function getOtpMailer(): OtpMailer | null {
+  const creds = gmailCredentials();
+  if (!creds) return null;
+  if (!smtpPoolingEnabled()) return createOtpMailer();
+
+  if (!cachedMailer || cachedMailerKey !== creds.user) {
+    cachedMailer = createOtpMailer();
+    cachedMailerKey = creds.user;
+  }
+  return cachedMailer;
+}
+
+/**
+ * The `From` header. Gmail validates the sender against the authenticated
+ * account, so a foreign address in `EMAIL_FROM_ADDRESS` would be refused by the
+ * relay — keep its display name, substitute `GMAIL_USER` as the address.
+ */
+export function otpMailFrom(): string {
+  const creds = gmailCredentials();
+  const configured = process.env.EMAIL_FROM_ADDRESS?.trim();
+  if (!creds) return configured || DEFAULT_FROM;
+
+  const configuredAddress = configured?.match(/<\s*([^>]+?)\s*>/)?.[1] ?? configured;
+  if (configuredAddress && configuredAddress.toLowerCase() !== creds.user.toLowerCase()) {
+    console.warn(
+      `[otp] EMAIL_FROM_ADDRESS "${configuredAddress}" is not GMAIL_USER — Gmail only sends as the authenticated account, so ${creds.user} is used instead.`
+    );
+  }
+  const displayName = configured?.match(/^([^<]+)/)?.[1]?.trim() || `${BRAND.name} Verification`;
+  return `${displayName} <${creds.user}>`;
+}
+
+/** Address-safe domain for the synthetic Message-ID. */
+function refDomain(from: string): string {
+  const raw = from.includes('@') ? from.slice(from.lastIndexOf('@') + 1) : 'gmail.com';
+  return raw.replace(/[>"'\s)(]/g, '') || 'gmail.com';
 }
 
 export interface OtpEmailInput {
@@ -357,66 +461,104 @@ export function otpEmailSubject(input: OtpEmailInput): string {
 }
 
 /**
- * Send the OTP email. Returns a structured result — the caller decides whether
- * to roll the challenge back, so a failed send can never leave a live OTP that
- * the user never received.
+ * Turn a Nodemailer/SMTP failure into something the API can act on:
+ * `retryable: true` means "a fresh request may work", `false` means an operator
+ * has to change something (credentials, quota, recipient policy).
+ */
+export function classifySmtpError(error: unknown): { message: string; retryable: boolean } {
+  const err = (error ?? {}) as {
+    message?: string;
+    code?: string;
+    response?: string;
+    responseCode?: number | string;
+  };
+  const message = String(err.message ?? error ?? 'SMTP send failed.').trim();
+  const code = String(err.code ?? '');
+  const response = String(err.responseCode ?? '');
+  // Gmail puts the useful text in the raw SMTP reply, so match on both sides.
+  const haystack = `${message} ${String(err.response ?? '')}`;
+
+  if (
+    code === 'EAUTH' ||
+    /^(530|534|535)/.test(response) ||
+    /Username and Password not accepted|Invalid login/i.test(haystack)
+  ) {
+    return {
+      message: 'Gmail rejected the SMTP credentials. Check GMAIL_USER and GMAIL_APP_PASSWORD (an app password is required).',
+      retryable: false,
+    };
+  }
+  if (/daily sending quota|too many recipients|rate limit exceeded|quota/i.test(haystack)) {
+    return { message: 'The Gmail account hit its sending quota. Try again later.', retryable: false };
+  }
+  if (code === 'ECONNECTION' || code === 'ESOCKET' || code === 'ETIMEDOUT' || code === 'EHARDERROR') {
+    return { message, retryable: true };
+  }
+  // 4xx = transient relay refusal, 5xx = hard rejection of this message.
+  if (response.startsWith('4')) return { message, retryable: true };
+  if (response.startsWith('5')) return { message, retryable: false };
+  return { message, retryable: true };
+}
+
+/**
+ * Send the OTP email over Gmail SMTP. Returns a structured result — the caller
+ * decides whether to roll the challenge back, so a failed send can never leave a
+ * live OTP that the user never received.
  */
 export async function sendOtpEmail(
   input: OtpEmailInput & { idempotencyKey?: string }
 ): Promise<OtpDeliveryResult> {
-  const client = getResendClient();
-  if (!client) {
+  if (!isSmtpConfigured()) {
     return {
       ok: false,
       provider: 'unconfigured',
-      error: 'RESEND_API_KEY is not configured on this server.',
+      error: 'GMAIL_USER / GMAIL_APP_PASSWORD are not configured on this server.',
       retryable: false,
     };
   }
 
-  const from = otpFromAddress();
-  // Unique per message so Gmail never threads two OTP emails together.
-  const nonce = globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Date.now().toString(36);
-  const refDomain = (from.split('@')[1] ?? 'campus360bd.com').replace(/[>"]/g, '');
+  const mailer = getOtpMailer();
+  if (!mailer) {
+    return { ok: false, provider: 'unconfigured', error: 'The SMTP transport could not be created.', retryable: false };
+  }
 
-  const payload = {
-    from,
-    to: [input.to],
-    subject: otpEmailSubject(input),
-    html: buildOtpEmailHtml(input),
-    text: buildOtpEmailText(input),
-    tags: [{ name: 'category', value: 'auth-otp' }],
-    headers: {
-      'Auto-Submitted': 'auto-generated',
-      'X-Entity-Ref-ID': `<otp-${nonce}@${refDomain}>`,
-      'X-Complaints-To': APP_URL.replace(/^https?:\/\//, ''),
-    },
-  };
+  const from = otpMailFrom();
+  const domain = refDomain(from);
+  // Derived from the challenge id: a retried request reuses the same Message-ID,
+  // so mail clients recognise it as the same message instead of threading two
+  // OTP emails together (SMTP itself has no idempotency key).
+  const messageId = input.idempotencyKey
+    ? `<otp-${input.idempotencyKey}@${domain}>`
+    : `<otp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}@${domain}>`;
 
   try {
-    const result = await client.emails.create(
-      payload,
-      input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined
-    );
+    const info = await mailer.sendMail({
+      from,
+      to: input.to,
+      subject: otpEmailSubject(input),
+      html: buildOtpEmailHtml(input),
+      text: buildOtpEmailText(input),
+      messageId,
+      headers: {
+        'Auto-Submitted': 'auto-generated',
+        'X-Entity-Ref-ID': messageId,
+        'X-Complaints-To': domain,
+      },
+    });
 
-    if (result.error || !result.data) {
-      const statusCode = result.error?.statusCode ?? null;
+    const rejected: unknown[] = Array.isArray(info?.rejected) ? info.rejected : [];
+    if (rejected.length > 0) {
       return {
         ok: false,
-        provider: 'resend',
-        error: result.error?.message ?? 'Resend rejected the send request.',
-        // Quota/rate/5xx are worth another attempt; auth and domain errors are not.
-        retryable: statusCode === null || statusCode === 429 || statusCode >= 500,
+        provider: 'gmail',
+        error: `Gmail refused the recipient address (${rejected.map(String).join(', ')}).`,
+        retryable: false,
       };
     }
 
-    return { ok: true, provider: 'resend', emailId: result.data.id ?? null };
+    return { ok: true, provider: 'gmail', messageId: info?.messageId ?? messageId };
   } catch (error) {
-    return {
-      ok: false,
-      provider: 'resend',
-      error: error instanceof Error ? error.message : 'Resend request failed.',
-      retryable: true,
-    };
+    const classified = classifySmtpError(error);
+    return { ok: false, provider: 'gmail', error: classified.message, retryable: classified.retryable };
   }
 }

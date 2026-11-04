@@ -1,7 +1,7 @@
 # OTP Failure Diagnosis & Dual-Track Resolution
 
 **Status:** resolved — Track A is now the default path (real-time email OTP via
-the Resend API); Track B survives only as an offline escape hatch.
+Nodemailer + Gmail SMTP); Track B survives only as an offline escape hatch.
 **Date:** 2026-11-04
 
 ## 1. Diagnosis (Supabase Dashboard → Authentication → Logs)
@@ -24,11 +24,18 @@ the Resend API); Track B survives only as an offline escape hatch.
 This is the authentication deadlock: at class scale (40+ signups), OTP mail is
 either refused by address or exhausted within minutes.
 
-## 2. Track A — real-time email OTP via the Resend API (default)
+## 2. Track A — real-time email OTP via Nodemailer + Gmail SMTP (default)
 
-Custom SMTP bypasses both the team-inbox restriction and the 2/hour cap, and the
-app no longer relies on Supabase's mailer for sign-in at all —
-`/api/auth/request-otp` calls Resend directly.
+Any SMTP relay bypasses both the team-inbox restriction and the 2/hour cap, and
+the app no longer relies on Supabase's mailer for sign-in at all —
+`/api/auth/request-otp` connects to `smtp.gmail.com` through Nodemailer.
+
+**Why Gmail SMTP and not a transactional provider API:** providers such as Resend
+refuse to relay to arbitrary addresses until you have verified a custom domain
+(SPF/DKIM). Campus360 BD does not have one yet, so every OTP would have been
+locked behind a purchase. Gmail's SMTP relay works from a plain `@gmail.com`
+address, is free, and reaches any inbox. The trade-off is throughput and sender
+reputation — quantified in §6.
 
 | Concern | Implementation |
 | --- | --- |
@@ -39,14 +46,18 @@ app no longer relies on Supabase's mailer for sign-in at all —
 | Newest wins | every new request retires prior open challenges for the address (`supersedeOpenChallenges`) |
 | Attempts | 5 per challenge; the 5th failure revokes the code |
 | Cooldown | 60s per email, plus 5/10min per address and 10/10min per IP |
-| Delivery | `sendOtpEmail()` → Resend SDK (`resend` npm package, `emails.create`), bilingual branded HTML + plain-text part, `Idempotency-Key` = challenge id (`apps/web/lib/otp-email.ts`) |
-| Failure | delivery error rolls the challenge back (row deleted) so the user can retry immediately, and writes `audit_log.OTP_DELIVERY_FAILED` |
+| Delivery | `sendOtpEmail()` → Nodemailer (`nodemailer` npm package, `createTransport({ service: 'gmail' })`, `auth` from `GMAIL_USER`/`GMAIL_APP_PASSWORD`), bilingual branded HTML + plain-text part, `Message-ID` seeded from the challenge id (`apps/web/lib/otp-email.ts`) |
+| Failure | `classifySmtpError()` sorts hard faults (bad credentials, quota, 5xx recipient refusal) from transient ones (4xx, `ESOCKET`, `ETIMEDOUT`); the challenge is rolled back (row deleted) so the user can retry immediately, and `audit_log.OTP_DELIVERY_FAILED` is written |
 | Session | on success the service client mints a magiclink and the SSR client exchanges it for the cookie session |
 
 Configuration:
 
-1. `RESEND_API_KEY` — server-only API key (`process.env`, never `NEXT_PUBLIC_*`).
-2. `EMAIL_FROM_ADDRESS` — sender on a **verified** Resend domain (SPF/DKIM).
+1. `GMAIL_USER` + `GMAIL_APP_PASSWORD` — server-only (`process.env`, never
+   `NEXT_PUBLIC_*`). The password must be a 16-character **app password** from
+   <https://myaccount.google.com/apppasswords> (2-Step Verification on); Gmail
+   rejects an account password and the app password is revocable on its own.
+2. `EMAIL_FROM_ADDRESS` — display name only; Gmail relays as `GMAIL_USER` and
+   `otpMailFrom()` substitutes it (with a warning) if the addresses differ.
 3. `OTP_PEPPER_SECRET` — required; `request-otp` returns
    `503 AUTH_CONFIG_UNAVAILABLE` in production when it is missing, instead of
    hashing with a default key.
@@ -57,13 +68,19 @@ Configuration:
    detects the missing columns, retries with the migration-0002 column set and
    logs one warning.
 
-Supabase Dashboard → Authentication → SMTP can keep the same Resend
+Supabase Dashboard → Authentication → SMTP Settings can keep the **same** Gmail
 credentials, so password-reset and magic-link mail leave the team inbox too.
 
-## 3. Track B — demo fallback (`NEXT_PUBLIC_AUTH_MODE === 'demo'` **and** no `RESEND_API_KEY`)
+Transport defaults: a fresh connection per message (`pool` off) because a frozen
+serverless function holding an open SMTP socket is a worse failure mode than the
+~200 ms handshake; `SMTP_POOL=1` opts into a cached pooled transporter for
+Docker/long-running deployments. `SMTP_TIMEOUT_MS` / `SMTP_SEND_TIMEOUT_MS`
+bound the connect and socket phases so a dead relay cannot hang the request.
 
-Track B is now strictly a fallback: it is only reachable when no Resend key is
-configured, so a deployment can never silently stop mailing while *appearing*
+## 3. Track B — demo fallback (`NEXT_PUBLIC_AUTH_MODE === 'demo'` **and** no SMTP credentials)
+
+Track B is now strictly a fallback: it is only reachable when `GMAIL_USER` /
+`GMAIL_APP_PASSWORD` are absent, so a deployment can never silently stop mailing while *appearing*
 to be in production. `DemoOtpPanel` also stopped deriving the code client-side —
 it renders only when the API actually returned a `demoCode`, so the panel can
 never show a code the server would reject.
@@ -77,7 +94,7 @@ never show a code the server would reject.
 - TTL is shared with Track A (5 minutes), which is also the demo cookie's
   `maxAge` in `apps/web/lib/demo-auth.ts`.
 - The plaintext column exists purely so a preview without SMTP can complete
-  sign-up; §5 shows how to drop it once every environment has Resend.
+  sign-up; §5 shows how to drop it once every environment can mail.
 
 ## 4. Password-based demo accounts (no OTP at all)
 
@@ -119,3 +136,32 @@ RLS: `verification_attempts` already has RLS enabled with **no** policies for
 must never read a digest or an expiry. The API writes it with the service-role
 client (`apps/web/lib/supabase-server.ts`), which bypasses RLS. No new policies
 are required and none should be added.
+
+## 6. Gmail throughput, and when to move off it
+
+Gmail removes the verified-domain requirement, it does not remove sender
+limits. On a personal account:
+
+| Constraint | Practical effect |
+| --- | --- |
+| ~500 recipients/day | roughly 500 sign-ups per day per `GMAIL_USER`; a single university's onboarding wave can exhaust it before lunch |
+| ~100 messages/hour (newer accounts, unmeasured but observed) | bursty class-room signups can hit `429`-style `Too many recipients` / `Rate limit exceeded`; `classifySmtpError()` maps that to a **non**-retryable 503 so users are told to contact support instead of hammering |
+| Per-message size 50 MB | irrelevant for a 6-digit code |
+| Sender reputation | a `@gmail.com` From can land in Promotions/Spam more often than a domain-verified sender, and the inbox is not monitored — the template says "do not reply" and routes `X-Complaints-To` accordingly |
+| One account = one blast radius | if Google flags the account, OTP delivery for every university stops at once |
+
+Mitigations already in place: the 60s per-address cooldown, 5 requests/10 min per
+address and 10/10 min per IP keep the quota from being burned by retries, and
+`delivery_status` / `email_message_id` make "the code never arrived" answerable
+from the database.
+
+Escalation ladder, cheapest first:
+
+1. Keep Gmail but use a **Google Workspace** account (2,000 recipients/day) —
+   the code does not change, only `GMAIL_USER`/`GMAIL_APP_PASSWORD`.
+2. Point `createOtpMailer()` at any other SMTP relay (SES/Mailgun/Postmark SMTP,
+   or a university relay) — only the transport options change; the template,
+   hashing and TTL logic are untouched. `host`/`port`/`secure` replace `service`.
+3. Once a domain is verified, a transactional HTTP API can be reintroduced
+   behind the same `sendOtpEmail()` contract — the route handlers and
+   `verification_attempts` schema need no edit.

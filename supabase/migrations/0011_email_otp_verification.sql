@@ -1,6 +1,6 @@
 -- supabase/migrations/0011_email_otp_verification.sql
 -- ============================================================================
--- Real-time email OTP verification (Resend) — schema changes
+-- Real-time email OTP verification (Nodemailer / Gmail SMTP) — schema changes
 --
 -- The application flow (apps/web/app/api/auth/request-otp + verify-otp, backed
 -- by apps/web/lib/otp-store.ts) works without this file, but these columns are
@@ -14,9 +14,9 @@
 --                         OTP is accepted or revoked, so the table holds no
 --                         verifiable secret for a settled challenge.
 --   3. delivery_status / email_sent_at / email_message_id / delivery_error —
---                         Resend bookkeeping, so "the code never arrived" can
---                         be answered from the admin side without the provider
---                         dashboard. email_message_id is the Resend email id.
+--                         SMTP bookkeeping, so "the code never arrived" can be
+--                         answered from the database alone. email_message_id is
+--                         the SMTP Message-ID of the delivered message.
 --   4. partial index     — the hot lookup is "latest unsettled challenge for
 --                         this email"; the index skips every settled row.
 --   5. purge function    — keeps the table from growing one row per sign-up.
@@ -61,9 +61,9 @@ COMMENT ON COLUMN public.verification_attempts.expires_at IS
 COMMENT ON COLUMN public.verification_attempts.consumed_at IS
   'Set when the challenge stops being usable: replaced by a newer code, attempts exhausted, or verified.';
 COMMENT ON COLUMN public.verification_attempts.delivery_status IS
-  'Resend delivery state: PENDING (inserted, not yet mailed), SENT (provider accepted), FAILED (rolled back).';
+  'Delivery state: PENDING (inserted, not yet mailed), SENT (SMTP server accepted), FAILED (rolled back).';
 COMMENT ON COLUMN public.verification_attempts.email_message_id IS
-  'Resend email id returned by POST /emails — join key for provider-side delivery logs.';
+  'Message-ID used for the send (seeded from this row id) — join key for mail-server log lookups.';
 
 -- ---------------------------------------------------------------------------
 -- 3. Hot-path index: newest unsettled challenge per email

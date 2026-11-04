@@ -14,9 +14,9 @@
 //   • `consumed_at`   — set when a challenge is retired (replaced by a newer
 //                       code, exhausted attempts, or successful verification),
 //                       so stale rows can never be picked up again.
-//   • `delivery_status` / `email_message_id` / `email_sent_at` — Resend
-//                       bookkeeping, so support can answer "the code never
-//                       arrived" without touching the provider dashboard.
+//   • `delivery_status` / `email_message_id` / `email_sent_at` — SMTP
+//                       bookkeeping (Nodemailer), so support can answer "the
+//                       code never arrived" from the database alone.
 //
 // The three extended columns ship in migration 0011_email_otp_verification.sql.
 // If it has not been applied yet, each write transparently retries with the
@@ -54,6 +54,7 @@ export interface OtpChallenge {
   consumed_at?: string | null;
   signup_payload?: Record<string, unknown> | null;
   delivery_status?: OtpDeliveryStatus;
+  /** SMTP Message-ID for the send (see lib/otp-email.ts). */
   email_message_id?: string | null;
   created_at: string;
 }
@@ -313,7 +314,7 @@ export async function recordOtpFailure(admin: SupabaseClient, challenge: OtpChal
   if (exhausted) await consumeOtpChallenge(admin, challenge.id, { verified: false, clearHash: true });
 }
 
-/** Delivery bookkeeping after Resend accepts the message. */
+/** Delivery bookkeeping after the SMTP server accepts the message. */
 export async function markOtpEmailSent(
   admin: SupabaseClient,
   id: string,

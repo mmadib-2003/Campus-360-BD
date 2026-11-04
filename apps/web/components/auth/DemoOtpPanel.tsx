@@ -7,8 +7,8 @@
 // issued a demo code (`code` is returned by /api/auth/request-otp). The panel
 // used to re-derive the code client-side from SHA-256(salt:email); that was
 // dropped when real email OTP became the default, so the panel can never show
-// a code the server refuses. Configure RESEND_API_KEY and the API stops
-// returning a demoCode, which hides this panel on its own.
+// a code the server refuses. Configure GMAIL_USER + GMAIL_APP_PASSWORD and the
+// API stops returning a demoCode, which hides this panel on its own.
 
 import React from 'react';
 import { useUi } from '@/lib/i18n-client';
@@ -55,7 +55,7 @@ export function DemoOtpPanel({ email, code }: { email: string; code?: string | n
         </span>
       </div>
       <p className="mt-2 text-[10px] text-amber-700/70 dark:text-amber-200/70">
-        {t('Set RESEND_API_KEY to switch this deployment to real email delivery with a 5-minute single-use OTP.')}
+        {t('Set GMAIL_USER and GMAIL_APP_PASSWORD to switch this deployment to real email delivery with a 5-minute single-use OTP.')}
       </p>
     </div>
   );
