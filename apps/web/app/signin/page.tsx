@@ -49,6 +49,7 @@ export default function SignInPage() {
             studentId: '',
             demoCode: payload.data?.demoCode ?? null,
             demo: Boolean(payload.data?.demo),
+            expiresAt: payload.data?.expiresAt ?? null,
           })
         );
       }

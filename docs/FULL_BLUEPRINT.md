@@ -6,7 +6,7 @@
 
 * **Strict Multi-Tenancy & Domain Whitelisting:** Every domain table carries a `university_id UUID NOT NULL REFERENCES universities(id)` column. Row-Level Security (RLS) enforces strict tenant isolation via a security-definer helper `auth.user_university_id()`. Cross-university read access is permitted only when a table explicitly supports public opt-in (`visibility = 'PUBLIC'` on `academic_files` or `is_public = true` on `events`) or when accessed by a `SUPER_ADMIN`.
 
-* **Server-Side OTP & Email Delivery:** Because default Supabase magic links do not enforce multi-domain per-university whitelisting prior to token generation, `POST /api/auth/request-otp` validates the email domain against `university_email_domains` server-side first, generates a CSPRNG 6-digit OTP, stores its SHA-256 hash in `verification_attempts` (TTL 10 minutes, max 5 attempts, 60-second resend cooldown per email + IP), and dispatches a bilingual transactional email via Resend. Upon verification (`POST /api/auth/verify-otp`), the server issues a valid Supabase Auth session and sets `profiles.trust_level = 'EMAIL_VERIFIED'`.
+* **Server-Side OTP & Email Delivery:** Because default Supabase magic links do not enforce multi-domain per-university whitelisting prior to token generation, `POST /api/auth/request-otp` validates the email domain against `university_email_domains` server-side first, generates a CSPRNG 6-digit OTP, stores its HMAC-SHA256 digest in `verification_attempts` (TTL 5 minutes, max 5 attempts, 60-second resend cooldown per email + IP, only the newest challenge per address stays live), and dispatches a branded bilingual transactional email in real time over Gmail SMTP via Nodemailer (`apps/web/lib/otp-email.ts`, `GMAIL_USER` + `GMAIL_APP_PASSWORD`, no verified domain required). Upon verification (`POST /api/auth/verify-otp`), the server issues a valid Supabase Auth session and sets `profiles.trust_level = 'EMAIL_VERIFIED'`.
 
 * **Anonymous Grievance Cryptographic Binding:** When a student files an anonymous complaint (`is_anonymous = true`, default ON for Harassment, Ragging/Bullying, and Sexual Harassment), `student_id` is set to `NULL` on the `complaints` row so neither admins nor DB snapshots can link the complaint to a user profile. The server generates a human-readable `tracking_code` (e.g., `JU-CASE-2026-000123`) and a 32-byte high-entropy `tracking_secret`. Only ` encode(digest(tracking_secret, 'sha256'), 'hex')` is stored in `complaints.tracking_secret_hash`. The raw secret is returned once to the client and persisted in `expo-secure-store` (mobile) or encrypted local storage (web).
 
@@ -34,7 +34,7 @@
 +---------------------------------------------------------------------------------------------------+
 |                    ORCHESTRATION LAYER (Next.js Route Handlers & Edge Middleware)                 |
 |  - Rate Limiter (Upstash/Postgres sliding window per IP + User)                                   |
-|  - /api/auth/* (Domain Whitelist Check -> CSPRNG 6-digit OTP -> Resend Email -> Supabase Session) |
+|  - /api/auth/* (Domain Whitelist Check -> CSPRNG 6-digit OTP -> Gmail SMTP Email -> Supabase Session) |
 |  - /api/archive/* (MIME Sniffing, Quota Check 20/day/user, Signed Upload/Download URL Issuance)   |
 |  - /api/complaints/* (Anon Secret Hashing, Routing Engine, SLA Calculation, Crisis Interstitial)  |
 |  - /api/events/* (Haversine Geofence Verification, Live Coords Broadcast, ICS Generation)         |
@@ -66,7 +66,7 @@
                           v
 +---------------------------------------------------------------------------------------------------+
 |                           EXTERNAL INTEGRATIONS & OBSERVABILITY                                   |
-|  [Google Maps Platform: Places/Geocoding/Directions/Maps SDK]  [Resend: Bilingual OTP & Alerts]   |
+|  [Google Maps Platform: Places/Geocoding/Directions/Maps SDK]  [Nodemailer/Gmail: Bilingual OTP] |
 |  [Expo Push / FCM / APNs]      [ClamAV Scanning Service]       [Sentry + PostHog + Uptime Checks] |
 +---------------------------------------------------------------------------------------------------+
 
@@ -297,9 +297,10 @@ ANON_COMPLAINT_PEPPER=replace-with-64-char-hex-secret-for-tracking-codes
 CSRF_SIGNING_SECRET=replace-with-64-char-hex-secret-for-csrf-tokens
 CRON_WEBHOOK_SECRET=replace-with-shared-secret-for-supabase-edge-functions
 
-# --- Email Provider (Resend / SendGrid) ---
-RESEND_API_KEY=re_123456789_example_key
-EMAIL_FROM_ADDRESS="Campus360 BD Verification <no-reply@campus360bd.com>"
+# --- Email Provider (Nodemailer over Gmail SMTP) ---
+GMAIL_USER=campus360bd@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+EMAIL_FROM_ADDRESS="Campus360 BD Verification <campus360bd@gmail.com>"
 
 # --- Google Maps Platform (Strictly Separated & Restricted per Platform) ---
 # Restricted by HTTP Referrer (*.campus360bd.com/*, localhost:3000/*)
@@ -2374,6 +2375,8 @@ export async function POST(req: NextRequest) {
     return apiError('DB_ERROR', 'Could not create verification challenge.', 'যাচাইকরণ প্রক্রিয়া শুরু করা যায়নি।', 500);
   }
 
+  // NOTE: this appendix snapshot predates the Nodemailer/Gmail transport — the
+  // live implementation is apps/web/lib/otp-email.ts + apps/web/lib/otp-store.ts.
   // Dispatch bilingual OTP via Resend API
   if (process.env.RESEND_API_KEY) {
     await fetch('https://api.resend.com/emails', {
@@ -5488,7 +5491,7 @@ and include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset
 ## 14. Verification Checklist (Mapped 1:1 to Section 8)
 
 - [x] **Sign-up works for any BD public-university email on the seeded whitelist and only those:** Enforced in `apps/web/app/api/auth/request-otp/route.ts` against `university_email_domains` (seeded with 50+ BD public universities in `supabase/seed/seed.sql`) and verified by Playwright E2E test `blocks non-university Gmail sign-up`.
-- [x] **OTP is real email-delivered, rate-limited; demo OTP 12345 is gone:** Generated via `crypto.randomInt(100000, 1000000)` (strictly 6 digits; 5-digit `12345` is rejected by `VerifyOtpSchema`), hashed with HMAC-SHA256 in `verification_attempts`, rate-limited per IP and email with 60s resend cooldown, and delivered via Resend.
+- [x] **OTP is real email-delivered, rate-limited; demo OTP 12345 is gone:** Generated via `crypto.randomInt(100000, 1000000)` (strictly 6 digits; 5-digit `12345` is rejected by `VerifyOtpSchema`), hashed with HMAC-SHA256 in `verification_attempts`, rate-limited per IP and email with 60s resend cooldown, and delivered over Gmail SMTP via Nodemailer.
 - [x] **University A user cannot read University B private data (RLS test proves it):** Enforced by `university_id = public.current_user_university_id()` in `supabase/migrations/0005_rls_policies.sql` and proven in `supabase/tests/rls_isolation.test.sql` (JU Student A vs DU Student B).
 - [x] **Archive: verified same-university user uploads PDF → same-university verified user searches, previews, downloads via signed URL; unverified blocked:** Implemented in `/api/archive/upload-url`, `/api/archive`, and `/api/archive/[id]/download-url` with 5-minute (300s) signed URLs and `trust_level != 'UNVERIFIED'` checks.
 - [x] **Complaints: student files anonymous complaint → gets tracking code → admin assigned → admin replies + changes status → student's timeline updates in real time → SLA breach auto-escalates:** Implemented across `/api/complaints`, `/api/complaints/track`, `/api/admin/complaints/[id]/status`, trigger `trg_complaint_lifecycle`, and Edge Function `supabase/functions/sla-escalation-cron/index.ts`.

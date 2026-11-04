@@ -1,4 +1,16 @@
 // apps/web/app/api/auth/verify-otp/route.ts
+// ============================================================================
+// Step 2 of the email OTP flow: validate the submitted code against the
+// digest stored in `verification_attempts`, enforce the 5-minute TTL and the
+// 5-attempt budget, retire the challenge, provision the Supabase user and
+// establish the session cookie.
+//
+//   POST /api/auth/verify-otp   { email, otp }
+//
+// On success the challenge is consumed atomically-ish (verified_at +
+// consumed_at set, otp_hash nulled) so a captured code cannot be replayed even
+// if the response is lost and the request is retried.
+// ============================================================================
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
@@ -6,7 +18,22 @@ import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { demoNextStep, normalizeDemoRole, verifyDemoChallenge } from '@/lib/demo-auth';
-import { demoOtpExpiresAt, isDemoAuthMode } from '@/lib/demo-otp';
+import {
+  OTP_MAX_ATTEMPTS,
+  OTP_TTL_SECONDS,
+  isDemoAuthMode,
+  redactEmail,
+  remainingOtpSeconds,
+} from '@/lib/demo-otp';
+import { normalizeOtpInput, otpHashMatches, otpSecurityConfigError } from '@/lib/otp-crypto';
+import {
+  clearProfileDemoOtp,
+  consumeOtpChallenge,
+  hasAttemptsLeft,
+  isChallengeExpired,
+  readActiveOtpChallenge,
+  recordOtpFailure,
+} from '@/lib/otp-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,12 +45,13 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const otp = typeof body?.otp === 'string' ? body.otp.trim() : '';
+  const otp = normalizeOtpInput(body?.otp);
 
-  if (!email || !/^\d{6}$/.test(otp)) {
+  if (!email || !otp) {
     return apiError('INVALID_INPUT', 'A valid email and 6-digit OTP are required.', 'সঠিক ইমেইল এবং ৬-সংখ্যার ওটিপি প্রয়োজন।', 400);
   }
 
+  // Local preview (no Supabase): the cookie-issued demo challenge.
   if (!isSupabaseServerConfigured()) {
     const demo = verifyDemoChallenge(email, otp);
     if (!demo.ok) {
@@ -39,66 +67,75 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const admin = createSupabaseAdminClient();
-  const { data: challenge } = await admin
-    .from('verification_attempts')
-    .select('*')
-    .eq('email', email)
-    .is('verified_at', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!challenge) {
-    return apiError('CHALLENGE_NOT_FOUND', 'No active OTP challenge found. Request a new code.', 'সক্রিয় ওটিপি পাওয়া যায়নি। নতুন কোড অনুরোধ করুন।', 404);
-  }
-
-  if (new Date(challenge.expires_at).getTime() < Date.now()) {
-    return apiError('OTP_EXPIRED', 'This OTP has expired (10-minute TTL).', 'এই ওটিপির মেয়াদ শেষ হয়ে গেছে (১০ মিনিট)।', 410);
-  }
-
-  if (challenge.attempt_count >= challenge.max_attempts) {
-    return apiError('MAX_ATTEMPTS_EXCEEDED', 'Maximum 5 attempts exceeded. Please request a new OTP.', 'সর্বোচ্চ ৫ বার ভুল চেষ্টা করা হয়েছে। নতুন ওটিপি নিন।', 429);
-  }
-
-  const pepper = process.env.OTP_PEPPER_SECRET || 'default-dev-pepper-override-in-prod';
-  const candidateHash = crypto
-    .createHmac('sha256', pepper)
-    .update(`${email}:${otp}`)
-    .digest('hex');
-
-  const isMatch = crypto.timingSafeEqual(
-    Buffer.from(candidateHash, 'hex'),
-    Buffer.from(challenge.otp_hash, 'hex')
-  );
-
-  if (!isMatch) {
-    await admin
-      .from('verification_attempts')
-      .update({ attempt_count: challenge.attempt_count + 1 })
-      .eq('id', challenge.id);
-
+  if (otpSecurityConfigError()) {
     return apiError(
-      'INVALID_OTP',
-      `Invalid OTP code. ${challenge.max_attempts - (challenge.attempt_count + 1)} attempts remaining.`,
-      `ভুল ওটিপি কোড। আর ${challenge.max_attempts - (challenge.attempt_count + 1)} বার চেষ্টা করতে পারবেন।`,
-      401
+      'AUTH_CONFIG_UNAVAILABLE',
+      'The server is not ready to verify OTP codes. Please contact support.',
+      'সার্ভার এই মুহূর্তে ওটিপি যাচাই করতে পারছে না। অনুগ্রহ করে সহায়তার সাথে যোগাযোগ করুন।',
+      503
     );
   }
 
-  // Mark challenge verified
-  await admin
-    .from('verification_attempts')
-    .update({ verified_at: new Date().toISOString() })
-    .eq('id', challenge.id);
+  const admin = createSupabaseAdminClient();
+  const challenge = await readActiveOtpChallenge(admin, email);
 
-  // Track B — the demo OTP has served its purpose; enforce the TTL cleanup.
-  await admin
-    .from('profiles')
-    .update({ demo_otp: null, demo_otp_expires_at: null })
-    .eq('email', email);
+  if (!challenge) {
+    return apiError(
+      'CHALLENGE_NOT_FOUND',
+      'No active OTP challenge found. Request a new code.',
+      'সক্রিয় ওটিপি পাওয়া যায়নি। নতুন কোড অনুরোধ করুন।',
+      404
+    );
+  }
 
-  // Provision or locate Supabase user + profile
+  if (isChallengeExpired(challenge)) {
+    // Retire it immediately so the client cannot keep hammering a dead code.
+    await consumeOtpChallenge(admin, challenge.id, { verified: false, clearHash: true });
+    return apiError(
+      'OTP_EXPIRED',
+      `This OTP has expired (${Math.round(OTP_TTL_SECONDS / 60)}-minute TTL). Request a new code.`,
+      `এই ওটিপির মেয়াদ শেষ হয়ে গেছে (${Math.round(OTP_TTL_SECONDS / 60)} মিনিট)। নতুন কোড অনুরোধ করুন।`,
+      410
+    );
+  }
+
+  if (!hasAttemptsLeft(challenge)) {
+    await consumeOtpChallenge(admin, challenge.id, { verified: false, clearHash: true });
+    return apiError(
+      'MAX_ATTEMPTS_EXCEEDED',
+      `Maximum ${OTP_MAX_ATTEMPTS} attempts exceeded. Please request a new OTP.`,
+      `সর্বোচ্চ ${OTP_MAX_ATTEMPTS} বার ভুল চেষ্টা করা হয়েছে। নতুন ওটিপি নিন।`,
+      429
+    );
+  }
+
+  // Constant-time digest comparison — the plaintext code was never stored.
+  if (!otpHashMatches(challenge.otp_hash, email, otp)) {
+    await recordOtpFailure(admin, challenge);
+    const attemptsUsed = Number(challenge.attempt_count ?? 0) + 1;
+    const attemptsLeft = Math.max(0, Number(challenge.max_attempts ?? OTP_MAX_ATTEMPTS) - attemptsUsed);
+
+    return apiError(
+      'INVALID_OTP',
+      attemptsLeft > 0
+        ? `Invalid OTP code. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining before the code is revoked.`
+        : 'Invalid OTP code. This code has been revoked — request a new one.',
+      attemptsLeft > 0
+        ? `ভুল ওটিপি কোড। আর ${attemptsLeft} বার চেষ্টা করতে পারবেন।`
+        : 'ভুল ওটিপি কোড। এই কোডটি বাতিল করা হয়েছে — নতুন কোড অনুরোধ করুন।',
+      401,
+      { attemptsRemaining: attemptsLeft }
+    );
+  }
+
+  // Valid: consume the challenge and clear the digest from the database.
+  await consumeOtpChallenge(admin, challenge.id, { verified: true, clearHash: true });
+  // Track B housekeeping — a demo code never outlives its verification.
+  await clearProfileDemoOtp(admin, email);
+
+  const secondsLeft = remainingOtpSeconds(challenge.expires_at);
+
+  // Provision or locate the Supabase user + profile.
   const payload = (challenge.signup_payload ?? {}) as Record<string, string>;
   let userId: string | undefined;
 
@@ -141,12 +178,6 @@ export async function POST(req: NextRequest) {
       full_name: payload.fullName || email.split('@')[0],
       student_id: payload.studentId || 'PENDING',
       trust_level: 'EMAIL_VERIFIED',
-      // Track B — record the demo OTP that provisioned this profile with its
-      // 10-minute TTL (pre-existing profiles had it stored at request time and
-      // cleared above once it was accepted).
-      ...(isDemoAuthMode()
-        ? { demo_otp: otp, demo_otp_expires_at: demoOtpExpiresAt() }
-        : {}),
     });
 
     const requestedRole = String(payload.role ?? 'student').toLowerCase();
@@ -170,10 +201,16 @@ export async function POST(req: NextRequest) {
     action: 'EMAIL_OTP_VERIFIED',
     entity_type: 'PROFILE',
     entity_id: userId,
-    metadata: { email },
+    metadata: {
+      email: redactEmail(email),
+      challenge_id: challenge.id,
+      seconds_used: OTP_TTL_SECONDS - secondsLeft,
+      demo: isDemoAuthMode(),
+    },
   });
 
-  // Generate session magic link token & exchange into cookie session
+  // Log the user in: mint a magiclink token with the service client and
+  // exchange it through the SSR client so the session lands in cookies.
   const { data: linkData } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
@@ -181,10 +218,22 @@ export async function POST(req: NextRequest) {
 
   const routeSupabase = createSupabaseRouteClient();
   if (linkData?.properties?.hashed_token) {
-    await routeSupabase.auth.verifyOtp({
+    const {
+      error: sessionErr,
+      data: { user },
+    } = await routeSupabase.auth.verifyOtp({
       type: 'magiclink',
       token_hash: linkData.properties.hashed_token,
     });
+
+    if (sessionErr || !user) {
+      return apiError(
+        'SESSION_ISSUE_FAILED',
+        'Email verified, but the session could not be started. Please sign in again.',
+        'ইমেইল যাচাই সফল হয়েছে, তবে সেশন শুরু করা যায়নি। আবার সাইন ইন করুন।',
+        500
+      );
+    }
   }
 
   const requestedRole = String(payload.role ?? 'student').toLowerCase();
@@ -194,6 +243,7 @@ export async function POST(req: NextRequest) {
     universityId: challenge.university_id,
     role: requestedRole,
     trustLevel: 'EMAIL_VERIFIED',
+    challengeConsumed: true,
     nextStep: existingProfile ? demoNextStep(normalizeDemoRole(requestedRole)) : '/onboarding',
   });
 }

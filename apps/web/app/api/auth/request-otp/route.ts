@@ -1,12 +1,42 @@
 // apps/web/app/api/auth/request-otp/route.ts
+// ============================================================================
+// Step 1 of the email OTP flow: whitelist the institutional domain, mint a
+// 6-digit CSPRNG code, persist its HMAC digest + 5-minute expiry in Supabase,
+// and deliver the code to the inbox in real time over Gmail SMTP (Nodemailer).
+//
+//   POST /api/auth/request-otp
+//   { email, universityId?, role?, signupPayload?: { fullName, studentId, ... } }
+//
+// The plaintext code is returned to the client ONLY on the Track B demo path
+// (no SMTP credentials + NEXT_PUBLIC_AUTH_MODE=demo). On the real path the
+// response carries the expiry and cooldown — never the code, which exists only
+// inside the email.
+// ============================================================================
 import { NextRequest } from 'next/server';
-import crypto from 'crypto';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { issueDemoChallenge } from '@/lib/demo-auth';
-import { computeDemoOtp, demoOtpExpiresAt, isDemoAuthMode } from '@/lib/demo-otp';
+import {
+  OTP_RESEND_COOLDOWN_SECONDS,
+  OTP_TTL_SECONDS,
+  computeDemoOtp,
+  generateOtpCode,
+  isDemoAuthMode,
+  otpExpiresAt,
+  redactEmail,
+  remainingOtpSeconds,
+} from '@/lib/demo-otp';
+import { isSmtpConfigured, sendOtpEmail } from '@/lib/otp-email';
+import { otpSecurityConfigError } from '@/lib/otp-crypto';
+import {
+  createOtpChallenge,
+  deleteOtpChallenge,
+  isOtpRequestInCooldown,
+  markOtpEmailSent,
+  storeProfileDemoOtp,
+} from '@/lib/otp-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,11 +68,13 @@ export async function POST(req: NextRequest) {
   }
 
   const emailDomain = rawEmail.split('@')[1];
-  // Track B — Demo OTP: deterministic 6-digit code per email when AUTH_MODE=demo.
-  const demoMode = isDemoAuthMode();
+  const ipAddress = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+  const userAgent = req.headers.get('user-agent') ?? 'unknown';
 
+  // Local preview with no Supabase credentials: cookie-backed demo challenge.
   if (!isSupabaseServerConfigured()) {
     const demoCode = await computeDemoOtp(rawEmail);
+    const demoExpiresAt = otpExpiresAt();
     const demo = issueDemoChallenge({
       email: rawEmail,
       universityId,
@@ -59,14 +91,24 @@ export async function POST(req: NextRequest) {
         email: rawEmail,
         universityId: demo.challenge.universityId,
         role: demo.challenge.role,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        expiresAt: demoExpiresAt,
+        secondsRemaining: remainingOtpSeconds(demoExpiresAt),
         cooldownSeconds: 0,
         demoCode: demo.challenge.code,
         demo: true,
       },
       200,
-      undefined,
+      { delivery: 'demo' },
       rlEmail.headers
+    );
+  }
+
+  if (otpSecurityConfigError()) {
+    return apiError(
+      'AUTH_CONFIG_UNAVAILABLE',
+      'The server is not ready to issue OTP codes. Please contact support.',
+      'সার্ভার এই মুহূর্তে ওটিপি কোড তৈরি করতে পারছে না। অনুগ্রহ করে সহায়তার সাথে যোগাযোগ করুন।',
+      503
     );
   }
 
@@ -96,103 +138,138 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Enforce 60s resend cooldown per email
-  const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
-  const { data: recentAttempt } = await admin
-    .from('verification_attempts')
-    .select('created_at')
-    .eq('email', rawEmail)
-    .gte('created_at', sixtySecondsAgo)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const university = (domainMatch.universities ?? {}) as { code?: string; name_en?: string; name_bn?: string };
 
-  if (recentAttempt) {
+  // Enforce the 60s resend cooldown per email.
+  if (await isOtpRequestInCooldown(admin, rawEmail, OTP_RESEND_COOLDOWN_SECONDS)) {
     return apiError(
       'OTP_COOLDOWN',
-      'Please wait 60 seconds before requesting another OTP code.',
-      'নতুন ওটিপি কোডের জন্য অনুগ্রহ করে ৬০ সেকেন্ড অপেক্ষা করুন।',
+      `Please wait ${OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another OTP code.`,
+      `নতুন ওটিপি কোডের জন্য অনুগ্রহ করে ${OTP_RESEND_COOLDOWN_SECONDS} সেকেন্ড অপেক্ষা করুন।`,
       429,
-      undefined,
+      { retryAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS },
       rlEmail.headers
     );
   }
 
-  // Track B (demo): deterministic code per email. Track A (production): a
-  // CSPRNG 6-digit OTP (100000 - 999999) delivered over custom SMTP — the
-  // Supabase default provider only mails team members (2/hour project cap).
-  const otpCode = demoMode ? await computeDemoOtp(rawEmail) : String(crypto.randomInt(100000, 1000000));
-  const pepper = process.env.OTP_PEPPER_SECRET || 'default-dev-pepper-override-in-prod';
-  const otpHash = crypto
-    .createHmac('sha256', pepper)
-    .update(`${rawEmail}:${otpCode}`)
-    .digest('hex');
+  // Track A (real email) is the default. Track B (deterministic demo code in
+  // the panel) only applies while no SMTP credentials are configured — setting
+  // GMAIL_USER + GMAIL_APP_PASSWORD promotes the deployment to real delivery.
+  const mailConfigured = isSmtpConfigured();
+  const demoMode = isDemoAuthMode() && !mailConfigured;
 
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  const ipAddress = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+  if (!mailConfigured && !demoMode) {
+    return apiError(
+      'EMAIL_PROVIDER_NOT_CONFIGURED',
+      'OTP email delivery is not configured on this server (missing GMAIL_USER / GMAIL_APP_PASSWORD).',
+      'এই সার্ভারে ওটিপি ইমেইল পাঠানো সেটআপ করা নেই (GMAIL_USER / GMAIL_APP_PASSWORD অনুপস্থিত)।',
+      503
+    );
+  }
 
-  const { error: insertErr } = await admin.from('verification_attempts').insert({
+  // Track A: CSPRNG 6-digit code (100000–999999). Track B: SHA-256(email)
+  // derivation so the offline panel can show the same value client-side.
+  const otpCode = demoMode ? await computeDemoOtp(rawEmail) : generateOtpCode();
+  const signupPayload = {
+    ...(body?.signupPayload ?? {}),
+    role: body?.role ?? body?.signupPayload?.role ?? 'student',
+  };
+
+  // Store the digest + 5-minute expiry in Supabase first: the code must be
+  // verifiable the instant the email lands, and the row's id seeds the
+  // Message-ID so a retried request cannot produce a second, competing code.
+  const challenge = await createOtpChallenge({
+    admin,
     email: rawEmail,
-    university_id: domainMatch.university_id,
-    otp_hash: otpHash,
-    ip_address: ipAddress,
-    max_attempts: 5,
-    expires_at: expiresAt,
-    signup_payload: { ...(body?.signupPayload ?? {}), role: body?.role ?? body?.signupPayload?.role ?? 'student' },
+    universityId: domainMatch.university_id,
+    code: otpCode,
+    ipAddress,
+    signupPayload,
   });
 
-  if (insertErr) {
-    return apiError('DB_ERROR', 'Could not create verification challenge.', 'যাচাইকরণ প্রক্রিয়া শুরু করা যায়নি।', 500);
+  if (!challenge.ok) {
+    return apiError(
+      'DB_ERROR',
+      'Could not create verification challenge.',
+      'যাচাইকরণ প্রক্রিয়া শুরু করা যায়নি।',
+      500
+    );
   }
 
-  // Track B: persist the demo code in profiles.demo_otp with a 10-minute TTL
-  // (pre-signup users get it on profile creation in /api/auth/verify-otp).
   if (demoMode) {
-    await admin
-      .from('profiles')
-      .update({ demo_otp: otpCode, demo_otp_expires_at: demoOtpExpiresAt() })
-      .eq('email', rawEmail);
+    // No email is sent: mirror the code onto profiles.demo_otp for the panel
+    // and for the pre-signup case where the profile does not exist yet.
+    await storeProfileDemoOtp(admin, rawEmail, otpCode, challenge.expiresAt);
+    return apiSuccess(
+      {
+        email: rawEmail,
+        universityId: domainMatch.university_id,
+        expiresAt: challenge.expiresAt,
+        secondsRemaining: challenge.secondsRemaining,
+        cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+        ttlSeconds: OTP_TTL_SECONDS,
+        demo: true,
+        demoCode: otpCode,
+      },
+      200,
+      { delivery: 'demo' },
+      rlEmail.headers
+    );
   }
 
-  // Track A — dispatch bilingual OTP via custom SMTP (Resend). Skipped in demo
-  // mode so the scarce SMTP quota is never burned by the fallback path.
-  if (!demoMode && process.env.RESEND_API_KEY) {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM_ADDRESS || 'Campus360 BD <no-reply@campus360bd.com>',
-        to: [rawEmail],
-        subject: `Your Campus360 BD Verification Code: ${otpCode} / আপনার যাচাইকরণ কোড`,
-        html: `
-          <div style="font-family: Inter, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px;">
-            <h2 style="color: #059669; margin-top: 0;">Campus360 BD — University Verification</h2>
-            <p>Your 6-digit verification code (valid for 10 minutes):</p>
-            <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; padding: 16px; background: #ecfdf5; color: #065f46; border-radius: 12px; text-align: center;">
-              ${otpCode}
-            </div>
-            <p style="margin-top: 16px;">আপনার ৬-সংখ্যার যাচাইকরণ কোড (১০ মিনিটের জন্য কার্যকর): <strong>${otpCode}</strong></p>
-          </div>
-        `,
-      }),
+  const delivery = await sendOtpEmail({
+    to: rawEmail,
+    code: otpCode,
+    expiresAt: challenge.expiresAt,
+    ttlSeconds: OTP_TTL_SECONDS,
+    fullName: typeof signupPayload.fullName === 'string' ? signupPayload.fullName : null,
+    universityName: university.name_en ?? university.name_bn ?? null,
+    universityCode: university.code ?? null,
+    idempotencyKey: challenge.id,
+  });
+
+  if (!delivery.ok) {
+    // Roll the challenge back: an undelivered code must not sit in the table
+    // (and deleting it clears the 60s cooldown so the user can retry now).
+    await deleteOtpChallenge(admin, challenge.id);
+    await admin.from('audit_log').insert({
+      university_id: domainMatch.university_id,
+      action: 'OTP_DELIVERY_FAILED',
+      entity_type: 'VERIFICATION_ATTEMPT',
+      entity_id: challenge.id,
+      metadata: { email: redactEmail(rawEmail), provider: delivery.provider, error: delivery.error },
+      ip_address: ipAddress,
+      user_agent: userAgent,
     });
+
+    return apiError(
+      'OTP_DELIVERY_FAILED',
+      delivery.retryable
+        ? 'We could not send the verification email. Please try again in a moment.'
+        : 'Email delivery is unavailable for this address. Please contact support.',
+      'যাচাইকরণ ইমেইল পাঠানো যায়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+      delivery.retryable ? 502 : 503,
+      { retryable: delivery.retryable },
+      rlEmail.headers
+    );
   }
+
+  await markOtpEmailSent(admin, challenge.id, delivery.messageId);
 
   return apiSuccess(
     {
       email: rawEmail,
       universityId: domainMatch.university_id,
-      expiresAt,
-      cooldownSeconds: 60,
-      // Track B — Demo OTP panel payload (rendered only when
-      // NEXT_PUBLIC_AUTH_MODE === 'demo' on the verification screen).
-      ...(demoMode ? { demo: true, demoCode: otpCode } : {}),
+      universityCode: university.code ?? null,
+      expiresAt: challenge.expiresAt,
+      secondsRemaining: remainingOtpSeconds(challenge.expiresAt),
+      cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+      ttlSeconds: OTP_TTL_SECONDS,
+      delivery: 'email',
+      messageId: delivery.messageId,
     },
     200,
-    undefined,
+    { delivery: delivery.provider },
     rlEmail.headers
   );
 }

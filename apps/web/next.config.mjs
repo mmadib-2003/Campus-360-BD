@@ -6,6 +6,11 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ['@campus360/shared', '@campus360/ui'],
+  // Nodemailer is server-only and reaches for Node built-ins (net, tls, dns).
+  // Keeping it external stops the bundler from walking it into a client graph.
+  experimental: {
+    serverComponentsExternalPackages: ['nodemailer'],
+  },
   async headers() {
     return [
       {
