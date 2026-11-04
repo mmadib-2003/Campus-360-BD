@@ -80,6 +80,15 @@ export interface RegistryPostgrestError {
 export interface RegistryReadOutcome<T = unknown> {
   ok: boolean;
   data: T | null;
+  /**
+   * The `count` PostgREST reported for a `count: 'exact'` request. It has to be
+   * carried separately because supabase-js puts it NEXT TO `data`, not inside it --
+   * and for `head: true` counts, `data` is null by design. A caller that looked for
+   * the number under `data` saw `null` from a query that had just succeeded, which is
+   * how /api/health/registry reported `ok:false, error:null` against a healthy
+   * database (and `error:null` is worse than a wrong number: it points at Postgres).
+   */
+  count: number | null;
   error: RegistryPostgrestError | null;
   fault: SupabaseFault | null;
   attempts: number;
@@ -100,7 +109,11 @@ export async function registryRead<T = any>(
   // PromiseLike, not Promise: supabase-js hands back a PostgrestBuilder, which
   // is awaitable (it implements `then`) but has no `catch`/`finally`, so typing
   // this as a Promise would force every caller to wrap its own query.
-  run: () => PromiseLike<{ data?: T | null; error?: RegistryPostgrestError | null }>,
+  run: () => PromiseLike<{
+    data?: T | null;
+    error?: RegistryPostgrestError | null;
+    count?: number | null;
+  }>,
   fields: Record<string, unknown> = {},
   options: { maxAttempts?: number } = {}
 ): Promise<RegistryReadOutcome<T>> {
@@ -110,6 +123,7 @@ export async function registryRead<T = any>(
     return {
       ok: false,
       data: null,
+      count: null,
       error: { message: target.problem },
       fault: null,
       attempts: 0,
@@ -125,7 +139,7 @@ export async function registryRead<T = any>(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     attemptsMade = attempt;
-    let outcome: { data?: T | null; error?: RegistryPostgrestError | null };
+    let outcome: { data?: T | null; error?: RegistryPostgrestError | null; count?: number | null };
     try {
       outcome = await run();
     } catch (thrown) {
@@ -140,6 +154,7 @@ export async function registryRead<T = any>(
       return {
         ok: true,
         data: outcome.data ?? null,
+        count: outcome.count ?? null,
         error: null,
         fault: null,
         attempts: attempt,
@@ -179,6 +194,7 @@ export async function registryRead<T = any>(
   return {
     ok: false,
     data: null,
+    count: null,
     error: lastError,
     fault: lastFault,
     attempts: attemptsMade,
