@@ -30,7 +30,13 @@ jobs:
         run: pnpm turbo run lint typecheck
 
       - name: Run Vitest unit tests
-        run: pnpm turbo run test
+        # `turbo run test` only reaches workspaces that declare a test script, so the
+        # apps/web suite (which covers the module data path and the Supabase client
+        # config guards) has to be run from the repo root, where its vitest config and
+        # the "@/" alias live.
+        run: |
+          pnpm turbo run test
+          pnpm test:modules
 
       - name: Start local Supabase & execute pgTAP RLS isolation tests
         run: |

@@ -85,3 +85,34 @@ export function clampNumber(value: unknown, fallback: number, min: number, max: 
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
+
+/**
+ * Normalize a Postgres `text[]` value for rendering.
+ *
+ * The column type is an array, but the value that reaches a component is not
+ * always one: a form can save a comma-separated string, an older row can carry
+ * `null`, and a JSON envelope can hand back an object. `((row.skills as string[]) ?? []).map(...)`
+ * only defends against null — anything else throws "is not a function" and
+ * React replaces the whole module with the global error page. This accepts all
+ * of it and always returns an array of displayable strings.
+ */
+export function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (item === null || item === undefined ? '' : typeof item === 'string' ? item : String(item)))
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[,;\n]/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  if (value && typeof value === 'object') {
+    const asRecord = value as Record<string, unknown>;
+    const nested = asRecord.items ?? asRecord.values ?? asRecord.data;
+    if (Array.isArray(nested)) return toStringArray(nested);
+  }
+  return [];
+}

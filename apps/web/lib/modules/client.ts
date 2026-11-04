@@ -145,6 +145,21 @@ export function useSession(): SessionState {
   return state;
 }
 
+/**
+ * Every list assignment in this file goes through here.
+ *
+ * A collection state that is `null`, `{}` or a string instead of an array is
+ * enough to take a whole page down — the first `.map()` after it throws
+ * `is not a function`, and React renders the global error instead of the module.
+ * That is reachable from outside our control: a degraded API envelope, a
+ * fallback branch that answers `{ success: true }` without rows, or a demo store
+ * entry that has not been seeded. So anything that is not an array becomes `[]`,
+ * which the pages already know how to render as an empty state.
+ */
+function toList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 interface FetchState<T> {
   data: T;
   loading: boolean;
@@ -183,15 +198,17 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
       setError(null);
 
       if (session.demo || !isSupabaseConfigured()) {
-        const rows = demoList(activeSpec.table, {
-          filters: options.filters as Record<string, string>,
-          search: options.search,
-          searchColumns: activeSpec.searchColumns,
-          orderBy: activeSpec.orderBy,
-          limit: options.limit,
-        }).filter((row) => !options.mine || String(row[activeSpec.ownerColumn ?? ''] ?? '') === getDemoProfile().id);
+        const rows = toList<T>(
+          demoList(activeSpec.table, {
+            filters: options.filters as Record<string, string>,
+            search: options.search,
+            searchColumns: activeSpec.searchColumns,
+            orderBy: activeSpec.orderBy,
+            limit: options.limit,
+          }).filter((row) => !options.mine || String(row[activeSpec.ownerColumn ?? ''] ?? '') === getDemoProfile().id)
+        );
         if (!cancelled) {
-          setDataState(rows as T[]);
+          setDataState(rows);
           setTotal(rows.length);
           setDemo(true);
           setLoading(false);
@@ -216,8 +233,9 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
           setError(payload?.error?.message_en ?? 'Could not load data.');
           setDataState([]);
         } else {
-          setDataState((payload.data ?? []) as T[]);
-          setTotal(Number(payload.meta?.total ?? payload.data?.length ?? 0));
+          const rows = toList<T>(payload.data);
+          setDataState(rows);
+          setTotal(Number(payload.meta?.total ?? rows.length));
           setDemo(false);
         }
       } catch (err) {
@@ -504,9 +522,9 @@ export function useApiList<T extends Row = Row>(
       setLoading(true);
       setError(null);
       if (!isSupabaseConfigured() || session.demo) {
-        const rows = options.table ? demoList(options.table, {}) : [];
+        const rows = toList<T>(options.table ? demoList(options.table, {}) : []);
         if (!cancelled) {
-          setDataState(rows as T[]);
+          setDataState(rows);
           setTotal(rows.length);
           setDemo(true);
           setLoading(false);
@@ -522,8 +540,9 @@ export function useApiList<T extends Row = Row>(
         const payload = await res.json();
         if (cancelled) return;
         if (payload.success) {
-          setDataState((payload.data ?? []) as T[]);
-          setTotal(Number(payload.meta?.total ?? payload.data?.length ?? 0));
+          const rows = toList<T>(payload.data);
+          setDataState(rows);
+          setTotal(Number(payload.meta?.total ?? rows.length));
           setDemo(false);
         } else {
           setError(payload?.error?.message_en ?? 'Could not load data.');
