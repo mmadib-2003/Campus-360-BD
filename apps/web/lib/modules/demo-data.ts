@@ -180,12 +180,93 @@ export const DEMO_UNIVERSITY_ID = 'demo-univ-du';
 export interface DemoAccount {
   email: string;
   password: string;
-  role: Exclude<DemoRole, 'faculty' | 'alumni'>;
+  role: DemoRole;
   universityCode: string;
   fullName: string;
 }
 
-const DEMO_PASSWORD = 'Demo#1234';
+/** Shared by every seeded demo account and the Quick Demo Login buttons. */
+export const DEMO_PASSWORD = 'Demo#1234';
+
+export type QuickDemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
+
+export interface QuickDemoAccount {
+  role: QuickDemoRole;
+  email: string;
+  password: string;
+  fullName: string;
+  /** Button label, e.g. "Log in as Student". */
+  label: string;
+  labelBn: string;
+  /** One-line description of what this role can do. */
+  blurb: string;
+  blurbBn: string;
+  /** Where the button lands after a successful sign-in. */
+  landing: string;
+  tone: 'emerald' | 'sky' | 'amber' | 'violet';
+  icon: string;
+}
+
+/**
+ * The four one-click demo identities. These exact addresses are provisioned by
+ * supabase/seed/seed_quick_demo_accounts.sql with the hardcoded bcrypt hash of
+ * DEMO_PASSWORD, so the same buttons work against a live Supabase project and
+ * against the offline preview store.
+ */
+export const QUICK_DEMO_ACCOUNTS: QuickDemoAccount[] = [
+  {
+    role: 'student',
+    email: 'student@demo.campus360.test',
+    password: DEMO_PASSWORD,
+    fullName: 'Demo Student',
+    label: 'Log in as Student',
+    labelBn: 'শিক্ষার্থী হিসেবে লগইন',
+    blurb: 'Marketplace, civic tickets, blood network, events and clubs.',
+    blurbBn: 'মার্কেটপ্লেস, সিটিক টিকিট, ব্লড নেটওয়ার্ক, ইভেন্ট ও ক্লাব।',
+    landing: '/feed',
+    tone: 'emerald',
+    icon: '🎓',
+  },
+  {
+    role: 'faculty',
+    email: 'faculty@demo.campus360.test',
+    password: DEMO_PASSWORD,
+    fullName: 'Demo Faculty',
+    label: 'Log in as Faculty',
+    labelBn: 'ফ্যাকাল্টি হিসেবে লগইন',
+    blurb: 'Mentorship, skill postings, department notices and reviews.',
+    blurbBn: 'মেন্টরশিপ, স্কিল পোস্টিং, বিভাগের নোটিফিকেশন ও রিভিউ।',
+    landing: '/faculty',
+    tone: 'sky',
+    icon: '🧑‍🏫',
+  },
+  {
+    role: 'admin',
+    email: 'admin@demo.campus360.test',
+    password: DEMO_PASSWORD,
+    fullName: 'Demo Admin',
+    label: 'Log in as Admin',
+    labelBn: 'অ্যাডমিন হিসেবে লগইন',
+    blurb: 'University admin console, moderation queue and analytics.',
+    blurbBn: 'বিশ্ববিদ্যালয় অ্যাডমিন কনসোল, মডারেশন কিউ ও অ্যানালিটিকস।',
+    landing: '/admin/panel',
+    tone: 'amber',
+    icon: '🛡️',
+  },
+  {
+    role: 'alumni',
+    email: 'alumni@demo.campus360.test',
+    password: DEMO_PASSWORD,
+    fullName: 'Demo Alumni',
+    label: 'Log in as Alumni',
+    labelBn: 'প্রাক্তন শিক্ষার্থী হিসেবে লগইন',
+    blurb: 'Careers, donations, alumni network and mentorship.',
+    blurbBn: 'ক্যারিয়ার, দান, প্রাক্তন শিক্ষার্থী নেটওয়ার্ক ও মেন্টরশিপ।',
+    landing: '/careers',
+    tone: 'violet',
+    icon: '🎖️',
+  },
+];
 
 function buildDemoAccounts(): DemoAccount[] {
   const accounts: DemoAccount[] = [];
@@ -217,6 +298,19 @@ function buildDemoAccounts(): DemoAccount[] {
       }
     );
   }
+
+  // The four one-click identities from /signin. They live on the reserved
+  // `demo.campus360.test` domain (never a real inbox) and are scoped to DU.
+  for (const quick of QUICK_DEMO_ACCOUNTS) {
+    accounts.push({
+      email: quick.email,
+      password: quick.password,
+      role: quick.role,
+      universityCode: 'DU',
+      fullName: quick.fullName,
+    });
+  }
+
   return accounts;
 }
 

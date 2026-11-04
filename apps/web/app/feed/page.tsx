@@ -2,11 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { useUi } from '@/lib/i18n-client';
 import { useModuleList, useSession } from '@/lib/modules/client';
-import { Badge, Card, ModuleHeader, SkeletonList, Stat } from '@/components/modules/ui';
+import { Badge, Card, ModuleHeader, SkeletonList, SkeletonStat, Stat } from '@/components/modules/ui';
 import { getDemoUniversity } from '@/lib/modules/demo-data';
 import { asArray } from '@/lib/render-safe';
+import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
 
 export default function FeedPage() {
   const { locale, t } = useUi();
@@ -49,10 +51,16 @@ export default function FeedPage() {
       </ModuleHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label={t('Verification status')} value={t('ID verified')} hint={t('Email verified')} />
-        <Stat label={t('My tickets')} value={asArray(tickets.data).length} hint={t('Open')} tone="amber" />
-        <Stat label={t('My listings')} value={asArray(listings.data).length} hint={t('Marketplace')} />
-        <Stat label={t('Tenant isolation')} value="RLS" hint={t('Your campus only')} tone="emerald" />
+        {session.loading || listings.loading || tickets.loading ? (
+          Array.from({ length: 4 }).map((_, index) => <SkeletonStat key={index} />)
+        ) : (
+          <>
+            <Stat label={t('Verification status')} value={t('ID verified')} hint={t('Email verified')} />
+            <Stat label={t('My tickets')} value={asArray(tickets.data).length} hint={t('Open')} tone="amber" />
+            <Stat label={t('My listings')} value={asArray(listings.data).length} hint={t('Marketplace')} />
+            <Stat label={t('Tenant isolation')} value="RLS" hint={t('Your campus only')} tone="emerald" />
+          </>
+        )}
       </div>
 
       <Card className="p-5 space-y-2">
@@ -70,7 +78,7 @@ export default function FeedPage() {
             {t('Campus Feed')} →
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {[
             { href: '/marketplace', label: t('Marketplace'), icon: '🛍️' },
             { href: '/civic', label: t('Civic Ticketing & Complaint Box'), icon: '🛡️' },
@@ -81,18 +89,21 @@ export default function FeedPage() {
             { href: '/skills', label: t('Skill Hub & Jobs'), icon: '🎓' },
             { href: '/events', label: t('Events & RSVPs'), icon: '📅' },
           ].map((module) => (
-            <Link
-              key={module.href}
-              href={module.href}
-              className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/40 text-xs font-medium"
-            >
-              <span className="text-base" aria-hidden>
-                {module.icon}
-              </span>
-              <span className="block mt-1">{module.label}</span>
-            </Link>
+            <StaggerItem key={module.href} className="h-full">
+              <motion.div {...cardHover} className="h-full">
+                <Link
+                  href={module.href}
+                  className="group card-glow flex h-full flex-col rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-3 text-xs font-medium"
+                >
+                  <span className="text-base transition-transform duration-200 group-hover:scale-110" aria-hidden>
+                    {module.icon}
+                  </span>
+                  <span className="block mt-1">{module.label}</span>
+                </Link>
+              </motion.div>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerGroup>
       </section>
 
       <section className="space-y-3">

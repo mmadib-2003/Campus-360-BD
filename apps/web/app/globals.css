@@ -69,3 +69,66 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
 }
+
+/* ---------------------------------------------------------------------------
+   Dynamic UX: skeleton shimmer + motion-friendly surfaces.
+   The shimmer is a CSS animation (cheaper than a JS-driven skeleton) and is
+   disabled when the visitor prefers reduced motion.
+   --------------------------------------------------------------------------- */
+.skeleton-shimmer {
+  background-color: rgb(226 232 240 / 0.7);
+  background-image: linear-gradient(
+    90deg,
+    rgb(148 163 184 / 0) 0%,
+    rgb(148 163 184 / 0.35) 45%,
+    rgb(148 163 184 / 0) 90%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: campus360-shimmer 1.5s ease-in-out infinite;
+}
+
+.dark .skeleton-shimmer {
+  background-color: rgb(30 41 59 / 0.8);
+  background-image: linear-gradient(
+    90deg,
+    rgb(148 163 184 / 0) 0%,
+    rgb(148 163 184 / 0.16) 45%,
+    rgb(148 163 184 / 0) 90%
+  );
+}
+
+@keyframes campus360-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+  }
+}
+
+/* A soft emerald glow used by the module cards on hover/focus. */
+.card-glow {
+  box-shadow: 0 0 0 0 rgb(16 185 129 / 0);
+  transition: box-shadow 220ms ease, border-color 220ms ease, transform 220ms ease;
+}
+.card-glow:hover,
+.card-glow:focus-visible {
+  box-shadow: 0 14px 40px -16px rgb(16 185 129 / 0.45);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

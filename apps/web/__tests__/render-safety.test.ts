@@ -323,3 +323,49 @@ describe('campus imagery assets line up with what the database points at', () =>
     expect(update![0]).toContain("ELSE '/campuses/campus.jpg'");
   });
 });
+
+describe('authentic campus imagery and one-click demo identities', () => {
+  const seed = read('supabase/seed/seed.sql');
+  const demoAuth = read('apps/web/lib/demo-auth.ts');
+  const demoData = read('apps/web/lib/modules/demo-data.ts');
+  const quickSeed = read('supabase/seed/seed_quick_demo_accounts.sql');
+
+  it('points the six flagship campuses at real Wikimedia Commons photographs', () => {
+    const expected = [
+      ['DU', 'Curzon_Hall,_University_of_Dhaka,_Dhaka.jpg'],
+      ['JU', 'Shaheed_Minar_of_Jahangirnagar_University.jpg'],
+      ['BUET', 'BUET_Campus_(01).jpg'],
+      ['SUST', 'Sust_campus_5.JPG'],
+      ['CU', 'Campus,_University_of_Chittagong_1.jpg'],
+      ['RU', 'Rajshahi_University_Campus.jpg'],
+    ] as const;
+    for (const [code, file] of expected) {
+      expect(seed, `${code} cover`).toContain(file);
+      expect(demoAuth, `${code} preview cover`).toContain(file);
+    }
+    expect(seed).toContain('commons.wikimedia.org/wiki/Special:FilePath');
+    expect(demoAuth).toContain('commons.wikimedia.org/wiki/Special:FilePath');
+  });
+
+  it('points the six flagship campuses at real institutional logo files', () => {
+    expect(seed).toContain('upload.wikimedia.org/wikipedia/en/c/cb/Dhaka_University_logo.svg');
+    expect(seed).toContain('upload.wikimedia.org/wikipedia/en/d/da/BUET_LOGO.svg');
+    expect(demoAuth).toContain('upload.wikimedia.org/wikipedia/en/c/cb/Dhaka_University_logo.svg');
+    expect(demoAuth).toContain('upload.wikimedia.org/wikipedia/en/d/da/BUET_LOGO.svg');
+  });
+
+  it('provisions the four one-click demo identities with a hardcoded hash', () => {
+    for (const email of [
+      'student@demo.campus360.test',
+      'faculty@demo.campus360.test',
+      'admin@demo.campus360.test',
+      'alumni@demo.campus360.test',
+    ]) {
+      expect(quickSeed).toContain(email);
+      expect(demoData).toContain(email);
+    }
+    expect(quickSeed).toContain('$2a$10$QsYfRPv60gPCkvVDIlYO7u8dvdYGUJ4dbuhViCIpcXIJWCw69ZBwu');
+    expect(quickSeed).toContain("'ALUMNI'::app_role");
+    expect(demoData).toContain("'Demo#1234'");
+  });
+});
