@@ -5,7 +5,8 @@ import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supa
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { demoNextStep, verifyDemoChallenge } from '@/lib/demo-auth';
+import { demoNextStep, normalizeDemoRole, verifyDemoChallenge } from '@/lib/demo-auth';
+import { demoOtpExpiresAt, isDemoAuthMode } from '@/lib/demo-otp';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +92,12 @@ export async function POST(req: NextRequest) {
     .update({ verified_at: new Date().toISOString() })
     .eq('id', challenge.id);
 
+  // Track B — the demo OTP has served its purpose; enforce the TTL cleanup.
+  await admin
+    .from('profiles')
+    .update({ demo_otp: null, demo_otp_expires_at: null })
+    .eq('email', email);
+
   // Provision or locate Supabase user + profile
   const payload = (challenge.signup_payload ?? {}) as Record<string, string>;
   let userId: string | undefined;
@@ -134,6 +141,12 @@ export async function POST(req: NextRequest) {
       full_name: payload.fullName || email.split('@')[0],
       student_id: payload.studentId || 'PENDING',
       trust_level: 'EMAIL_VERIFIED',
+      // Track B — record the demo OTP that provisioned this profile with its
+      // 10-minute TTL (pre-existing profiles had it stored at request time and
+      // cleared above once it was accepted).
+      ...(isDemoAuthMode()
+        ? { demo_otp: otp, demo_otp_expires_at: demoOtpExpiresAt() }
+        : {}),
     });
 
     const requestedRole = String(payload.role ?? 'student').toLowerCase();
@@ -141,7 +154,8 @@ export async function POST(req: NextRequest) {
       student: 'STUDENT',
       faculty: 'FACULTY',
       alumni: 'ALUMNI',
-      admin: 'UNIVERSITY_ADMIN',
+      admin: 'ADMIN',
+      governance: 'GOVERNANCE',
     };
     await admin.from('user_roles').insert({
       user_id: userId,
@@ -180,6 +194,6 @@ export async function POST(req: NextRequest) {
     universityId: challenge.university_id,
     role: requestedRole,
     trustLevel: 'EMAIL_VERIFIED',
-    nextStep: existingProfile ? demoNextStep(requestedRole as 'student' | 'faculty' | 'alumni' | 'admin') : '/onboarding',
+    nextStep: existingProfile ? demoNextStep(normalizeDemoRole(requestedRole)) : '/onboarding',
   });
 }

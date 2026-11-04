@@ -4,9 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
+import { DevSignInPanel } from '@/components/auth/DevSignInPanel';
 
-function inferRole(email: string): 'student' | 'faculty' | 'alumni' | 'admin' {
+function inferRole(email: string): 'student' | 'faculty' | 'alumni' | 'admin' | 'governance' {
   const local = email.split('@')[0]?.toLowerCase() ?? '';
+  if (local.startsWith('governance') || local.includes('governance')) return 'governance';
   if (local.startsWith('admin') || local.includes('admin')) return 'admin';
   if (local.startsWith('faculty') || local.startsWith('teacher')) return 'faculty';
   if (local.startsWith('alumni')) return 'alumni';
@@ -94,6 +96,8 @@ export default function SignInPage() {
           {t('Admin Login')}
         </Link>
       </div>
+      {/* Password-based demo accounts — only in demo mode (NEXT_PUBLIC_AUTH_MODE === 'demo'). */}
+      <DevSignInPanel />
     </div>
   );
 }

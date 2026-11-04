@@ -22,7 +22,7 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*, universities(*), departments(*), halls(*)')
+    .select('*, universities(*), departments(*), halls:university_halls(*)')
     .eq('id', user.id)
     .single();
 

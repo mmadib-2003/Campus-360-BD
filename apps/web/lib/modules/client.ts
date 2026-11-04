@@ -43,6 +43,7 @@ export interface SessionState {
   } | null;
   roles: string[];
   isAdmin: boolean;
+  isGovernance: boolean;
 }
 
 /** Reads the current session once and shares it with every module component. */
@@ -55,6 +56,7 @@ export function useSession(): SessionState {
     profile: null,
     roles: [],
     isAdmin: false,
+    isGovernance: false,
   });
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export function useSession(): SessionState {
               profile: null,
               roles: [],
               isAdmin: false,
+              isGovernance: false,
             });
             return;
           }
@@ -87,6 +90,7 @@ export function useSession(): SessionState {
             profile: profile as any,
             roles: profile.roles,
             isAdmin: session.role === 'admin',
+            isGovernance: session.role === 'governance',
           });
         };
         applyDemoSession();
@@ -108,7 +112,8 @@ export function useSession(): SessionState {
               userId: String(data.profile.id),
               profile: data.profile,
               roles,
-              isAdmin: roles.some((r: string) => ['UNIVERSITY_ADMIN', 'SUPER_ADMIN', 'GOVERNING_BODY'].includes(r)),
+              isAdmin: roles.some((r: string) => ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN'].includes(r)),
+              isGovernance: roles.some((r: string) => ['GOVERNANCE', 'GOVERNING_BODY'].includes(r)),
             });
           } else {
             setState({
@@ -119,6 +124,7 @@ export function useSession(): SessionState {
               profile: null,
               roles: [],
               isAdmin: false,
+              isGovernance: false,
             });
           }
         }

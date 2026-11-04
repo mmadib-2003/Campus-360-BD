@@ -6,6 +6,7 @@ import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { issueDemoChallenge } from '@/lib/demo-auth';
+import { computeDemoOtp, demoOtpExpiresAt, isDemoAuthMode } from '@/lib/demo-otp';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,14 +38,18 @@ export async function POST(req: NextRequest) {
   }
 
   const emailDomain = rawEmail.split('@')[1];
+  // Track B — Demo OTP: deterministic 6-digit code per email when AUTH_MODE=demo.
+  const demoMode = isDemoAuthMode();
 
   if (!isSupabaseServerConfigured()) {
+    const demoCode = await computeDemoOtp(rawEmail);
     const demo = issueDemoChallenge({
       email: rawEmail,
       universityId,
       role: body?.role ?? body?.signupPayload?.role,
       fullName: body?.signupPayload?.fullName,
       studentId: body?.signupPayload?.studentId,
+      code: demoCode,
     });
     if (!demo.ok) {
       return apiError('DOMAIN_NOT_WHITELISTED', demo.error, demo.errorBn, demo.status);
@@ -113,8 +118,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Generate CSPRNG 6-digit OTP (100000 - 999999) — NEVER 12345
-  const otpCode = String(crypto.randomInt(100000, 1000000));
+  // Track B (demo): deterministic code per email. Track A (production): a
+  // CSPRNG 6-digit OTP (100000 - 999999) delivered over custom SMTP — the
+  // Supabase default provider only mails team members (2/hour project cap).
+  const otpCode = demoMode ? await computeDemoOtp(rawEmail) : String(crypto.randomInt(100000, 1000000));
   const pepper = process.env.OTP_PEPPER_SECRET || 'default-dev-pepper-override-in-prod';
   const otpHash = crypto
     .createHmac('sha256', pepper)
@@ -138,8 +145,18 @@ export async function POST(req: NextRequest) {
     return apiError('DB_ERROR', 'Could not create verification challenge.', 'যাচাইকরণ প্রক্রিয়া শুরু করা যায়নি।', 500);
   }
 
-  // Dispatch bilingual OTP via Resend API
-  if (process.env.RESEND_API_KEY) {
+  // Track B: persist the demo code in profiles.demo_otp with a 10-minute TTL
+  // (pre-signup users get it on profile creation in /api/auth/verify-otp).
+  if (demoMode) {
+    await admin
+      .from('profiles')
+      .update({ demo_otp: otpCode, demo_otp_expires_at: demoOtpExpiresAt() })
+      .eq('email', rawEmail);
+  }
+
+  // Track A — dispatch bilingual OTP via custom SMTP (Resend). Skipped in demo
+  // mode so the scarce SMTP quota is never burned by the fallback path.
+  if (!demoMode && process.env.RESEND_API_KEY) {
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -170,6 +187,9 @@ export async function POST(req: NextRequest) {
       universityId: domainMatch.university_id,
       expiresAt,
       cooldownSeconds: 60,
+      // Track B — Demo OTP panel payload (rendered only when
+      // NEXT_PUBLIC_AUTH_MODE === 'demo' on the verification screen).
+      ...(demoMode ? { demo: true, demoCode: otpCode } : {}),
     },
     200,
     undefined,

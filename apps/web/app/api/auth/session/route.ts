@@ -43,7 +43,7 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*, universities(code, name_en, name_bn), departments(code, name_en, name_bn), halls(code, name_en, name_bn)')
+    .select('*, universities(code, name_en, name_bn), departments(code, name_en, name_bn), halls:university_halls(name, name_bn, type)')
     .eq('id', user.id)
     .maybeSingle();
 
