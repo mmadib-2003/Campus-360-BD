@@ -120,6 +120,8 @@ export async function GET() {
     const read = await registryRead<{ count: number | null }>(
       `health.${probe.table}`,
       () => {
+        // head:true: PostgREST answers with Content-Range only, so `count` is the
+        // entire point of the request and an empty body is not a failure.
         let query = (client as any)
           .from(probe.table)
           .select('id', { count: 'exact', head: true });
@@ -128,7 +130,10 @@ export async function GET() {
       },
       { client: useAdmin ? 'service-role' : 'anon' }
     );
-    const rows = read.ok ? (read.data?.count ?? null) : null;
+    // `count` sits beside `data` on the supabase-js response and `data` is null for a
+    // head:true count query, so reading it off `data` turned a healthy database into
+    // `ok:false, error:null`.
+    const rows = read.ok ? (read.count ?? read.data?.count ?? null) : null;
     body.tables.push({
       table: probe.table,
       ok: read.ok && rows !== null,
