@@ -118,6 +118,36 @@ the `.env.example` template**, so `isSupabaseServerConfigured()` said "configure
 lookup for a host that does not exist. `tables: []` is deliberate — with an
 unusable endpoint the probe does not bother issuing four doomed queries.
 
+## Follow-up: why the box then said `HTTP 500`
+
+After #7 the red box changed from `TypeError: fetch failed` to `HTTP 500 Try again`.
+That was the fix, imperfectly applied. `requireUrl()` was made to *throw* on an
+unusable endpoint (correct — a wrong host must not be queried quietly), but each
+registry route built its client on its own line **before** `registryRead()` ran, so
+the throw escaped the handler. Next answered with its HTML error page,
+`fetchRegistry` found no `payload.error`, and fell back to the status code:
+`HTTP 500`. One opaque failure had been replaced by a different opaque failure.
+
+Fixed by `lib/registry-gate.ts`: `registryGate(stage, messageBn)` checks the
+endpoint *first* and wraps construction, so every "we cannot even build a client"
+case answers `503` with a JSON envelope — `SUPABASE_URL_INVALID` (naming the
+variable and the offending host) or `SUPABASE_NOT_CONFIGURED` (scrubbed reason,
+plus a pointer to `/api/health/registry`) — and the signup form renders that text
+instead of a bare status code. A non-JSON 5xx from any other cause is now also
+labelled and retried once, since a cold start can genuinely produce one.
+
+The gate is unit-tested against the throw (`503` + `SUPABASE_URL_INVALID`, correct
+Bengali fallback, `no-store` intact) and guarded in source, so a route cannot go
+back to calling `createSupabaseRouteClient()` directly.
+
+On the log request: `vercel__get_deployment_events` (and `GET /deployments/.../events`
+in general) carries **build** output only — clone, `pnpm install`, `✓ Compiled
+successfully`, cache upload — so it cannot show `[campus360:registry]` lines. Runtime
+function logs need `vercel logs <url>`, `vercel inspect <deployment>`, or the
+Observability tab in the dashboard. That is why the registry failures are reported in
+the response envelope and the probe: those *are* the reachable equivalent of a log
+line from a sandbox without Vercel CLI credentials.
+
 ## Remediation (Vercel, not the code)
 
 In Vercel → project `campus-360-bd` → Settings → Environment Variables, production

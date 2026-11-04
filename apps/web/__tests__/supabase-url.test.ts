@@ -486,3 +486,73 @@ describe('describeSupabaseKey — shape without exposure', () => {
     }
   });
 });
+
+describe('registryGate — a broken endpoint must never escape as a bare 500', () => {
+  it('answers 503 SUPABASE_URL_INVALID instead of throwing out of the handler', async () => {
+    // This is the PR #7 regression: `requireUrl()` throws for a placeholder
+    // endpoint, the route called it directly, and the form could only show
+    // `HTTP 500` because Next had already replaced our envelope with HTML.
+    setEnv('https://your-project-ref.supabase.co');
+    const { registryGate } = await import('@/lib/registry-gate');
+    const gate = registryGate('universities', 'test');
+    expect(gate.ok).toBe(false);
+    if (gate.ok) throw new Error('expected the gate to fail');
+    expect(gate.response.status).toBe(503);
+    const body = await gate.response.json();
+    expect(body.error.code).toBe('SUPABASE_URL_INVALID');
+    expect(body.error.message_en).toContain('template host');
+    expect(body.error.message_bn).toBe('test');
+    expect(gate.response.headers.get('Cache-Control')).toBe('no-store, max-age=0');
+  });
+
+  it('turns any construction failure into a readable, scrubbed envelope', async () => {
+    const { registryGate } = await import('@/lib/registry-gate');
+    const secret = 'eyJhbGciOiJIUzI1NiJ9.leakedpayload.signature';
+    const gate = registryGate('halls', 'bn-text', () => {
+      throw new Error(`createClient rejected key ${secret}`);
+    });
+    expect(gate.ok).toBe(false);
+    if (gate.ok) throw new Error('expected the gate to fail');
+    expect(gate.response.status).toBe(503);
+    const body = await gate.response.json();
+    expect(body.error.code).toBe('SUPABASE_NOT_CONFIGURED');
+    expect(body.error.message_en).toContain('[redacted-token]');
+    expect(body.error.message_en).not.toContain(secret);
+    expect(body.error.message_en).toContain('/api/health/registry');
+  });
+
+  it('hands back the client when the endpoint is usable', async () => {
+    const { registryGate } = await import('@/lib/registry-gate');
+    const fake = { from: () => 'queried' };
+    const gate = registryGate('programs', 'bn-text', () => fake as never);
+    expect(gate.ok).toBe(true);
+    if (!gate.ok) throw new Error(`expected success, got: ${gate.reason}`);
+    expect(gate.client).toBe(fake);
+  });
+});
+
+describe('registry route failure paths are all structured', () => {
+  const ROUTES = [
+    'app/api/universities/route.ts',
+    'app/api/universities/[id]/route.ts',
+    'app/api/halls/route.ts',
+    'app/api/departments/route.ts',
+    'app/api/programs/route.ts',
+  ];
+
+  it.each(ROUTES)('%s builds its client through registryGate, not directly', (rel) => {
+    const src = read(rel);
+    const get = src.slice(src.indexOf('export async function GET'));
+    expect(get, `${rel} must gate client construction`).toContain('registryGate(');
+    expect(get, `${rel} must not call createSupabaseRouteClient() outside the gate`).not.toMatch(
+      /const supabase = createSupabaseRouteClient\(\);/
+    );
+  });
+
+  it('keeps the form readable when a 5xx body is not our JSON', () => {
+    const src = read('app/signup/page.tsx');
+    expect(src).toContain('if (!payload?.error) {');
+    expect(src).toContain('/api/health/registry names the exact cause');
+    expect(src).toContain('retryable: response.status >= 500');
+  });
+});
