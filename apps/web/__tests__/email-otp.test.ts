@@ -2,7 +2,7 @@
 // Real-time email OTP unit coverage: code strength, TTL policy, digest
 // comparison, the message shape and SMTP error classification. No network, no
 // database, no credentials.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   OTP_CODE_OFFSET,
   OTP_CODE_SPACE,
@@ -150,14 +150,25 @@ describe('otp email rendering', () => {
   });
 
   it('reports an unconfigured provider instead of throwing', async () => {
-    expect(gmailCredentials()).toBeNull();
-    expect(isSmtpConfigured()).toBe(false);
-    const result = await sendOtpEmail(input);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.provider).toBe('unconfigured');
-      expect(result.error).toContain('GMAIL_USER');
-      expect(result.retryable).toBe(false);
+    // "This deployment cannot mail" is an operator-visible fact, so it is logged
+    // as well as returned — the spy keeps the line out of the report and asserts
+    // it is actually emitted (and never carries the recipient in full).
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(gmailCredentials()).toBeNull();
+      expect(isSmtpConfigured()).toBe(false);
+      const result = await sendOtpEmail(input);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.provider).toBe('unconfigured');
+        expect(result.error).toContain('GMAIL_USER');
+        expect(result.retryable).toBe(false);
+      }
+      const line = warn.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+      expect(line).toContain('[campus360:auth] smtp.unconfigured');
+      expect(line).not.toContain(input.to);
+    } finally {
+      warn.mockRestore();
     }
   });
 });

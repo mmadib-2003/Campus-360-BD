@@ -13,6 +13,7 @@
 // inside the email.
 // ============================================================================
 import { NextRequest } from 'next/server';
+import { authError, authLog } from '@/lib/auth-log';
 import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
@@ -41,6 +42,23 @@ import {
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handleOtpRequest(req);
+  } catch (error) {
+    // A throw inside this handler would otherwise reach the browser as Next.js's
+    // HTML error page, which the sign-in client cannot parse — it shows up as
+    // "the button did nothing". Every failure mode must be JSON + logged.
+    authError('request-otp.unhandled', error);
+    return apiError(
+      'OTP_REQUEST_FAILED',
+      'The verification request could not be completed. Please try again.',
+      'যাচাইকরণ অনুরোধটি সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+      500
+    );
+  }
+}
+
+async function handleOtpRequest(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const rawEmail = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
   const universityId = typeof body?.universityId === 'string' ? body.universityId : undefined;
@@ -114,7 +132,14 @@ export async function POST(req: NextRequest) {
 
   const admin = createSupabaseAdminClient();
 
-  // Enforce University Email Domain Whitelist Server-Side
+  // Enforce University Email Domain Whitelist Server-Side.
+  //
+  // NOTE (known gap, deliberately not changed while untested against a live
+  // PostgREST): `.eq('is_active', true)` here filters the *domain* row. The
+  // `universities!inner(...)` embed selects the parent's `is_active` but does
+  // not filter on it, so deactivating a university still lets its domains
+  // request codes. Tightening it to `.eq('universities.is_active', true)` is a
+  // one-liner, but it changes who can sign up — do it with a staging check.
   let domainQuery = admin
     .from('university_email_domains')
     .select('id, university_id, domain, universities!inner(id, code, name_en, name_bn, is_active)')
@@ -125,9 +150,33 @@ export async function POST(req: NextRequest) {
     domainQuery = domainQuery.eq('university_id', universityId);
   }
 
-  const { data: domainMatch } = await domainQuery.maybeSingle();
+  const { data: domainMatch, error: domainError } = await domainQuery.maybeSingle();
+
+  if (domainError) {
+    // This is NOT "your domain is not approved". Reading the registry can fail
+    // for its own reasons (missing relation, JWT/role issue, transient PostgREST
+    // error) and telling a student their address is unlisted sends them to the
+    // wrong support queue. Fail loudly, distinctly, and in the log.
+    authError('request-otp.registry-lookup-failed', domainError, {
+      attemptedDomain: emailDomain,
+      universityId: universityId ?? null,
+    });
+    return apiError(
+      'AUTH_REGISTRY_UNAVAILABLE',
+      'The university registry could not be read right now. Please try again shortly.',
+      'বিশ্ববিদ্যালয়ের তালিকা এই মুহূর্তে পড়া যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+      503,
+      undefined,
+      rlEmail.headers
+    );
+  }
 
   if (!domainMatch) {
+    authLog('request-otp.domain-not-whitelisted', {
+      attemptedDomain: emailDomain,
+      universityId: universityId ?? null,
+      note: 'no active row in university_email_domains for this domain',
+    });
     return apiError(
       'DOMAIN_NOT_WHITELISTED',
       `The email domain @${emailDomain} is not on the approved Bangladesh public university registry.`,
@@ -188,6 +237,11 @@ export async function POST(req: NextRequest) {
   });
 
   if (!challenge.ok) {
+    // The store returns the PostgREST message; surface it to the operator, not
+    // to the browser (it can name columns and constraints).
+    authError('request-otp.challenge-store-failed', new Error(challenge.error), {
+      email: redactEmail(rawEmail),
+    });
     return apiError(
       'DB_ERROR',
       'Could not create verification challenge.',
@@ -199,7 +253,13 @@ export async function POST(req: NextRequest) {
   if (demoMode) {
     // No email is sent: mirror the code onto profiles.demo_otp for the panel
     // and for the pre-signup case where the profile does not exist yet.
-    await storeProfileDemoOtp(admin, rawEmail, otpCode, challenge.expiresAt);
+    // Best-effort bookkeeping: a failed mirror write must not lose the code the
+    // panel already has, so it is logged and swallowed rather than thrown.
+    try {
+      await storeProfileDemoOtp(admin, rawEmail, otpCode, challenge.expiresAt);
+    } catch (error) {
+      authError('request-otp.demo-mirror-failed', error, { email: redactEmail(rawEmail) });
+    }
     return apiSuccess(
       {
         email: rawEmail,
@@ -232,15 +292,28 @@ export async function POST(req: NextRequest) {
     // Roll the challenge back: an undelivered code must not sit in the table
     // (and deleting it clears the 60s cooldown so the user can retry now).
     await deleteOtpChallenge(admin, challenge.id);
-    await admin.from('audit_log').insert({
-      university_id: domainMatch.university_id,
-      action: 'OTP_DELIVERY_FAILED',
-      entity_type: 'VERIFICATION_ATTEMPT',
-      entity_id: challenge.id,
-      metadata: { email: redactEmail(rawEmail), provider: delivery.provider, error: delivery.error },
-      ip_address: ipAddress,
-      user_agent: userAgent,
+    authError('request-otp.delivery-failed', new Error(delivery.error), {
+      email: redactEmail(rawEmail),
+      provider: delivery.provider,
+      retryable: delivery.retryable,
+      challengeId: challenge.id,
+      cooldownCleared: true,
     });
+    try {
+      await admin.from('audit_log').insert({
+        university_id: domainMatch.university_id,
+        action: 'OTP_DELIVERY_FAILED',
+        entity_type: 'VERIFICATION_ATTEMPT',
+        entity_id: challenge.id,
+        metadata: { email: redactEmail(rawEmail), provider: delivery.provider, error: delivery.error },
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      });
+    } catch (error) {
+      // The user already has their answer; a broken audit trail is a secondary
+      // fault and must not convert a 502 into an unhandled 500.
+      authError('request-otp.audit-insert-failed', error, { challengeId: challenge.id });
+    }
 
     return apiError(
       'OTP_DELIVERY_FAILED',
@@ -254,7 +327,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await markOtpEmailSent(admin, challenge.id, delivery.messageId);
+  try {
+    await markOtpEmailSent(admin, challenge.id, delivery.messageId);
+  } catch (error) {
+    // The email is already in the recipient's inbox: losing the delivery_status
+    // write must never fail the request the user is waiting on.
+    authError('request-otp.mark-sent-failed', error, { challengeId: challenge.id });
+  }
+
+  authLog('request-otp.issued', {
+    email: redactEmail(rawEmail),
+    universityCode: university.code ?? null,
+    challengeId: challenge.id,
+    messageId: delivery.messageId,
+    secondsRemaining: remainingOtpSeconds(challenge.expiresAt),
+  });
 
   return apiSuccess(
     {
