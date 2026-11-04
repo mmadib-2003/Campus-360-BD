@@ -7,6 +7,13 @@
 -- The /admin/panel (halls section) manages entries for remaining universities.
 --
 -- Runs after seed.sql (which creates the universities). Idempotent.
+--
+-- IMPORTANT: every INSERT here is a SELECT ... FROM public.universities, so
+-- running this file alone against a database with no universities inserts
+-- ZERO rows and still reports success. Apply supabase/seed/seed.sql first,
+-- then verify with: SELECT count(*) FROM public.universities;
+-- (The sign-up hall picker reads university_halls — NOT the legacy
+-- public.halls table that seed.sql populates.)
 -- ============================================================================
 
 BEGIN;

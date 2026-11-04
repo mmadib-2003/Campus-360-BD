@@ -165,3 +165,58 @@ Escalation ladder, cheapest first:
 3. Once a domain is verified, a transactional HTTP API can be reintroduced
    behind the same `sendOtpEmail()` contract — the route handlers and
    `verification_attempts` schema need no edit.
+
+## 7. Field incident 2026-11-04 — "campus list is empty" and "OTP never arrives"
+
+Both reports came from the deployed preview at the same time, and they were the
+**same fault**: the production database had no registry rows.
+
+| Checked | Result |
+| --- | --- |
+| `universities` / `university_email_domains` / `university_halls` | **0 / 0 / 0 rows** |
+| `verification_attempts` | 0 rows — so no request ever reached the code-issuing step |
+| RLS on the registry tables | already permissive: `universities`, `university_email_domains`, `university_halls` all have an anon+authenticated `SELECT` with `USING (true)`; `set local role anon` saw all rows |
+| Migration `0011` | applied — `consumed_at`, `delivery_status`, `email_sent_at`, `email_message_id`, `delivery_error` all present |
+| Nodemailer wiring | `service: 'gmail'` + app-password auth, awaited inside the handler, Node.js runtime (no `runtime = 'edge'`) |
+| Vercel egress | ports **465 and 587 are open**; only port 25 is blocked (Vercel KB, "Can I use SMTP with Vercel?") |
+
+The sign-in failure was therefore **not** SMTP. `request-otp` verifies the
+address against `university_email_domains` before it generates anything, so with
+an empty table every student got `403 DOMAIN_NOT_WHITELISTED` and no email was
+ever attempted. The empty combobox was the same missing table, one screen earlier.
+
+Fix applied: `supabase/seed/seed.sql` (universities, domains, departments,
+governing units, routing) **then** `supabase/seed/seed_university_halls.sql`
+(halls + governance demo rows) — 51 universities, 56 domains, 32 halls. Order
+matters: both files are `INSERT ... SELECT FROM universities`, so the halls seed
+alone inserts nothing against an empty registry.
+
+### Reading the logs next time
+
+```bash
+vercel logs https://<deployment>.vercel.app --follow | grep campus360:auth
+```
+
+| Log line | What it means | First thing to check |
+| --- | --- | --- |
+| `smtp.transport-config` | emitted once per cold start: service, sending user, pool, timeouts, `credentialsPresent` | `credentialsPresent: false` → the env vars are not on the **Production** environment |
+| `smtp.sent` | Gmail accepted the message (has the `Message-ID`) | look in Spam/Promotions before blaming the app |
+| `smtp.send-failed` + `responseCode: 535` | credentials rejected | app password (never the account password); 2-Step Verification must be on for one to exist; on a Workspace account an admin must enable "Public client access / SMTP for Gmail" for that user |
+| `smtp.send-failed` + `ETIMEDOUT`/`ESOCKET` | relay unreachable from that region | transient — the API already returned 502 "try again" |
+| `smtp.recipient-rejected` | Gmail refused that mailbox | the student's address, not our config |
+| `request-otp.registry-lookup-failed` | the whitelist **query** errored (503 `AUTH_REGISTRY_UNAVAILABLE`) | PostgREST/service-role config, not the user's email |
+| `request-otp.domain-not-whitelisted` | no active domain row matched | `select * from university_email_domains where domain = '…';` |
+| `request-otp.challenge-store-failed` | insert into `verification_attempts` failed | columns present? (re-apply 0011) service role able to write? |
+
+The log lines never contain the OTP or the app password — `lib/auth-log.ts`
+drops credential-shaped keys and scrubs the values, and
+`apps/web/__tests__/auth-log.test.ts` fails if that ever stops being true.
+
+### Known gap left open deliberately
+
+`.eq('is_active', true)` in the whitelist query filters the **domain** row; the
+embedded `universities!inner(...)` selects the parent's `is_active` but does not
+filter on it, so deactivating a university does not currently stop its domains
+from issuing codes. It is a one-line change
+(`.eq('universities.is_active', true)`) that alters who can sign in, so it should
+be made against a staging project where the PostgREST filter can be exercised.

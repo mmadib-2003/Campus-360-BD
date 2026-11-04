@@ -22,7 +22,10 @@
 //   • The plaintext code is never logged, and it is deliberately kept out of
 //     the subject line — subject text is visible in lock-screen previews.
 //   • Delivery failures are classified and returned to the caller so
-//     `request-otp` can roll the challenge back; they are never swallowed.
+//     `request-otp` can roll the challenge back; they are never swallowed, and
+//     each one is written to the runtime log through lib/auth-log.ts (which
+//     redacts the app password and any OTP-shaped digits) so a Vercel log
+//     reader sees the SMTP reply code, not just "delivery failed".
 //
 // Gmail's own ceilings apply: ~500 recipients/day on a personal account (and a
 // lower effective rate while the address is new). See §6 of
@@ -30,7 +33,8 @@
 // ============================================================================
 
 import * as nodemailer from 'nodemailer';
-import { OTP_TTL_SECONDS } from '@/lib/demo-otp';
+import { OTP_TTL_SECONDS, redactEmail } from '@/lib/demo-otp';
+import { authError, authLog, authLogTransportConfig, authWarn } from '@/lib/auth-log';
 
 /**
  * Result of one delivery attempt. `messageId` is the SMTP Message-ID, stored on
@@ -103,9 +107,31 @@ export interface OtpMailer {
   sendMail(options: nodemailer.SendMailOptions): Promise<nodemailer.SentMessageInfo>;
 }
 
+let transportConfigLogged = false;
+
+/**
+ * One line per cold start saying how the transport was wired. `credentialsPresent`
+ * is a boolean rather than the value, and `auth-log` drops any key that looks like
+ * a secret — so this line is safe to leave in production logs permanently.
+ */
+function logTransportConfigOnce(creds: { user: string; pass: string }): void {
+  if (transportConfigLogged) return;
+  transportConfigLogged = true;
+  authLogTransportConfig({
+    service: 'gmail',
+    user: creds.user,
+    credentialsPresent: creds.pass.length > 0,
+    pool: smtpPoolingEnabled(),
+    connectionTimeoutMs: SMTP_CONNECT_TIMEOUT_MS,
+    socketTimeoutMs: SMTP_SOCKET_TIMEOUT_MS,
+    from: otpMailFrom(),
+  });
+}
+
 export function createOtpMailer(): OtpMailer | null {
   const creds = gmailCredentials();
   if (!creds) return null;
+  logTransportConfigOnce(creds);
 
   const base = {
     service: 'gmail',
@@ -509,6 +535,10 @@ export async function sendOtpEmail(
   input: OtpEmailInput & { idempotencyKey?: string }
 ): Promise<OtpDeliveryResult> {
   if (!isSmtpConfigured()) {
+    authWarn('smtp.unconfigured', {
+      reason: 'GMAIL_USER and/or GMAIL_APP_PASSWORD are absent from this runtime',
+      to: redactEmail(input.to),
+    });
     return {
       ok: false,
       provider: 'unconfigured',
@@ -519,6 +549,9 @@ export async function sendOtpEmail(
 
   const mailer = getOtpMailer();
   if (!mailer) {
+    authError('smtp.transport-create-failed', new Error('createTransport returned no transporter for gmail'), {
+      to: redactEmail(input.to),
+    });
     return { ok: false, provider: 'unconfigured', error: 'The SMTP transport could not be created.', retryable: false };
   }
 
@@ -548,6 +581,13 @@ export async function sendOtpEmail(
 
     const rejected: unknown[] = Array.isArray(info?.rejected) ? info.rejected : [];
     if (rejected.length > 0) {
+      // Gmail accepted the TCP session but refused this mailbox — usually a
+      // disabled/forwarding address. Distinct from an auth or quota fault.
+      authError('smtp.recipient-rejected', new Error(`rejected: ${rejected.map(String).join(', ')}`), {
+        to: redactEmail(input.to),
+        messageId,
+        response: info?.response,
+      });
       return {
         ok: false,
         provider: 'gmail',
@@ -556,9 +596,24 @@ export async function sendOtpEmail(
       };
     }
 
+    authLog('smtp.sent', {
+      to: redactEmail(input.to),
+      messageId: info?.messageId ?? messageId,
+      response: info?.response,
+      acceptedCount: Array.isArray(info?.accepted) ? info.accepted.length : null,
+    });
     return { ok: true, provider: 'gmail', messageId: info?.messageId ?? messageId };
   } catch (error) {
     const classified = classifySmtpError(error);
+    // Full fault detail lives here, not in the API response: the caller only sees
+    // `message` + `retryable`. Includes the SMTP reply code (535 vs 454 etc.),
+    // which is what separates "fix the credentials" from "try again".
+    authError('smtp.send-failed', error, {
+      to: redactEmail(input.to),
+      messageId,
+      retryable: classified.retryable,
+      classification: classified.message,
+    });
     return { ok: false, provider: 'gmail', error: classified.message, retryable: classified.retryable };
   }
 }
