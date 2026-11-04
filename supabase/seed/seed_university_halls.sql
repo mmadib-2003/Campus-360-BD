@@ -248,6 +248,24 @@ ON CONFLICT (university_id, name) DO UPDATE
 --    Signup requires a hall choice for students, so an empty roster silently
 --    locks those campuses out; this keeps them selectable and honest.
 -- ---------------------------------------------------------------------------
+-- 2b. Retire legacy near-duplicates. An earlier revision of this seed stored
+-- some halls with a hyphen or a different spacing ('Al-Beruni Hall' beside the
+-- canonical 'Al Beruni Hall'), which under UNIQUE (university_id, name) reads
+-- as two halls in the signup combobox. Rows that collapse to the same name once
+-- spaces and hyphens are removed are deactivated — kept for history, because
+-- profiles.hall_id may still point at them, but hidden from the picker.
+UPDATE public.university_halls h
+SET is_active = false, updated_at = now()
+WHERE h.is_active
+  AND EXISTS (
+    SELECT 1 FROM public.university_halls c
+    WHERE c.university_id = h.university_id
+      AND c.is_active
+      AND c.id <> h.id
+      AND translate(lower(c.name), '- ', '') = translate(lower(h.name), '- ', '')
+      AND c.name < h.name
+  );
+
 INSERT INTO public.university_halls (university_id, name, name_bn, type)
 SELECT u.id,
        'Day Scholar (no hall seat applied for)',
