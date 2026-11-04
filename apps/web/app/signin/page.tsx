@@ -63,12 +63,11 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto my-12 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div className="max-w-7xl mx-auto my-8 px-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)] gap-6 items-start">
+      <section className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
       <h1 className="text-xl font-bold">{t('Sign In')}</h1>
       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('University email OTP is required for every account.')}</p>
-
-      {/* One-click role-based demo identities — always visible, no OTP. */}
-      <QuickDemoLogin />
 
       <div className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-800">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -108,6 +107,11 @@ export default function SignInPage() {
       </div>
       {/* Password-based demo accounts — only in demo mode (NEXT_PUBLIC_AUTH_MODE === 'demo'). */}
       <DevSignInPanel />
+      </div>
+      </section>
+      <aside className="lg:sticky lg:top-6">
+        <QuickDemoLogin />
+      </aside>
       </div>
     </div>
   );

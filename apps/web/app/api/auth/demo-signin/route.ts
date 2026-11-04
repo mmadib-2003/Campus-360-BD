@@ -37,6 +37,20 @@ export async function POST(req: NextRequest) {
     return apiError('INVALID_INPUT', 'Email and password are required.', 'ইমেইল এবং পাসওয়ার্ড প্রয়োজন।', 400);
   }
 
+  // Strict allowlist: this endpoint is exclusively for the four seeded demo
+  // identities. It never requests or sends an OTP; Supabase password grant
+  // writes the normal auth cookies through createSupabaseRouteClient.
+  const account = findDemoAccount(email);
+  const allowedDemoEmails = new Set([
+    'student@demo.campus360.test',
+    'faculty@demo.campus360.test',
+    'admin@demo.campus360.test',
+    'alumni@demo.campus360.test',
+  ]);
+  if (!allowedDemoEmails.has(email) || !account) {
+    return apiError('DEMO_SIGNIN_DISABLED', 'Use one of the four demo accounts listed on /demo.', ' /demo পাতায় দেওয়া চারটি ডেমো অ্যাকাউন্ট ব্যবহার করুন।', 403);
+  }
+
   const supabaseConfigured = isSupabaseServerConfigured();
 
   if (!isDemoAuthMode() && !supabaseConfigured) {
@@ -90,7 +104,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const account = findDemoAccount(email);
   return apiSuccess({
     demo: false,
     userId: data.user.id,
