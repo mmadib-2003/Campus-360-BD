@@ -3,7 +3,7 @@
 // serverless-safe pooling default, the From-header rules, and what the message
 // handed to SMTP actually contains. `nodemailer` is mocked, so nothing here
 // touches the network and no real credentials are involved.
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // vi.hoisted so the mock factory (which is hoisted above module scope) can
 // share the spy with the assertions below.
@@ -35,6 +35,24 @@ function setEnv(values: Record<string, string | undefined>) {
     else process.env[key] = value;
   }
 }
+
+/**
+ * The transport logs each fault through lib/auth-log (see auth-log.test.ts for
+ * what it must and must not contain). Spying here keeps that output out of the
+ * test report while leaving it assertable.
+ */
+const consoleSpies = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
+
+function loggedThrough(kind: keyof typeof consoleSpies): string {
+  return consoleSpies[kind].mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+}
+
+beforeEach(() => {
+  for (const [kind, spy] of Object.entries(consoleSpies)) {
+    spy.mockReset();
+    vi.spyOn(console, kind as 'error' | 'warn' | 'log').mockImplementation(spy);
+  }
+});
 
 afterEach(() => {
   setEnv({
@@ -163,5 +181,38 @@ describe('gmail smtp transport', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain('gone@du.ac.bd');
+  });
+
+  it('logs the SMTP fault (redacted) instead of swallowing it', async () => {
+    setEnv(CREDENTIALS);
+    mockSendMail.mockRejectedValueOnce(
+      Object.assign(new Error('Invalid login'), {
+        code: 'EAUTH',
+        responseCode: '535',
+        response: '535-5.7.8 Username and Password not accepted',
+      })
+    );
+    const mod = await loadModule();
+    const result = await mod.sendOtpEmail({
+      to: 'student.du@du.ac.bd',
+      code: '482913',
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+    });
+
+    expect(result.ok).toBe(false);
+
+    const logged = loggedThrough('error');
+    // The point of the logging: the reply code is visible in the runtime log…
+    expect(logged).toContain('smtp.send-failed');
+    expect(logged).toContain('535');
+    expect(logged).toContain('EAUTH');
+    // …while nothing secret is.
+    expect(logged).not.toContain('482913');
+    expect(logged).not.toContain('abcd efgh ijkl mnop');
+
+    // And one breadcrumb per cold start says how the transport was wired.
+    const breadcrumbs = loggedThrough('log');
+    expect(breadcrumbs).toContain('smtp.transport-config');
+    expect(breadcrumbs).toContain('gmail');
   });
 });

@@ -13,6 +13,7 @@
 // ============================================================================
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
+import { authError, authLog } from '@/lib/auth-log';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
@@ -38,6 +39,22 @@ import {
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handleVerifyOtp(req);
+  } catch (error) {
+    // Same rule as request-otp: the client must always get the JSON envelope,
+    // and the operator must always get the real fault.
+    authError('verify-otp.unhandled', error);
+    return apiError(
+      'OTP_VERIFY_FAILED',
+      'Verification could not be completed. Please try again.',
+      'যাচাইকরণ সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+      500
+    );
+  }
+}
+
+async function handleVerifyOtp(req: NextRequest) {
   const rl = checkRateLimit(req, 'verify-otp', 10, 600);
   if (!rl.allowed) {
     return apiError('RATE_LIMITED', 'Too many verification attempts.', 'অতিরিক্ত চেষ্টার কারণে সাময়িকভাবে ব্লক করা হয়েছে।', 429);
@@ -80,6 +97,9 @@ export async function POST(req: NextRequest) {
   const challenge = await readActiveOtpChallenge(admin, email);
 
   if (!challenge) {
+    // `readActiveOtpChallenge` already logged a lookup failure when the query
+    // itself errored; this line ties that log line to the user's attempt.
+    authLog('verify-otp.no-active-challenge', { email: redactEmail(email) });
     return apiError(
       'CHALLENGE_NOT_FOUND',
       'No active OTP challenge found. Request a new code.',
@@ -139,11 +159,24 @@ export async function POST(req: NextRequest) {
   const payload = (challenge.signup_payload ?? {}) as Record<string, string>;
   let userId: string | undefined;
 
-  const { data: existingProfile } = await admin
+  const { data: existingProfile, error: profileErr } = await admin
     .from('profiles')
     .select('id, university_id')
     .eq('email', email)
     .maybeSingle();
+
+  if (profileErr) {
+    // The challenge is consumed by this point, so this branch has to be explicit:
+    // falling through to createUser would hit "User already registered" for an
+    // account that does exist, and the real cause (a read failure) would vanish.
+    authError('verify-otp.profile-lookup-failed', profileErr, { email: redactEmail(email) });
+    return apiError(
+      'PROFILE_LOOKUP_FAILED',
+      'Your email is verified, but the account could not be loaded. Please request a new code and sign in again.',
+      'আপনার ইমেইল যাচাই হয়েছে, তবে অ্যাকাউন্টটি লোড করা যায়নি। নতুন কোড অনুরোধ করে আবার সাইন ইন করুন।',
+      503
+    );
+  }
 
   if (existingProfile) {
     userId = existingProfile.id;
@@ -165,7 +198,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (authErr || !createdAuth.user) {
-      return apiError('AUTH_CREATE_FAILED', 'Failed to provision verified user account.', 'অ্যাকাউন্ট তৈরি করা যায়নি।', 500);
+    authError('verify-otp.user-create-failed', authErr ?? new Error('createUser returned no user'), {
+        email: redactEmail(email),
+      });
+      return apiError(
+        'AUTH_CREATE_FAILED', 'Failed to provision verified user account.', 'অ্যাকাউন্ট তৈরি করা যায়নি।', 500);
     }
 
     userId = createdAuth.user.id;
@@ -195,7 +232,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  await admin.from('audit_log').insert({
+  await authLogged('verify-otp.audit-insert-failed', () =>
+    admin.from('audit_log').insert({
     university_id: challenge.university_id,
     actor_id: userId,
     action: 'EMAIL_OTP_VERIFIED',
@@ -207,33 +245,58 @@ export async function POST(req: NextRequest) {
       seconds_used: OTP_TTL_SECONDS - secondsLeft,
       demo: isDemoAuthMode(),
     },
-  });
+    })
+  );
 
   // Log the user in: mint a magiclink token with the service client and
   // exchange it through the SSR client so the session lands in cookies.
-  const { data: linkData } = await admin.auth.admin.generateLink({
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
   });
+  if (linkErr) {
+    authError('verify-otp.generate-link-failed', linkErr, { email: redactEmail(email), userId });
+  }
 
   const routeSupabase = createSupabaseRouteClient();
-  if (linkData?.properties?.hashed_token) {
-    const {
-      error: sessionErr,
-      data: { user },
-    } = await routeSupabase.auth.verifyOtp({
-      type: 'magiclink',
-      token_hash: linkData.properties.hashed_token,
-    });
 
-    if (sessionErr || !user) {
-      return apiError(
-        'SESSION_ISSUE_FAILED',
-        'Email verified, but the session could not be started. Please sign in again.',
-        'ইমেইল যাচাই সফল হয়েছে, তবে সেশন শুরু করা যায়নি। আবার সাইন ইন করুন।',
-        500
-      );
-    }
+  if (!linkData?.properties?.hashed_token) {
+    // No token, no cookie. Reporting success from here told the client
+    // "verified" while leaving it signed out — which is exactly what looked like
+    // "sign-in crashing" from the browser. The challenge is already consumed, so
+    // the message says what to do next rather than inviting a retry of the code.
+    authError(
+      'verify-otp.session-token-missing',
+      linkErr ?? new Error('generateLink returned no hashed_token'),
+      { email: redactEmail(email), userId }
+    );
+    return apiError(
+      'SESSION_ISSUE_FAILED',
+      'Email verified, but the session could not be started. Please request a new code and sign in again.',
+      'ইমেইল যাচাই সফল হয়েছে, তবে সেশন শুরু করা যায়নি। নতুন কোড অনুরোধ করে আবার সাইন ইন করুন।',
+      500
+    );
+  }
+
+  const {
+    error: sessionErr,
+    data: { user },
+  } = await routeSupabase.auth.verifyOtp({
+    type: 'magiclink',
+    token_hash: linkData.properties.hashed_token,
+  });
+
+  if (sessionErr || !user) {
+    authError('verify-otp.session-exchange-failed', sessionErr ?? new Error('verifyOtp returned no user'), {
+      email: redactEmail(email),
+      userId,
+    });
+    return apiError(
+      'SESSION_ISSUE_FAILED',
+      'Email verified, but the session could not be started. Please sign in again.',
+      'ইমেইল যাচাই সফল হয়েছে, তবে সেশন শুরু করা যায়নি। আবার সাইন ইন করুন।',
+      500
+    );
   }
 
   const requestedRole = String(payload.role ?? 'student').toLowerCase();
@@ -246,4 +309,15 @@ export async function POST(req: NextRequest) {
     challengeConsumed: true,
     nextStep: existingProfile ? demoNextStep(normalizeDemoRole(requestedRole)) : '/onboarding',
   });
+}
+
+// verify-otp helper: bookkeeping writes (audit trail) must never turn a
+// successful verification into an error response, but they must not be silent
+// either. This keeps that contract to one line at each call site.
+async function authLogged(stage: string, run: () => PromiseLike<unknown>): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    authError(stage, error);
+  }
 }
