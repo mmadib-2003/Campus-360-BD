@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
-import { REGISTRY_NO_STORE, registryError } from '@/lib/registry-cache';
+import { REGISTRY_NO_STORE, registryFailure, registryRead } from '@/lib/registry-cache';
 import { DEMO_UNIVERSITY_HALLS, getDemoUniversity } from '@/lib/modules/demo-data';
 
 export const dynamic = 'force-dynamic';
@@ -53,19 +53,26 @@ export async function GET(req: NextRequest) {
   if (universityId) {
     query = query.eq('university_id', universityId);
   } else {
-    const { data: university } = await supabase
-      .from('universities')
-      .select('id')
-      .eq('code', universityCode.toUpperCase())
-      .maybeSingle();
-    if (!university) return apiSuccess([], 200, undefined, REGISTRY_NO_STORE);
-    query = query.eq('university_id', university.id);
+    // The code -> id lookup is a registry read too. It used to ignore `error`,
+    // so an unreachable database answered "here are your halls: none" with a
+    // 200. Fail loudly instead of showing an empty dropdown.
+    const lookup = await registryRead<{ id: string } | null>(
+      'halls.fetch.lookup',
+      () =>
+        supabase
+          .from('universities')
+          .select('id')
+          .eq('code', universityCode.toUpperCase())
+          .maybeSingle(),
+      { universityCode }
+    );
+    if (!lookup.ok) return registryFailure(lookup, 'হল তালিকা লোড করা যায়নি।');
+    if (!lookup.data) return apiSuccess([], 200, undefined, REGISTRY_NO_STORE);
+    query = query.eq('university_id', lookup.data.id);
   }
 
-  const { data, error } = await query;
-  if (error) {
-    registryError('halls.fetch', error, { universityId, universityCode });
-    return apiError('FETCH_FAILED', error.message, 'হল তালিকা লোড করা যায়নি।', 500, undefined, REGISTRY_NO_STORE);
-  }
-  return apiSuccess(data ?? [], 200, undefined, REGISTRY_NO_STORE);
+  const read = await registryRead<any[]>('halls.fetch', () => query, { universityId, universityCode });
+  if (!read.ok) return registryFailure(read, 'হল তালিকা লোড করা যায়নি।');
+
+  return apiSuccess(read.data ?? [], 200, undefined, REGISTRY_NO_STORE);
 }
