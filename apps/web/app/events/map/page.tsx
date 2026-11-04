@@ -3,16 +3,26 @@
 
 import React, { useEffect, useState } from 'react';
 import { CampusGoogleMap, CampusEventPin } from '@/components/maps/CampusGoogleMap';
+import { SkeletonList } from '@/components/modules/ui';
 
 export default function LiveEventsMapPage() {
   const [events, setEvents] = useState<CampusEventPin[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     fetch('/api/events')
       .then((r) => r.json())
       .then((res) => {
-        if (res.success) setEvents(res.data || []);
+        if (!cancelled && res.success) setEvents(res.data || []);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleCheckIn(eventId: string, lat: number, lng: number) {
@@ -25,7 +35,14 @@ export default function LiveEventsMapPage() {
 
   return (
     <div className="space-y-6">
-      <CampusGoogleMap events={events} onCheckIn={handleCheckIn} />
+      {loading ? (
+        <div className="space-y-3">
+          <div className="h-64 rounded-2xl skeleton-shimmer" />
+          <SkeletonList rows={2} />
+        </div>
+      ) : (
+        <CampusGoogleMap events={events} onCheckIn={handleCheckIn} />
+      )}
     </div>
   );
 }
