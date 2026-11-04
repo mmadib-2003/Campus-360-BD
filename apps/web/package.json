@@ -8,7 +8,8 @@
     "start": "next start -p 3000",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "provision:demo-users": "node scripts/provision-demo-users.mjs"
   },
   "dependencies": {
     "@campus360/shared": "workspace:*",
