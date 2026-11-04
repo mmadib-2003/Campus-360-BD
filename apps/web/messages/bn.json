@@ -544,7 +544,18 @@
     "Body": "বিবরণ",
     "Title En": "শিরোনাম (ইংরেজি)",
     "Title Bn": "শিরোনাম (বাংলা)",
-    "Description En": "বিবরণ (ইংরেজি)"
+    "Description En": "বিবরণ (ইংরেজি)",
+    "Quick Demo Login": "দ্রুত ডেমো লগইন",
+    "One click, no OTP. Pick a role to explore the full product instantly.": "এক ক্লিক, ওটিপি ছাড়াই। পণ্যটি ঘুরে দেখতে একটি ভূমিকা বেছে নিন।",
+    "Demo data only": "শুধু ডেমো তথ্য",
+    "Could not start the demo session. Please try again.": "ডেমো সেশন শুরু করা যায়নি। আবার চেষ্টা করুন।",
+    "All four demo accounts use the password": "চারটি ডেমো অ্যাকাউন্টের পাসওয়ার্ড",
+    "No email or OTP is sent.": "কোনো ইমেইল বা ওটিপি পাঠানো হয় না।",
+    "Or sign in with your university email": "অথবা আপনার বিশ্ববিদ্যালয়ের ইমেইলে সাইন ইন করুন",
+    "Live module": "লাইভ মডিউল",
+    "Authentic campus photography and institutional logos via Wikimedia Commons.": "Wikimedia Commons-এর মাধ্যমে আসল ক্যাম্পাস ছবি ও প্রাতিষ্ঠানিক লোগো।",
+    "The registry is warming up": "রেজিস্ট্রি প্রস্তুত হচ্ছে",
+    "Campus cards will appear as soon as the registry responds.": "রেজিস্ট্রি সাড়া দিলে ক্যাম্পাস কার্ড দেখা যাবে।"
   },
   "roles": {
     "student": "শিক্ষার্থী",

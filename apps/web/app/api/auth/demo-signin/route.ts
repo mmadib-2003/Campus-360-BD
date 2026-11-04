@@ -40,12 +40,17 @@ export async function POST(req: NextRequest) {
   const supabaseConfigured = isSupabaseServerConfigured();
 
   if (!isDemoAuthMode() && !supabaseConfigured) {
-    return apiError(
-      'DEMO_SIGNIN_DISABLED',
-      'Demo sign-in is disabled for this deployment.',
-      'এই ডিপ্লয়মেন্টে ডেমো সাইন-ইন নিষ্ক্রিয় করা আছে।',
-      403
-    );
+    // Preview deployments without Supabase still serve the four one-click demo
+    // identities from /signin. Only the known seeded addresses are accepted
+    // below — this is not a bypass for arbitrary credentials.
+    if (!findDemoAccount(email)) {
+      return apiError(
+        'DEMO_SIGNIN_DISABLED',
+        'Demo sign-in is disabled for this deployment.',
+        'এই ডিপ্লয়মেন্টে ডেমো সাইন-ইন নিষ্ক্রিয় করা আছে।',
+        403
+      );
+    }
   }
 
   // Preview / demo fallback: match against the seeded credential list only.

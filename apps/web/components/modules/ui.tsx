@@ -314,16 +314,82 @@ export function EmptyState({
   );
 }
 
-export function SkeletonList({ rows = 3 }: { rows?: number }) {
+export function SkeletonCard({ className }: { className?: string }) {
   return (
-    <div className="space-y-3" aria-busy="true" aria-live="polite">
+    <div
+      className={cn(
+        'p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800',
+        className
+      )}
+      aria-hidden
+    >
+      <div className="flex items-center gap-3">
+        <div className="h-9 w-9 rounded-xl skeleton-shimmer shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-3 w-1/3 rounded skeleton-shimmer" />
+          <div className="h-2.5 w-2/3 rounded skeleton-shimmer" />
+        </div>
+      </div>
+      <div className="mt-3 h-2.5 w-full rounded skeleton-shimmer" />
+      <div className="mt-2 h-2.5 w-5/6 rounded skeleton-shimmer" />
+    </div>
+  );
+}
+
+export function SkeletonList({ rows = 3, className }: { rows?: number; className?: string }) {
+  return (
+    <div
+      className={cn('space-y-3', className)}
+      aria-busy="true"
+      aria-live="polite"
+      data-testid="skeleton-list"
+    >
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-          <div className="h-3 w-1/3 rounded bg-slate-200 dark:bg-slate-800 animate-pulse" />
-          <div className="h-3 w-2/3 rounded bg-slate-200 dark:bg-slate-800 animate-pulse mt-2" />
-          <div className="h-3 w-1/2 rounded bg-slate-200 dark:bg-slate-800 animate-pulse mt-2" />
+        <SkeletonCard key={index} />
+      ))}
+    </div>
+  );
+}
+
+/** Card-grid skeleton for the home feed / module hub / directory. */
+export function SkeletonGrid({ rows = 6, className }: { rows?: number; className?: string }) {
+  return (
+    <div
+      className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3', className)}
+      aria-busy="true"
+      aria-live="polite"
+      data-testid="skeleton-grid"
+    >
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+          aria-hidden
+        >
+          <div className="h-24 skeleton-shimmer" />
+          <div className="p-4 space-y-2">
+            <div className="h-3 w-2/3 rounded skeleton-shimmer" />
+            <div className="h-2.5 w-1/2 rounded skeleton-shimmer" />
+          </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Stat-tile skeleton for dashboard headers. */
+export function SkeletonStat({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        'p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900',
+        className
+      )}
+      aria-hidden
+    >
+      <div className="h-2.5 w-1/2 rounded skeleton-shimmer" />
+      <div className="mt-2 h-5 w-1/3 rounded skeleton-shimmer" />
+      <div className="mt-2 h-2 w-2/3 rounded skeleton-shimmer" />
     </div>
   );
 }

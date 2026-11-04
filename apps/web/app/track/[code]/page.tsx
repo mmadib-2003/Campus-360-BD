@@ -6,6 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { demoTable, subscribeDemoRealtime } from '@/lib/modules/demo-data';
 import { trySupabaseBrowser } from '@/lib/supabase-browser';
+import { subscribeToTable } from '@/lib/realtime';
+import { SkeletonList } from '@/components/modules/ui';
 
 type Row = Record<string, any>;
 
@@ -111,19 +113,23 @@ export default function TrackCasePage() {
   React.useEffect(() => {
     if (!code) return;
     const supabase = trySupabaseBrowser();
-    let channel: any = null;
-    if (supabase) {
-      channel = supabase
-        .channel(`campus360:complaints:track:${code}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'complaints', filter: `tracking_code=eq.${code}` },
-          () => {
-            void load(secret || undefined, true);
+    const removeRealtime = supabase
+      ? subscribeToTable(
+          supabase,
+          'complaints',
+          {
+            onInsert: () => void load(secret || undefined, true),
+            onUpdate: () => void load(secret || undefined, true),
+            onDelete: () => void load(secret || undefined, true),
+            onError: (error) => console.warn('[campus360:realtime] tracking subscription failed', error),
+          },
+          {
+            event: '*',
+            filter: `tracking_code=eq.${code}`,
+            topicBase: `campus360:complaints:track:${code}`,
           }
         )
-        .subscribe();
-    }
+      : () => undefined;
     const unsubscribe = subscribeDemoRealtime((event) => {
       if (event.type === 'store' || (event.table === 'complaints_public' && event.row && String(event.row.tracking_code ?? '').toUpperCase() === code.toUpperCase())) {
         void load(secret || undefined, true);
@@ -133,7 +139,7 @@ export default function TrackCasePage() {
       void load(secret || undefined, true);
     }, 4000);
     return () => {
-      if (supabase && channel) supabase.removeChannel(channel);
+      removeRealtime();
       unsubscribe();
       window.clearInterval(interval);
     };
@@ -162,7 +168,12 @@ export default function TrackCasePage() {
   }
 
   if (loading) {
-    return <div className="max-w-2xl mx-auto my-12 text-sm text-slate-500">{t('Loading…')}</div>;
+    return (
+      <div className="max-w-2xl mx-auto my-12 space-y-4">
+        <div className="h-8 w-1/2 rounded skeleton-shimmer" />
+        <SkeletonList rows={3} />
+      </div>
+    );
   }
 
   if (notFound || !ticket) {

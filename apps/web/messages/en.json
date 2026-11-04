@@ -544,7 +544,18 @@
     "Body": "Body",
     "Title En": "Title En",
     "Title Bn": "Title Bn",
-    "Description En": "Description En"
+    "Description En": "Description En",
+    "Quick Demo Login": "Quick Demo Login",
+    "One click, no OTP. Pick a role to explore the full product instantly.": "One click, no OTP. Pick a role to explore the full product instantly.",
+    "Demo data only": "Demo data only",
+    "Could not start the demo session. Please try again.": "Could not start the demo session. Please try again.",
+    "All four demo accounts use the password": "All four demo accounts use the password",
+    "No email or OTP is sent.": "No email or OTP is sent.",
+    "Or sign in with your university email": "Or sign in with your university email",
+    "Live module": "Live module",
+    "Authentic campus photography and institutional logos via Wikimedia Commons.": "Authentic campus photography and institutional logos via Wikimedia Commons.",
+    "The registry is warming up": "The registry is warming up",
+    "Campus cards will appear as soon as the registry responds.": "Campus cards will appear as soon as the registry responds."
   },
   "roles": {
     "student": "Student",

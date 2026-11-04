@@ -17,6 +17,7 @@ import {
   subscribeDemoSession,
 } from './demo-data';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
+import { subscribeToTable } from '@/lib/realtime';
 
 export type Row = Record<string, any>;
 
@@ -290,9 +291,10 @@ export function useRealtimeTable(
   const handlerRef = useRef(handlers);
   handlerRef.current = handlers;
   const filterKey = options.filter ?? '';
+  const enabled = options.enabled !== false;
 
   useEffect(() => {
-    if (!table || options.enabled === false) return;
+    if (!table || !enabled) return;
     const supabase = trySupabaseBrowser();
     if (!supabase) {
       // Preview mode: BroadcastChannel + storage events stand in for Supabase Realtime.
@@ -304,28 +306,25 @@ export function useRealtimeTable(
       });
     }
 
-    const channel = supabase
-      .channel(`campus360:${table}:${filterKey}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table,
-          ...(filterKey ? { filter: filterKey } : {}),
+    // `subscribeToTable` guarantees `.on('postgres_changes', ...)` runs before
+    // `.subscribe()`, gives every effect run its own topic (so a StrictMode
+    // remount or two components on one table can never collide), and releases
+    // the channel with `removeChannel` on cleanup. See lib/realtime.ts.
+    return subscribeToTable(
+      supabase,
+      table,
+      {
+        onInsert: (row) => handlerRef.current.onInsert?.(row),
+        onUpdate: (row) => handlerRef.current.onUpdate?.(row),
+        onDelete: (row) => handlerRef.current.onDelete?.(row),
+        onError: (error) => {
+          // A realtime outage must degrade to polling, never to a crash card.
+          console.warn('[campus360:realtime] subscription failed', error);
         },
-        (payload: { eventType: string; new: Row; old: Row }) => {
-          if (payload.eventType === 'INSERT') handlerRef.current.onInsert?.(payload.new);
-          if (payload.eventType === 'UPDATE') handlerRef.current.onUpdate?.(payload.new);
-          if (payload.eventType === 'DELETE') handlerRef.current.onDelete?.(payload.old);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [table, filterKey, options.enabled]);
+      },
+      { filter: filterKey || undefined, topicBase: `campus360:${table}${filterKey ? `:${filterKey}` : ''}` }
+    );
+  }, [table, filterKey, enabled]);
 }
 
 export interface MutateResult {

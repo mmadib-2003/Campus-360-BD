@@ -6,6 +6,7 @@ import bn from '../messages/bn.json';
 import { LOCALE_COOKIE, resolveLocale } from '@/i18n';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/AppShell';
+import { MotionProvider } from '@/components/motion/MotionProvider';
 import { sanitizeMessages } from '@/lib/messages';
 import { SafeSection } from '@/components/SafeSection';
 import './globals.css';
@@ -34,9 +35,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 a null embed, a JSONB array that arrived as a string -- used to take
                 the header, the nav and every other section down with it. Now the
                 module area degrades and the campus stays navigable. */}
-            <AppShell profile={null}>
-              <SafeSection label="This page">{children}</SafeSection>
-            </AppShell>
+            <MotionProvider>
+              <AppShell profile={null}>
+                <SafeSection label="This page">{children}</SafeSection>
+              </AppShell>
+            </MotionProvider>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

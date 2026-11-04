@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { DevSignInPanel } from '@/components/auth/DevSignInPanel';
+import { QuickDemoLogin } from '@/components/auth/QuickDemoLogin';
 
 function inferRole(email: string): 'student' | 'faculty' | 'alumni' | 'admin' | 'governance' {
   const local = email.split('@')[0]?.toLowerCase() ?? '';
@@ -62,10 +63,18 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto my-12 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div className="max-w-2xl mx-auto my-12 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
       <h1 className="text-xl font-bold">{t('Sign In')}</h1>
       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('University email OTP is required for every account.')}</p>
-      <form onSubmit={handleOtpSignIn} className="mt-4 space-y-4 text-sm">
+
+      {/* One-click role-based demo identities — always visible, no OTP. */}
+      <QuickDemoLogin />
+
+      <div className="mt-5 pt-5 border-t border-slate-200 dark:border-slate-800">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          {t('Or sign in with your university email')}
+        </p>
+        <form onSubmit={handleOtpSignIn} className="mt-3 max-w-md space-y-4 text-sm">
         <div>
           <label className="block font-medium mb-1" htmlFor="signin-email">
             {t('University Email')}
@@ -99,6 +108,7 @@ export default function SignInPage() {
       </div>
       {/* Password-based demo accounts — only in demo mode (NEXT_PUBLIC_AUTH_MODE === 'demo'). */}
       <DevSignInPanel />
+      </div>
     </div>
   );
 }
