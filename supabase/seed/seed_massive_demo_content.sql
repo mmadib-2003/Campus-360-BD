@@ -109,6 +109,12 @@ SELECT h.university_id,
 FROM public.university_halls h
 JOIN public.universities u ON u.id = h.university_id
 WHERE h.is_active
+  -- `university_halls` doubles as the hall-application dropdown, so it also holds
+  -- *statuses*: "Day Scholar (no hall seat applied for)" is not a building, and
+  -- importing it turned it into a hall that the dining/housing modules then
+  -- advertised (and that this seed's own localiser then pasted into event venues
+  -- and menu names). Reference data keeps the option; `halls` does not.
+  AND lower(h.name) !~ '(day scholar|no hall seat|off-campus residence|not applicable)'
   AND NOT EXISTS (SELECT 1 FROM public.halls x WHERE x.university_id = h.university_id)
 ON CONFLICT (university_id, code) DO NOTHING;
 
@@ -571,6 +577,69 @@ BEGIN
   RAISE NOTICE 'ported % rows in total', tot;
 END
 $do$;
+
+-- · repair pass, for databases ported before the day-scholar exclusion above.
+-- Every text column of every ported table is swept for the two pseudo-hall labels
+-- (English and Bengali) and rewritten to a real hall of THAT campus, falling back
+-- to a neutral campus phrase where the campus has none -- which is the honest
+-- answer, since the registry lists no residential halls for e.g. JUST. Idempotent:
+-- once the labels are gone the WHERE clause matches nothing, so a fresh run of
+-- this file costs two no-op statements. The orphaned cafeteria_menus rows are then
+-- re-pointed at their campus's hall, because hall_id is ON DELETE SET NULL and the
+-- dining module groups the day's menu under it.
+DO $hallfix$
+DECLARE
+  t text; c record; p record; q text; n bigint; tot bigint := 0;
+  pseudo text := '(day scholar|no hall seat|off-campus residence)';
+BEGIN
+  FOREACH t IN ARRAY ARRAY['posts','skill_postings','housing_listings','rideshare_offers',
+    'lost_items','marketplace_listings','club_notices','events','academic_files',
+    'mentor_profiles','alumni_profiles','career_opportunities','cafeteria_menus',
+    'sports_teams','sports_challenges','donation_campaigns','donations',
+    'donation_ledger','blood_requests','health_donors','governance_notices','reviews',
+    'complaints']
+  LOOP
+    FOR c IN
+      SELECT a.attname AS name
+      FROM pg_attribute a
+      WHERE a.attrelid = ('public.' || t)::regclass
+        AND a.attnum > 0 AND NOT a.attisdropped AND a.atttypid = 'text'::regtype
+    LOOP
+      FOR p IN SELECT DISTINCT name_en AS en, name_bn AS bn FROM public.halls
+                WHERE lower(name_en) ~ '(day scholar|no hall seat|off-campus residence)'
+      LOOP
+        q := format('UPDATE public.%1$I SET %2$I = replace(%2$I, $1, coalesce('
+          || '(SELECT h.name_en FROM public.halls h WHERE h.university_id = university_id '
+          ||   'AND lower(h.name_en) !~ $4 ORDER BY md5(h.id::text) LIMIT 1), $2)) '
+          || 'WHERE %2$I LIKE ''%%'' || $3 || ''%%''', t, c.name);
+        EXECUTE q USING p.en, 'the central student common room', p.en, pseudo;
+        GET DIAGNOSTICS n = ROW_COUNT; tot := tot + n;
+
+        q := format('UPDATE public.%1$I SET %2$I = replace(%2$I, $1, coalesce('
+          || '(SELECT h.name_bn FROM public.halls h WHERE h.university_id = university_id '
+          ||   'AND lower(h.name_en) !~ $4 ORDER BY md5(h.id::text) LIMIT 1), $2)) '
+          || 'WHERE %2$I LIKE ''%%'' || $3 || ''%%''', t, c.name);
+        EXECUTE q USING p.bn, 'কেন্দ্রীয় ছাত্র কমন রুম', p.bn, pseudo;
+        GET DIAGNOSTICS n = ROW_COUNT; tot := tot + n;
+      END LOOP;
+    END LOOP;
+  END LOOP;
+
+  DELETE FROM public.halls
+   WHERE lower(name_en) ~ '(day scholar|no hall seat|off-campus residence)';
+  GET DIAGNOSTICS n = ROW_COUNT; tot := tot + n;
+
+  UPDATE public.cafeteria_menus m
+     SET hall_id = (SELECT h.id FROM public.halls h
+                     WHERE h.university_id = m.university_id
+                     ORDER BY md5(h.id::text || 'menu') LIMIT 1)
+   WHERE m.hall_id IS NULL
+     AND EXISTS (SELECT 1 FROM public.halls h WHERE h.university_id = m.university_id);
+  GET DIAGNOSTICS n = ROW_COUNT; tot := tot + n;
+
+  RAISE NOTICE 'hall repair touched % rows', tot;
+END
+$hallfix$;
 
 -- · campus imagery for the home feed.
 -- seed.sql has pointed universities.logo_url at /logos/<code>.svg since the
