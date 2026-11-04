@@ -281,6 +281,48 @@ export const DEMO_UNIVERSITY_HALLS: DemoHall[] = DEMO_HALL_ROWS.map(([code, name
   name_bn,
   type,
 }));
+/**
+ * Fallback for /api/programs when a deployment has no database attached
+ * (preview builds). Mirrors the rows migration 0012 seeds, keyed by `code`
+ * instead of a UUID so a demo signup can be matched without the table.
+ */
+export interface DemoAcademicProgram {
+  id: string;
+  code: string;
+  name_en: string;
+  name_bn: string;
+  cycle: 'UNDERGRADUATE' | 'GRADUATE' | 'DOCTORAL' | 'DIPLOMA';
+  duration_years: number;
+  sort_order: number;
+}
+
+export const DEMO_ACADEMIC_PROGRAMS: DemoAcademicProgram[] = (
+  [
+  ['HONORS', "Bachelor's (Honors)", 'অনার্স (স্নাতক সম্মান)', 'UNDERGRADUATE', 4],
+  ['DEGREE_PASS', "Bachelor's (Degree / Pass)", 'ডিগ্রি (পাস) কোর্স', 'UNDERGRADUATE', 3],
+  ['ENGINEERING_BSC', 'B.Sc. in Engineering', 'প্রকৌশলে বিএসসি', 'UNDERGRADUATE', 4],
+  ['AGRICULTURE_BSC', 'B.Sc. in Agriculture', 'কৃষিতে বিএসসি', 'UNDERGRADUATE', 4],
+  ['ARCHITECTURE_BARCH', 'B. Architecture', 'স্থাপত্যে বি.আর্চ', 'UNDERGRADUATE', 5],
+  ['MEDICAL_MBBS', 'M.B.B.S. (Medicine)', 'এমবিবিএস (চিকিৎসা)', 'UNDERGRADUATE', 6],
+  ['DENTAL_BDS', 'B.D.S. (Dentistry)', 'বিডিএস (দন্ত)', 'UNDERGRADUATE', 5],
+  ['NURSING_BSC', 'B.Sc. in Nursing', 'নার্সিংয়ে বিএসসি', 'UNDERGRADUATE', 4],
+  ['PHARMACY', 'Pharmacy (Pharm.D / B.Pharm)', 'ফার্মেসি (ফার্মডি / বিফার্ম)', 'UNDERGRADUATE', 4],
+  ['MASTERS', "Master's / MBA / MPA", 'স্নাতকোত্তর / এমবিএ / এমপিএ', 'GRADUATE', 2],
+  ['MASTERS_FINAL', "Master's (Final Year)", 'স্নাতকোত্তর (ফাইনাল ইয়ার)', 'GRADUATE', 1],
+  ['PG_DIPLOMA', 'Post-Graduate Diploma', 'স্নাতকোত্তর ডিপ্লোমা', 'DIPLOMA', 1],
+  ['DIPLOMA', 'Diploma (Post-SSC)', 'ডিপ্লোমা (এসএসসি-োত্তর)', 'DIPLOMA', 4],
+  ['PHD', 'Ph.D. / Doctorate', 'পিএইচডি (ডক্টরেট)', 'DOCTORAL', 4],
+] as Array<[string, string, string, DemoAcademicProgram['cycle'], number]>
+).map(([code, name_en, name_bn, cycle, duration_years], index) => ({
+  id: `program-${code.toLowerCase()}`,
+  code,
+  name_en,
+  name_bn,
+  cycle,
+  duration_years,
+  sort_order: (index + 1) * 10,
+}));
+
 export const DEFAULT_DEMO_SESSION: DemoSession = {
   universityId: DEMO_UNIVERSITY_ID,
   role: 'student',

@@ -211,6 +211,9 @@ async function handleVerifyOtp(req: NextRequest) {
       university_id: challenge.university_id,
       department_id: payload.departmentId || null,
       hall_id: payload.hallId || null,
+      // Migration 0012. Nullable by design: a signup started before the program
+      // select existed — or one whose registry read failed — must still verify.
+      program_id: payload.programId || null,
       email,
       full_name: payload.fullName || email.split('@')[0],
       student_id: payload.studentId || 'PENDING',
