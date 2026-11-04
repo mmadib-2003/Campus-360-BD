@@ -18,6 +18,8 @@ import {
   useToast,
 } from '@/components/modules/ui';
 import { useSession } from '@/lib/modules/client';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 import { isSupabaseConfigured, trySupabaseBrowser } from '@/lib/supabase-browser';
 
 const CATEGORIES = [
@@ -34,6 +36,7 @@ const CATEGORIES = [
 
 export default function ArchivePage() {
   const session = useSession();
+  const { t } = useUi();
   const [files, setFiles] = useState<Array<Record<string, any>>>([]);
   const [courseCode, setCourseCode] = useState('');
   const [category, setCategory] = useState('ALL');
@@ -104,7 +107,7 @@ export default function ArchivePage() {
     <div className="space-y-6">
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold">📚 Academic Archive / একাডেমিক আর্কাইভ</h1>
+          <h1 className="text-xl font-bold">📚 {t('Academic Archive')}</h1>
           <p className="text-xs text-slate-400">
             50 MB max per file • MIME-sniffed • ClamAV virus-scanned • 5-minute signed download URLs.
           </p>
@@ -160,6 +163,7 @@ export default function ArchivePage() {
                 </span>
                 <div className="flex items-center gap-1.5">
                   <Badge tone={statusTone(file.scan_status)}>{String(file.scan_status ?? 'PENDING')}</Badge>
+                  <CampusBadge universityId={file.university_id} />
                   <span className="text-slate-400">v{file.current_version ?? 1}</span>
                 </div>
               </div>

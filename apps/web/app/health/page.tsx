@@ -23,11 +23,14 @@ import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession,
 import { isSupabaseConfigured } from '@/lib/supabase-browser';
 import { readDemoRows, demoInsertRow } from '@/lib/modules/client';
 import { formatDateTime, timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export default function HealthPage() {
   const session = useSession();
+  const { t } = useUi();
   const [tab, setTab] = React.useState<'blood' | 'donors' | 'mental'>('blood');
 
   // Deep links from notifications: /health?tab=donors&group=O%2B
@@ -271,6 +274,7 @@ export default function HealthPage() {
                   </span>
                   <Badge tone={statusTone(request.urgency)}>{String(request.urgency)}</Badge>
                   <Badge tone={statusTone(request.status)}>{String(request.status)}</Badge>
+                  <CampusBadge universityId={request.university_id} />
                   <span className="text-[11px] text-slate-400 ml-auto">🕒 {timeAgo(request.created_at)}</span>
                 </div>
                 <h3 className="font-bold text-sm">
@@ -282,7 +286,7 @@ export default function HealthPage() {
                 <div className="text-[11px] text-slate-400">Needed by {formatDateTime(request.needed_by)}</div>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button size="sm" onClick={() => setRespondTarget(request)}>
-                    I can donate
+                    {t('Contact')}
                   </Button>
                   <a
                     href={`tel:${request.contact_phone}`}

@@ -5,6 +5,7 @@ import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supa
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { demoNextStep, verifyDemoChallenge } from '@/lib/demo-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,21 @@ export async function POST(req: NextRequest) {
 
   if (!email || !/^\d{6}$/.test(otp)) {
     return apiError('INVALID_INPUT', 'A valid email and 6-digit OTP are required.', 'সঠিক ইমেইল এবং ৬-সংখ্যার ওটিপি প্রয়োজন।', 400);
+  }
+
+  if (!isSupabaseServerConfigured()) {
+    const demo = verifyDemoChallenge(email, otp);
+    if (!demo.ok) {
+      return apiError('INVALID_OTP', demo.error, demo.errorBn, demo.status);
+    }
+    return apiSuccess({
+      verified: true,
+      demo: true,
+      role: demo.session.role,
+      universityId: demo.session.universityId,
+      nextStep: demoNextStep(demo.session.role),
+      trustLevel: 'EMAIL_VERIFIED',
+    });
   }
 
   const admin = createSupabaseAdminClient();
@@ -120,10 +136,17 @@ export async function POST(req: NextRequest) {
       trust_level: 'EMAIL_VERIFIED',
     });
 
+    const requestedRole = String(payload.role ?? 'student').toLowerCase();
+    const roleMap: Record<string, string> = {
+      student: 'STUDENT',
+      faculty: 'FACULTY',
+      alumni: 'ALUMNI',
+      admin: 'UNIVERSITY_ADMIN',
+    };
     await admin.from('user_roles').insert({
       user_id: userId,
       university_id: challenge.university_id,
-      role: 'STUDENT',
+      role: roleMap[requestedRole] ?? 'STUDENT',
     });
   }
 
@@ -150,11 +173,13 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const requestedRole = String(payload.role ?? 'student').toLowerCase();
   return apiSuccess({
     verified: true,
     userId,
     universityId: challenge.university_id,
+    role: requestedRole,
     trustLevel: 'EMAIL_VERIFIED',
-    nextStep: existingProfile ? '/' : '/onboarding',
+    nextStep: existingProfile ? demoNextStep(requestedRole as 'student' | 'faculty' | 'alumni' | 'admin') : '/onboarding',
   });
 }

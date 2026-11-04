@@ -21,11 +21,14 @@ import {
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession, Row } from '@/lib/modules/client';
 import { timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 const CATEGORIES = ['ID Card', 'Bag', 'Phone', 'Laptop', 'Keys', 'Wallet', 'Books', 'Cycle', 'Gadget', 'Other'];
 
 export default function LostFoundPage() {
   const session = useSession();
+  const { t } = useUi();
   const [kind, setKind] = React.useState<'LOST' | 'FOUND'>('LOST');
   const [category, setCategory] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -80,9 +83,9 @@ export default function LostFoundPage() {
       <div className="space-y-6">
         <ModuleHeader
           icon="🔍"
-          title="Lost & Found"
-          titleBn="হারানো ও প্রাপ্তি"
-          blurb="Post lost or found items and get instant match notifications when keywords line up."
+          title={t('Lost & Found')}
+          titleBn={t('Lost & Found')}
+          blurb={t('Report lost items and reunite them with verified campus finders.')}
         />
         <SignInPrompt moduleName="Lost & Found" />
       </div>
@@ -95,7 +98,7 @@ export default function LostFoundPage() {
         icon="🔍"
         title="Lost & Found"
         titleBn="হারানো ও প্রাপ্তি"
-        blurb="A campus notice board for lost ID cards, keys and gadgets. When a found item is posted, students who reported a matching lost item are alerted instantly."
+        blurb={t('Report lost items and reunite them with verified campus finders.')}
         live
         demo={items.demo}
       >
@@ -144,7 +147,7 @@ export default function LostFoundPage() {
                   : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
               }`}
             >
-              {value === 'LOST' ? '😟 I lost something' : '🙌 I found something'}
+              {value === 'LOST' ? t('Lost') + ' 😟' : t('Found') + ' 🙌'}
             </button>
           ))}
         </div>
@@ -157,9 +160,9 @@ export default function LostFoundPage() {
           ) : items.data.length === 0 ? (
             <EmptyState
               icon="🔍"
-              title={`No ${kind.toLowerCase()} items reported`}
-              description="Post what you lost or found — matching students are notified instantly."
-              action={<Button onClick={() => setPostOpen(true)}>Post an item</Button>}
+              title={`${t('No listings found')}`}
+              description={t('Report lost items and reunite them with verified campus finders.')}
+              action={<Button onClick={() => setPostOpen(true)}>{t('New listing')}</Button>}
             />
           ) : (
             items.data.map((item) => (
@@ -167,6 +170,7 @@ export default function LostFoundPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={String(item.kind) === 'LOST' ? 'amber' : 'emerald'}>{String(item.kind)}</Badge>
                   <Badge tone="slate">{String(item.category)}</Badge>
+                  <CampusBadge universityId={item.university_id} />
                   <Badge tone={statusTone(item.status)}>{String(item.status)}</Badge>
                   <span className="text-[11px] text-slate-400 ml-auto">🕒 {timeAgo(item.created_at)}</span>
                 </div>
@@ -196,7 +200,7 @@ export default function LostFoundPage() {
                     variant="ghost"
                     onClick={() => {
                       setSearch(String(item.title).split(' ').slice(0, 2).join(' '));
-                      toast.show('Searching for similar items…');
+                      toast.show(t('Lost & Found'));
                     }}
                   >
                     Find similar
@@ -209,7 +213,7 @@ export default function LostFoundPage() {
 
         <div className="space-y-4">
           <Card className="p-4 space-y-2">
-            <SectionHeader icon="✨" title="Match engine" subtitle="Keyword + category scoring" />
+            <SectionHeader icon="✨" title={t('Lost & Found')} subtitle={t('Lost & Found')} />
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Every new post is tokenised against open reports of the opposite type. A match needs two shared keywords
               or one shared keyword plus the same category — then both students get a notification.
@@ -239,7 +243,7 @@ export default function LostFoundPage() {
         </div>
       </div>
 
-      <Modal open={postOpen} onClose={() => setPostOpen(false)} title="Post a lost or found item" wide>
+      <Modal open={postOpen} onClose={() => setPostOpen(false)} title={t('New listing')} wide>
         <ModuleForm
           moduleKey="lost-found"
           omit={['status']}

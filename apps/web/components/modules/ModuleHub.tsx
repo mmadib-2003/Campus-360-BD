@@ -7,6 +7,7 @@ import { MODULE_META } from '@/lib/modules/labels';
 import dynamic from 'next/dynamic';
 import { useSession } from '@/lib/modules/client';
 import { Badge, Card, SkeletonList } from './ui';
+import { useUi } from '@/lib/i18n-client';
 
 // Code-split embeds keep the campus feed's first-load JS unchanged.
 const MarketplacePreview = dynamic(() => import('./previews/MarketplacePreview'), {
@@ -39,21 +40,22 @@ const ORDER = [
  */
 export function ModuleHub() {
   const session = useSession();
+  const { locale, t } = useUi();
 
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-bold">Campus360 Interactive Modules</h2>
+          <h2 className="text-lg font-bold">{t('Campus360 Interactive Modules')}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Twelve real-time modules — every status change, RSVP, ticket and match updates live via Supabase Realtime.
+            {t('Twelve real-time modules — every status change, RSVP, ticket and match updates live via Supabase Realtime.')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Badge tone="emerald">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> LIVE
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> {t('LIVE')}
           </Badge>
-          {session.demo && <Badge tone="amber">Preview data</Badge>}
+          {session.demo && <Badge tone="amber">{t('Preview data')}</Badge>}
           {session.profile?.universities?.code && <Badge tone="slate">{session.profile.universities.code}</Badge>}
         </div>
       </div>
@@ -74,10 +76,9 @@ export function ModuleHub() {
                 </span>
                 <div className="min-w-0">
                   <div className="font-semibold text-sm group-hover:text-emerald-500 transition truncate">
-                    {meta.title}
+                    {locale === 'bn' ? meta.titleBn : meta.title}
                   </div>
-                  <div className="text-[11px] text-slate-400 truncate">{meta.titleBn}</div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{meta.blurb}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{locale === 'bn' ? meta.blurbBn : meta.blurb}</p>
                 </div>
               </div>
             </Link>
@@ -88,11 +89,11 @@ export function ModuleHub() {
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="font-bold text-sm">🛍️ Fresh on the marketplace</h3>
-            <p className="text-[11px] text-slate-400">Live listings from your university — updates without refresh.</p>
+            <h3 className="font-bold text-sm">🛍️ {t('Marketplace')}</h3>
+            <p className="text-[11px] text-slate-400">{t('Buy, sell and rent verified student items with monitored campus handover points.')}</p>
           </div>
           <Link href="/marketplace" className="text-[11px] font-semibold text-emerald-500">
-            Open marketplace →
+            {t('Marketplace')} →
           </Link>
         </div>
         <MarketplacePreview />
@@ -101,11 +102,11 @@ export function ModuleHub() {
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="font-bold text-sm">🩸 Smart Blood Bank — open requests</h3>
-            <p className="text-[11px] text-slate-400">Broadcasts reach matching donors instantly.</p>
+            <h3 className="font-bold text-sm">🩸 {t('Blood & Health Network')}</h3>
+            <p className="text-[11px] text-slate-400">{t('Blood requests, donor matching and confidential counselling.')}</p>
           </div>
           <Link href="/health?tab=donors" className="text-[11px] font-semibold text-emerald-500">
-            Open blood bank →
+            {t('Blood & Health Network')} →
           </Link>
         </div>
         <HealthPreview />

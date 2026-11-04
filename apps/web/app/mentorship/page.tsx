@@ -22,10 +22,13 @@ import {
 } from '@/components/modules/ui';
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 import { formatDateTime, timeAgo } from '@/lib/utils';
 
 export default function MentorshipPage() {
   const session = useSession();
+  const { t } = useUi();
   const [offerOpen, setOfferOpen] = React.useState(false);
   const [slotOpen, setSlotOpen] = React.useState(false);
   const [bookingTarget, setBookingTarget] = React.useState<Row | null>(null);
@@ -209,6 +212,7 @@ export default function MentorshipPage() {
                   <Badge tone={mentor.is_accepting ? 'emerald' : 'slate'}>
                     {mentor.is_accepting ? 'Accepting' : 'Paused'}
                   </Badge>
+                  <CampusBadge universityId={mentor.university_id} />
                 </div>
                 <div className="text-slate-400">{mentor.headline}</div>
                 <div className="flex flex-wrap gap-1">
