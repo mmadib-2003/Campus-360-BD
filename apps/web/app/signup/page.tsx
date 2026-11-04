@@ -43,6 +43,17 @@ async function fetchRegistryOnce<T>(
     if (payload?.success && Array.isArray(payload.data)) {
       return { data: payload.data as T[], error: null, retryable: false };
     }
+    if (!payload?.error) {
+      // No envelope at all: a 5xx whose body was not our JSON, i.e. the handler
+      // threw before it could answer. `HTTP 500` alone told nobody anything, so
+      // point at the probe that names the variable, and treat it as retryable
+      // (a cold start can genuinely produce one of these).
+      const reason =
+        response.status >= 500
+          ? `The server could not answer this request (HTTP ${response.status}). GET /api/health/registry names the exact cause.`
+          : `HTTP ${response.status}`;
+      return { data: [], error: reason, retryable: response.status >= 500 };
+    }
     const err = payload?.error;
     const message = err
       ? (locale === 'bn' ? err.message_bn || err.message_en : err.message_en || err.message_bn)

@@ -1,6 +1,6 @@
 // apps/web/app/api/universities/route.ts
 import { NextRequest } from 'next/server';
-import { createSupabaseRouteClient } from '@/lib/supabase-server';
+import { registryGate } from '@/lib/registry-gate';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { REGISTRY_NO_STORE, registryFailure, registryRead } from '@/lib/registry-cache';
@@ -15,7 +15,12 @@ export async function GET(req: NextRequest) {
     return apiSuccess(demoUniversitiesPayload(), 200, undefined, REGISTRY_NO_STORE);
   }
 
-  const supabase = createSupabaseRouteClient();
+  // The gate is what keeps a broken `NEXT_PUBLIC_SUPABASE_URL` from escaping as
+  // an unhandled HTML 500 (which the form can only render as `HTTP 500`): the
+  // config check runs before the client is built, and construction is guarded.
+  const gate = registryGate('universities', 'বিশ্ববিদ্যালয়ের তালিকা লোড করা যায়নি।');
+  if (!gate.ok) return gate.response;
+  const supabase = gate.client;
   const category = req.nextUrl.searchParams.get('category');
   const q = req.nextUrl.searchParams.get('q')?.trim();
 
@@ -57,7 +62,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const supabase = createSupabaseRouteClient();
+  // Same gate as the read path: an admin insert on a runtime that cannot even
+  // build a client should answer 503 with the reason, not an HTML 500.
+  const writeGate = registryGate('universities.create', 'বিশ্ববিদ্যালয়টি যোগ করা যায়নি।');
+  if (!writeGate.ok) return writeGate.response;
+  const supabase = writeGate.client;
   const body = await req.json();
   const { data, error } = await supabase
     .from('universities')
