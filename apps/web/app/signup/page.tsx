@@ -132,6 +132,7 @@ export default function SignUpPage() {
             hallId: role === 'student' ? hallId : '',
             demoCode: payload.data?.demoCode ?? null,
             demo: Boolean(payload.data?.demo),
+            expiresAt: payload.data?.expiresAt ?? null,
           })
         );
       }

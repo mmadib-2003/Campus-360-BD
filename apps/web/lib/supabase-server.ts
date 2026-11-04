@@ -1,4 +1,16 @@
 // apps/web/lib/supabase-server.ts
+// ============================================================================
+// Supabase clients for the server tier.
+//
+//   • createSupabaseRouteClient()  — anon key + request cookies. Owns the
+//     session (sign-in, sign-out, the magiclink exchange in /api/auth/verify-otp).
+//   • createSupabaseAdminClient()  — service role, RLS-bypassing. This is the
+//     client the OTP flow persists through (lib/otp-store.ts): a challenge row
+//     has to be written and read *before* the visitor has any session, and the
+//     stored digest must never be reachable from the browser-side anon client.
+//
+// Keep the admin client out of any module imported by a client component.
+// ============================================================================
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
