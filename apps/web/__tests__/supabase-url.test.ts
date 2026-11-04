@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   describeRegistryError,
   describeSupabaseFault,
+  describeSupabaseKey,
   resolveSupabaseUrl,
 } from '@/lib/supabase-url';
 import { registryMessage, registryRead } from '@/lib/registry-cache';
@@ -367,7 +368,11 @@ describe('health probe', () => {
   });
 
   it('reports counts and a host, and nothing secret', () => {
-    expect(src).not.toContain('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    // The key values may only be handed to describeSupabaseKey (shape check),
+    // never stored in the body: no assignment, no interpolation.
+    expect(src).toMatch(/describeSupabaseKey\(process\.env\.NEXT_PUBLIC_SUPABASE_ANON_KEY/);
+    expect(src).not.toMatch(/:\s*process\.env\.NEXT_PUBLIC_SUPABASE_ANON_KEY/);
+    expect(src).not.toMatch(/\$\{process\.env\.(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)/);
     // The service-role variable may only be tested for presence, never read out.
     expect(src).toMatch(/Boolean\(process\.env\.SUPABASE_SERVICE_ROLE_KEY\)/);
     expect(src).not.toMatch(/=\s*process\.env\.SUPABASE_SERVICE_ROLE_KEY/);
@@ -411,5 +416,73 @@ describe('what the outage was NOT', () => {
     expect(src).toContain("err?.code === 'FETCH_FAILED'");
     expect(src).toContain('const second = await fetchRegistryOnce');
     expect(src.match(/await fetchRegistryOnce/g)).toHaveLength(2);
+  });
+});
+
+describe('describeSupabaseKey — shape without exposure', () => {
+  const PROD_REF = 'lxdovryeidayxfsqkwbg';
+  const legacyJwt = (payload: Record<string, unknown>) =>
+    [
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+      Buffer.from(JSON.stringify(payload)).toString('base64url'),
+      Buffer.from('signature-not-checked-here').toString('base64url'),
+    ].join('.');
+
+  it('accepts a legacy anon key whose ref matches the configured project', () => {
+    const report = describeSupabaseKey(legacyJwt({ role: 'anon', iss: 'supabase', ref: PROD_REF }), {
+      role: 'anon',
+      projectRef: PROD_REF,
+    });
+    expect(report).toMatchObject({ present: true, shape: 'legacy-jwt', role: 'anon', ref: PROD_REF, refMatchesProject: true });
+    expect(report.problem).toBeNull();
+  });
+
+  it('accepts the newer publishable/secret formats on their prefix', () => {
+    expect(describeSupabaseKey('sb_publishable_AbCdEf_1234567890', { role: 'anon' }).shape).toBe('publishable');
+    expect(describeSupabaseKey('sb_publishable_AbCdEf_1234567890', { role: 'anon' }).problem).toBeNull();
+    expect(describeSupabaseKey('sb_secret_Zx9_0aBcDeFgHiJk', { role: 'service_role' }).shape).toBe('secret-format');
+  });
+
+  it('catches the .env.example placeholder, which is truthy and therefore previously invisible', () => {
+    const report = describeSupabaseKey('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example-anon', { role: 'anon' });
+    expect(report.shape).toBe('placeholder');
+    expect(report.problem).toContain('placeholder');
+    expect(report.present).toBe(true);
+  });
+
+  it('catches a key minted for a different project', () => {
+    const report = describeSupabaseKey(legacyJwt({ role: 'anon', ref: 'abcdefghijklmnopqrstuvwxyz' }), {
+      role: 'anon',
+      projectRef: PROD_REF,
+    });
+    expect(report.refMatchesProject).toBe(false);
+    expect(report.problem).toContain('a key from a different project');
+  });
+
+  it('catches the two roles being swapped', () => {
+    const report = describeSupabaseKey(legacyJwt({ role: 'anon', ref: PROD_REF }), { role: 'service_role', projectRef: PROD_REF });
+    expect(report.problem).toContain('service_role');
+    expect(report.problem).toContain('not interchangeable');
+  });
+
+  it('reports a missing key as missing, and garbage as malformed', () => {
+    expect(describeSupabaseKey(undefined, { role: 'anon' })).toMatchObject({ present: false, shape: 'missing' });
+    expect(describeSupabaseKey('not-a-key', { role: 'anon' }).shape).toBe('malformed');
+  });
+
+  it('never echoes the secret through any field of the report', () => {
+    const secret = legacyJwt({ role: 'service_role', ref: 'other-project', extra: 'eyJsup3rSecretValue' });
+    for (const report of [
+      describeSupabaseKey(secret, { role: 'anon', projectRef: 'lxdovryeidayxfsqkwbg' }),
+      describeSupabaseKey('x'.repeat(40), { role: 'service_role' }),
+      describeSupabaseKey('   ', { role: 'anon' }),
+    ]) {
+      for (const [field, value] of Object.entries(report)) {
+        if (typeof value === 'string') {
+          expect(value, `field ${field} leaked the key`).not.toContain(secret);
+          expect(value, `field ${field} leaked a token fragment`).not.toContain('eyJsup3rSecretValue');
+        }
+      }
+    }
   });
 });
