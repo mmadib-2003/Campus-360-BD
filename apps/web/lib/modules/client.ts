@@ -186,7 +186,16 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
   const [tick, setTick] = useState(0);
 
   const filtersKey = JSON.stringify(options.filters ?? {});
-  const enabled = options.enabled !== false;
+  // `enabled: false` is a hard stop, so that a collapsed tab can still say "do not
+  // fetch". The old auth gate lived in this option -- pages passed
+  // `enabled: session.authenticated`, which is how a signed-out visitor ended up with
+  // no request at all -- and the publicRead modules have had that gate removed at the
+  // call sites. The clause below is what keeps it removed: the session is no longer a
+  // reason to skip a list the database is willing to answer. __tests__/anon-listing-reads
+  // .test.ts fails if a publicRead page puts the gate back.
+  const enabled =
+    options.enabled !== false &&
+    (session.authenticated || session.demo || spec?.publicRead === true);
 
   useEffect(() => {
     if (!spec || !enabled || session.loading) return;

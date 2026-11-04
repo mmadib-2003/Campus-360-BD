@@ -51,7 +51,6 @@ export default function SkillsPage() {
     filters: { type, availability },
     search,
     limit: 60,
-    enabled: !!session.authenticated,
   });
   const alerts = useRealtimeModuleList('skill-alerts', { limit: 5, enabled: !!session.authenticated });
   const { create } = useModuleMutation('skills');

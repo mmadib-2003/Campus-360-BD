@@ -44,7 +44,7 @@ export default function TrustPage() {
   const toast = useToast();
 
   const disputes = useRealtimeModuleList('disputes', { limit: 40, enabled: !!session.authenticated });
-  const reviews = useRealtimeModuleList('reviews', { limit: 30, enabled: !!session.authenticated });
+  const reviews = useRealtimeModuleList('reviews', { limit: 30 });
   const disputeMutation = useModuleMutation('disputes');
 
   const trustLevel = String(session.profile?.trust_level ?? 'UNVERIFIED');

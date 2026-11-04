@@ -1,8 +1,9 @@
 // apps/web/app/api/modules/[module]/route.ts
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { requireAuth } from '@/lib/request-context';
-import { getModule, ModuleSpec } from '@/lib/modules/registry';
+import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
+import { createSupabaseRouteClient } from '@/lib/supabase-server';
+import { getModule, ModuleSpec, resolveListingAccess } from '@/lib/modules/registry';
 import { coerceField, randomCode } from '@/lib/modules/coerce';
 import { clampNumber } from '@/lib/utils';
 import { runModuleSideEffects } from '@/lib/modules/side-effects';
@@ -17,17 +18,31 @@ export async function GET(req: NextRequest, { params }: { params: { module: stri
     return apiError('UNKNOWN_MODULE', 'Unknown module.', 'অজানা মডিউল।', 404);
   }
 
+  // requireAuth() stays the entry point even for public modules: it is what answers
+  // 503 when the server has no database credentials (a silent empty list would look
+  // like an empty campus) and it is where a real session is detected. What changes is
+  // what happens when there is no session -- publicRead modules continue as `anon`.
   const { auth, response } = await requireAuth();
-  if (!auth) return response!;
+  const access = resolveListingAccess(spec, {
+    hasSession: Boolean(auth),
+    serverConfigured: isSupabaseServerConfigured(),
+  });
+  if (access === 'deny') return response!;
 
   const sp = req.nextUrl.searchParams;
   const limit = clampNumber(sp.get('limit'), 50, 1, MAX_LIMIT);
   const offset = clampNumber(sp.get('offset'), 0, 0, 100000);
 
-  let query = auth.supabase
-    .from(spec.table)
-    .select(spec.select ?? '*', { count: 'exact' })
-    .eq('university_id', auth.profile.university_id);
+  // An anonymous read is not tenant-scoped: there is no profile to scope it to, and
+  // every row carries university_id plus a CampusBadge, so the campus travels with the
+  // listing instead of filtering it. RLS is what bounds this request -- the policy in
+  // 0013 limits it to currently-listed rows, and the column grants drop contact
+  // details, which is why `publicSelect` exists.
+  const supabase = auth ? auth.supabase : createSupabaseRouteClient();
+  const selection =
+    access === 'public' ? (spec.publicSelect ?? spec.select) : (spec.select ?? '*');
+  let query = supabase.from(spec.table).select(selection ?? '*', { count: 'exact' });
+  if (auth) query = query.eq('university_id', auth.profile.university_id);
 
   if (spec.softDelete) query = query.is('deleted_at', null);
 
@@ -43,7 +58,7 @@ export async function GET(req: NextRequest, { params }: { params: { module: stri
     query = query.or(spec.searchColumns.map((c) => `${c}.ilike.%${search.replace(/[%,]/g, '')}%`).join(','));
   }
 
-  if (spec.ownerColumn && sp.get('mine') === 'true') {
+  if (auth && spec.ownerColumn && sp.get('mine') === 'true') {
     query = query.eq(spec.ownerColumn, auth.user.id);
   }
 
