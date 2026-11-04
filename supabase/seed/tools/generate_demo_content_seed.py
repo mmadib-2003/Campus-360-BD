@@ -1401,7 +1401,14 @@ $$;
 
 
 def finish(out_path, stmts, ids, G):
-    body = ',\n\n'.join(stmts)
+    body = '\n\n'.join(stmts)
+    # A DO block separates statements with ';'. A stray comma at a statement
+    # boundary (the classic "',\n'.join()' mistake) is a silent syntax error at
+    # run time, so fail here instead — but only for that shape: multi-line VALUES
+    # rows legitimately end with "),".
+    assert not any(line.strip().startswith(',') for line in body.splitlines()), \
+        'generator emitted a comma at a statement boundary — a DO block needs ; separators'
+    assert ';$' not in body and ',\n\n' not in body, 'statement join separator must be blank lines'
     out_path.write_text(HEADER + body + FOOTER)
     print(f'wrote {out_path} — {len(stmts)} statements, {len(body.splitlines())} lines')
 

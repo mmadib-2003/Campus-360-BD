@@ -89,7 +89,7 @@ BEGIN
         ('e2d9dfc5-d571-50fb-bef5-a34ec6124c92'::uuid, 'demo.nayeem.alumni@campus360.test', 'Nayeem Islam', U&'\09A8\09BE\09AF\09BC\09C7\09AE \0987\09B8\09B2\09BE\09AE', 'RU', NULL, 'ECON', 'DEGREE_PASS', '130401120'),
         ('d164a021-ac97-5c38-bc1e-f4f1e1231410'::uuid, 'demo.rumana.alumni@campus360.test', 'Rumana Sultana', U&'\09B0\09C1\09AE\09BE\09A8\09BE \09B8\09C1\09B2\09A4\09BE\09A8\09BE', 'CU', NULL, 'FIN', 'MASTERS', '160402077'),
         ('581dc94f-1baa-573e-a813-5917c405e2e0'::uuid, 'demo.kamrul.alumni@campus360.test', 'Kamrul Ahsan', U&'\0995\09BE\09AE\09B0\09C1\09B2 \0986\09B9\09B8\09BE\09A8', 'SUST', NULL, 'IPE', 'ENGINEERING_BSC', '120201044'),
-        ('42700fe0-a51f-52ee-a9bc-db64564b2fe1'::uuid, 'demo.sharmin.alumni@campus360.test', 'Sharmin Nahar', U&'\09B6\09BE\09B0\09AE\09BF\09A8 \09A8\09BE\09B9\09BE\09B0', 'JUST', NULL, 'BBA', 'HONORS', '170401009');,
+        ('42700fe0-a51f-52ee-a9bc-db64564b2fe1'::uuid, 'demo.sharmin.alumni@campus360.test', 'Sharmin Nahar', U&'\09B6\09BE\09B0\09AE\09BF\09A8 \09A8\09BE\09B9\09BE\09B0', 'JUST', NULL, 'BBA', 'HONORS', '170401009');
 
   INSERT INTO auth.users (
       instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -101,7 +101,7 @@ BEGIN
     jsonb_build_object('full_name', p.full_name_en, 'onboarded', true, 'demo_seed', 'seed_demo_content.sql'),
     now(), now(), false, false
   FROM tmp_person p
-  ON CONFLICT (id) DO NOTHING;,
+  ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO public.profiles (
       id, university_id, department_id, program_id, hall_id, email, full_name, student_id,
@@ -125,12 +125,12 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET university_id = EXCLUDED.university_id,
     department_id = EXCLUDED.department_id, program_id = EXCLUDED.program_id,
     hall_id = EXCLUDED.hall_id, full_name = EXCLUDED.full_name,
-    trust_level = EXCLUDED.trust_level, onboarding_completed = true, updated_at = now();,
+    trust_level = EXCLUDED.trust_level, onboarding_completed = true, updated_at = now();
 
   INSERT INTO public.user_roles (user_id, university_id, role)
   SELECT p.id, u.id, 'STUDENT'::public.app_role
   FROM tmp_person p JOIN public.universities u ON u.code = p.campus_code
-  ON CONFLICT DO NOTHING;,
+  ON CONFLICT DO NOTHING;
 
   -- · posts (12 rows)
   INSERT INTO public.posts (id, university_id, author_id, module_tag, title, body, media_urls, is_pinned, likes_count, comments_count, created_at, updated_at)
@@ -151,7 +151,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, tag, title, body, pinned, likes, comments, ago)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET module_tag = EXCLUDED.module_tag, title = EXCLUDED.title, body = EXCLUDED.body, media_urls = EXCLUDED.media_urls, is_pinned = EXCLUDED.is_pinned, likes_count = EXCLUDED.likes_count, comments_count = EXCLUDED.comments_count, updated_at = EXCLUDED.updated_at;,
+  ON CONFLICT (id) DO UPDATE SET module_tag = EXCLUDED.module_tag, title = EXCLUDED.title, body = EXCLUDED.body, media_urls = EXCLUDED.media_urls, is_pinned = EXCLUDED.is_pinned, likes_count = EXCLUDED.likes_count, comments_count = EXCLUDED.comments_count, updated_at = EXCLUDED.updated_at;
 
   -- · events (6 rows)
   INSERT INTO public.events (id, university_id, organizer_id, host_organization, title_en, title_bn, description_en, description_bn, category, is_public, starts_at, ends_at, venue_name, formatted_address, text_directions_en, text_directions_bn, lat, lng, place_id, geofence_radius_m, capacity, rsvp_required, rsvp_limit, ticket_price_bdt, live_override, created_at)
@@ -166,7 +166,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, org, title_en, title_bn, desc_en, desc_bn, cat, starts, ends, venue, addr, dirs_en, dirs_bn, lat, lng, geo, cap)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET host_organization = EXCLUDED.host_organization, title_en = EXCLUDED.title_en, title_bn = EXCLUDED.title_bn, description_en = EXCLUDED.description_en, description_bn = EXCLUDED.description_bn, category = EXCLUDED.category, is_public = EXCLUDED.is_public, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, venue_name = EXCLUDED.venue_name, formatted_address = EXCLUDED.formatted_address, text_directions_en = EXCLUDED.text_directions_en, text_directions_bn = EXCLUDED.text_directions_bn, lat = EXCLUDED.lat, lng = EXCLUDED.lng, place_id = EXCLUDED.place_id, geofence_radius_m = EXCLUDED.geofence_radius_m, capacity = EXCLUDED.capacity, rsvp_required = EXCLUDED.rsvp_required, rsvp_limit = EXCLUDED.rsvp_limit, ticket_price_bdt = EXCLUDED.ticket_price_bdt, live_override = EXCLUDED.live_override;,
+  ON CONFLICT (id) DO UPDATE SET host_organization = EXCLUDED.host_organization, title_en = EXCLUDED.title_en, title_bn = EXCLUDED.title_bn, description_en = EXCLUDED.description_en, description_bn = EXCLUDED.description_bn, category = EXCLUDED.category, is_public = EXCLUDED.is_public, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, venue_name = EXCLUDED.venue_name, formatted_address = EXCLUDED.formatted_address, text_directions_en = EXCLUDED.text_directions_en, text_directions_bn = EXCLUDED.text_directions_bn, lat = EXCLUDED.lat, lng = EXCLUDED.lng, place_id = EXCLUDED.place_id, geofence_radius_m = EXCLUDED.geofence_radius_m, capacity = EXCLUDED.capacity, rsvp_required = EXCLUDED.rsvp_required, rsvp_limit = EXCLUDED.rsvp_limit, ticket_price_bdt = EXCLUDED.ticket_price_bdt, live_override = EXCLUDED.live_override;
 
   -- · event_rsvps (15 rows)
   INSERT INTO public.event_rsvps (id, university_id, user_id, event_id, status, reminder_24h_sent, reminder_1h_sent)
@@ -190,7 +190,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, event_id, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status;
 
   -- · health_donors (8 rows)
   INSERT INTO public.health_donors (id, university_id, user_id, blood_group, last_donated_at, is_available, contact_phone, verified_donations_count)
@@ -207,7 +207,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, grp, last, avail, phone, cnt)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET blood_group = EXCLUDED.blood_group, last_donated_at = EXCLUDED.last_donated_at, is_available = EXCLUDED.is_available, contact_phone = EXCLUDED.contact_phone, verified_donations_count = EXCLUDED.verified_donations_count;,
+  ON CONFLICT (id) DO UPDATE SET blood_group = EXCLUDED.blood_group, last_donated_at = EXCLUDED.last_donated_at, is_available = EXCLUDED.is_available, contact_phone = EXCLUDED.contact_phone, verified_donations_count = EXCLUDED.verified_donations_count;
 
   -- · blood_requests (6 rows)
   INSERT INTO public.blood_requests (id, university_id, requester_id, patient_name, blood_group, bags_needed, hospital_name, hospital_address, contact_phone, urgency, needed_by, status, created_at, updated_at)
@@ -222,7 +222,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, patient, grp, bags, hospital, hosp_addr, phone, urgency, due, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET patient_name = EXCLUDED.patient_name, blood_group = EXCLUDED.blood_group, bags_needed = EXCLUDED.bags_needed, hospital_name = EXCLUDED.hospital_name, hospital_address = EXCLUDED.hospital_address, contact_phone = EXCLUDED.contact_phone, urgency = EXCLUDED.urgency, needed_by = EXCLUDED.needed_by, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at;,
+  ON CONFLICT (id) DO UPDATE SET patient_name = EXCLUDED.patient_name, blood_group = EXCLUDED.blood_group, bags_needed = EXCLUDED.bags_needed, hospital_name = EXCLUDED.hospital_name, hospital_address = EXCLUDED.hospital_address, contact_phone = EXCLUDED.contact_phone, urgency = EXCLUDED.urgency, needed_by = EXCLUDED.needed_by, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at;
 
   -- · blood_request_responses (8 rows)
   INSERT INTO public.blood_request_responses (id, university_id, user_id, request_id, donor_id, message, status)
@@ -239,7 +239,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, request_id, donor_id, status, message)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET message = EXCLUDED.message, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET message = EXCLUDED.message, status = EXCLUDED.status;
 
   -- · academic_files (12 rows)
   INSERT INTO public.academic_files (id, university_id, uploader_id, department_id, course_code, course_title, semester, academic_year, category, language, visibility, requires_same_university_verification, license_attribution, tags, current_version, storage_path, original_filename, mime_type, file_size_bytes, checksum_sha256, scan_status, views_count, downloads_count, upvotes_count, created_at, updated_at)
@@ -260,7 +260,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, dept, course_code, course_title, semester, year, category, language, visibility, tags, filename, size, views, downloads, age_days)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET department_id = EXCLUDED.department_id, course_code = EXCLUDED.course_code, course_title = EXCLUDED.course_title, semester = EXCLUDED.semester, academic_year = EXCLUDED.academic_year, category = EXCLUDED.category, language = EXCLUDED.language, visibility = EXCLUDED.visibility, requires_same_university_verification = EXCLUDED.requires_same_university_verification, license_attribution = EXCLUDED.license_attribution, tags = EXCLUDED.tags, current_version = EXCLUDED.current_version, storage_path = EXCLUDED.storage_path, original_filename = EXCLUDED.original_filename, mime_type = EXCLUDED.mime_type, file_size_bytes = EXCLUDED.file_size_bytes, checksum_sha256 = EXCLUDED.checksum_sha256, scan_status = EXCLUDED.scan_status, views_count = EXCLUDED.views_count, downloads_count = EXCLUDED.downloads_count, upvotes_count = EXCLUDED.upvotes_count, updated_at = EXCLUDED.updated_at;,
+  ON CONFLICT (id) DO UPDATE SET department_id = EXCLUDED.department_id, course_code = EXCLUDED.course_code, course_title = EXCLUDED.course_title, semester = EXCLUDED.semester, academic_year = EXCLUDED.academic_year, category = EXCLUDED.category, language = EXCLUDED.language, visibility = EXCLUDED.visibility, requires_same_university_verification = EXCLUDED.requires_same_university_verification, license_attribution = EXCLUDED.license_attribution, tags = EXCLUDED.tags, current_version = EXCLUDED.current_version, storage_path = EXCLUDED.storage_path, original_filename = EXCLUDED.original_filename, mime_type = EXCLUDED.mime_type, file_size_bytes = EXCLUDED.file_size_bytes, checksum_sha256 = EXCLUDED.checksum_sha256, scan_status = EXCLUDED.scan_status, views_count = EXCLUDED.views_count, downloads_count = EXCLUDED.downloads_count, upvotes_count = EXCLUDED.upvotes_count, updated_at = EXCLUDED.updated_at;
 
   -- · skill_postings (12 rows)
   INSERT INTO public.skill_postings (id, university_id, author_id, type, title, description, category, skills, location_en, location_bn, availability, rate_bdt, is_remote, contact_note, status, applicants_count, created_at, updated_at)
@@ -281,7 +281,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, typ, title, descr, cat, skills, loc_en, loc_bn, avail, rate, remote, contact, status, applicants, age_hours)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET type = EXCLUDED.type, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, skills = EXCLUDED.skills, location_en = EXCLUDED.location_en, location_bn = EXCLUDED.location_bn, availability = EXCLUDED.availability, rate_bdt = EXCLUDED.rate_bdt, is_remote = EXCLUDED.is_remote, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status, applicants_count = EXCLUDED.applicants_count, updated_at = EXCLUDED.updated_at;,
+  ON CONFLICT (id) DO UPDATE SET type = EXCLUDED.type, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, skills = EXCLUDED.skills, location_en = EXCLUDED.location_en, location_bn = EXCLUDED.location_bn, availability = EXCLUDED.availability, rate_bdt = EXCLUDED.rate_bdt, is_remote = EXCLUDED.is_remote, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status, applicants_count = EXCLUDED.applicants_count, updated_at = EXCLUDED.updated_at;
 
   -- · skill_applications (10 rows)
   INSERT INTO public.skill_applications (id, university_id, applicant_id, posting_id, message, status, created_at)
@@ -300,7 +300,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, posting_id, status, message)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET message = EXCLUDED.message, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET message = EXCLUDED.message, status = EXCLUDED.status;
 
   -- · skill_alerts (6 rows)
   INSERT INTO public.skill_alerts (id, university_id, user_id, keywords, categories)
@@ -315,7 +315,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, kw, cats)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET keywords = EXCLUDED.keywords, categories = EXCLUDED.categories;,
+  ON CONFLICT (id) DO UPDATE SET keywords = EXCLUDED.keywords, categories = EXCLUDED.categories;
 
   -- · mentor_profiles (3 rows)
   INSERT INTO public.mentor_profiles (id, university_id, user_id, headline, expertise, languages, session_rate_bdt, bio, is_accepting, sessions_count, rating)
@@ -327,7 +327,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, headline, exp, rate, bio, sessions, rating)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET headline = EXCLUDED.headline, expertise = EXCLUDED.expertise, languages = EXCLUDED.languages, session_rate_bdt = EXCLUDED.session_rate_bdt, bio = EXCLUDED.bio, is_accepting = EXCLUDED.is_accepting, sessions_count = EXCLUDED.sessions_count, rating = EXCLUDED.rating;,
+  ON CONFLICT (id) DO UPDATE SET headline = EXCLUDED.headline, expertise = EXCLUDED.expertise, languages = EXCLUDED.languages, session_rate_bdt = EXCLUDED.session_rate_bdt, bio = EXCLUDED.bio, is_accepting = EXCLUDED.is_accepting, sessions_count = EXCLUDED.sessions_count, rating = EXCLUDED.rating;
 
   -- · mentorship_slots (8 rows)
   INSERT INTO public.mentorship_slots (id, university_id, mentor_id, topic, starts_at, ends_at, capacity, booked_count, is_active)
@@ -343,7 +343,7 @@ BEGIN
         ('SUST', 'demo.arsalan.mentor@campus360.test', '3279a9cc-bee3-5164-88ad-7b182f01e51b'::uuid, 'Graph problems: the BFS/DFS patterns that repeat', '9 days', 21, 2, 0)
   ) AS v(campus_code, author_email, id, topic, day_off, hhour, capacity, booked)
   JOIN public.universities u ON u.code = v.campus_code
-  ON CONFLICT (id) DO UPDATE SET topic = EXCLUDED.topic, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, capacity = EXCLUDED.capacity, booked_count = EXCLUDED.booked_count, is_active = EXCLUDED.is_active;,
+  ON CONFLICT (id) DO UPDATE SET topic = EXCLUDED.topic, starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, capacity = EXCLUDED.capacity, booked_count = EXCLUDED.booked_count, is_active = EXCLUDED.is_active;
 
   -- · housing_listings (6 rows)
   INSERT INTO public.housing_listings (id, university_id, author_id, kind, title, description, rent_bdt, seat_count, gender_policy, area_en, area_bn, distance_km, amenities, image_urls, contact_phone, status, created_at)
@@ -358,7 +358,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, kind, title, descr, rent, seats, gender, area_en, area_bn, dist, amen, phone, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, rent_bdt = EXCLUDED.rent_bdt, seat_count = EXCLUDED.seat_count, gender_policy = EXCLUDED.gender_policy, area_en = EXCLUDED.area_en, area_bn = EXCLUDED.area_bn, distance_km = EXCLUDED.distance_km, amenities = EXCLUDED.amenities, image_urls = EXCLUDED.image_urls, contact_phone = EXCLUDED.contact_phone, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, rent_bdt = EXCLUDED.rent_bdt, seat_count = EXCLUDED.seat_count, gender_policy = EXCLUDED.gender_policy, area_en = EXCLUDED.area_en, area_bn = EXCLUDED.area_bn, distance_km = EXCLUDED.distance_km, amenities = EXCLUDED.amenities, image_urls = EXCLUDED.image_urls, contact_phone = EXCLUDED.contact_phone, status = EXCLUDED.status;
 
   -- · rideshare_offers (6 rows)
   INSERT INTO public.rideshare_offers (id, university_id, author_id, mode, origin, destination, depart_at, seats_total, seats_available, fare_bdt, vehicle_details, notes, status, created_at)
@@ -373,7 +373,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, mode, title, origin, dest, depart, total, avail, fare, vehicle, notes, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET mode = EXCLUDED.mode, origin = EXCLUDED.origin, destination = EXCLUDED.destination, depart_at = EXCLUDED.depart_at, seats_total = EXCLUDED.seats_total, seats_available = EXCLUDED.seats_available, fare_bdt = EXCLUDED.fare_bdt, vehicle_details = EXCLUDED.vehicle_details, notes = EXCLUDED.notes, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET mode = EXCLUDED.mode, origin = EXCLUDED.origin, destination = EXCLUDED.destination, depart_at = EXCLUDED.depart_at, seats_total = EXCLUDED.seats_total, seats_available = EXCLUDED.seats_available, fare_bdt = EXCLUDED.fare_bdt, vehicle_details = EXCLUDED.vehicle_details, notes = EXCLUDED.notes, status = EXCLUDED.status;
 
   -- · alumni_profiles (6 rows)
   INSERT INTO public.alumni_profiles (id, university_id, user_id, graduation_year, degree, employer, job_title, industry, city, country, linkedin_url, offers_referrals, is_mentor)
@@ -388,7 +388,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, year, degree, employer, title, industry, city, linkedin, refs, mentor)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET graduation_year = EXCLUDED.graduation_year, degree = EXCLUDED.degree, employer = EXCLUDED.employer, job_title = EXCLUDED.job_title, industry = EXCLUDED.industry, city = EXCLUDED.city, country = EXCLUDED.country, linkedin_url = EXCLUDED.linkedin_url, offers_referrals = EXCLUDED.offers_referrals, is_mentor = EXCLUDED.is_mentor;,
+  ON CONFLICT (id) DO UPDATE SET graduation_year = EXCLUDED.graduation_year, degree = EXCLUDED.degree, employer = EXCLUDED.employer, job_title = EXCLUDED.job_title, industry = EXCLUDED.industry, city = EXCLUDED.city, country = EXCLUDED.country, linkedin_url = EXCLUDED.linkedin_url, offers_referrals = EXCLUDED.offers_referrals, is_mentor = EXCLUDED.is_mentor;
 
   -- · career_opportunities (6 rows)
   INSERT INTO public.career_opportunities (id, university_id, alumni_id, kind, company, title, description, location, is_remote, salary_range, apply_url, deadline, status, created_at)
@@ -402,7 +402,7 @@ BEGIN
         ('JUST', 'demo.sharmin.alumni@campus360.test', 'ef698dec-2b1e-5b4c-97f5-0c7c0cbee076'::uuid, 'REFERRAL', 'Grameenphone', 'Associate, Digital Marketing (referral by Sharmin Nahar, JUST 2021)', U&'GP''s graduate intake for the digital team. I can put a word after the assessment, not before it. Do the online test seriously \2014 that is the stage most applicants skip. Meta or Google certifications help but are not required.', 'Dhaka (Banani)', true, 'BDT 75,000 - 95,000', 'https://www.grameenphone.com/careers', '25 days', 'OPEN')
   ) AS v(campus_code, author_email, id, kind, company, title, descr, loc, remote, salary, url, due, status)
   JOIN public.universities u ON u.code = v.campus_code
-  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, company = EXCLUDED.company, title = EXCLUDED.title, description = EXCLUDED.description, location = EXCLUDED.location, is_remote = EXCLUDED.is_remote, salary_range = EXCLUDED.salary_range, apply_url = EXCLUDED.apply_url, deadline = EXCLUDED.deadline, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, company = EXCLUDED.company, title = EXCLUDED.title, description = EXCLUDED.description, location = EXCLUDED.location, is_remote = EXCLUDED.is_remote, salary_range = EXCLUDED.salary_range, apply_url = EXCLUDED.apply_url, deadline = EXCLUDED.deadline, status = EXCLUDED.status;
 
   -- · cafeteria_menus (6 rows)
   INSERT INTO public.cafeteria_menus (id, university_id, hall_id, name_en, name_bn, serving_date, meal, pickup_window, is_active)
@@ -416,7 +416,7 @@ BEGIN
         ('JUST', 'demo.alamin.just@campus360.test', '8cc4a8b2-9445-534c-b42e-5b449dfbe383'::uuid, NULL, U&'JUST Central Cafeteria \2014 Lunch', U&'\099C\0987\09B8\09CD\099F \0995\09C7\09A8\09CD\09A6\09CD\09B0\09C0\09AF\09BC \0995\09CD\09AF\09BE\09AB\09C7\099F\09C7\09B0\09BF\09AF\09BC\09BE \2014 \09A6\09C1\09AA\09C1\09B0\09C7\09B0 \0996\09BE\09AC\09BE\09B0', 'LUNCH', '12:00 - 15:00', '2 days')
   ) AS v(campus_code, author_email, id, hall, name_en, name_bn, meal, win, date_off)
   JOIN public.universities u ON u.code = v.campus_code
-  ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, name_bn = EXCLUDED.name_bn, serving_date = EXCLUDED.serving_date, meal = EXCLUDED.meal, pickup_window = EXCLUDED.pickup_window, is_active = EXCLUDED.is_active;,
+  ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, name_bn = EXCLUDED.name_bn, serving_date = EXCLUDED.serving_date, meal = EXCLUDED.meal, pickup_window = EXCLUDED.pickup_window, is_active = EXCLUDED.is_active;
 
   -- · cafeteria_items (26 rows)
   INSERT INTO public.cafeteria_items (id, university_id, menu_id, name_en, name_bn, price_bdt, is_available, is_vegetarian)
@@ -450,7 +450,7 @@ BEGIN
         ('JUST', 'demo.alamin.just@campus360.test', 'aded77eb-2aee-50b5-86a5-80939eefd254'::uuid, U&'JUST Central Cafeteria \2014 Lunch', 'Yogurt', U&'\09A6\0987', 20, true, true)
   ) AS v(campus_code, author_email, id, menu, name_en, name_bn, price, avail, veg)
   JOIN public.universities u ON u.code = v.campus_code
-  ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, name_bn = EXCLUDED.name_bn, price_bdt = EXCLUDED.price_bdt, is_available = EXCLUDED.is_available, is_vegetarian = EXCLUDED.is_vegetarian;,
+  ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, name_bn = EXCLUDED.name_bn, price_bdt = EXCLUDED.price_bdt, is_available = EXCLUDED.is_available, is_vegetarian = EXCLUDED.is_vegetarian;
 
   -- · lost_items (6 rows)
   INSERT INTO public.lost_items (id, university_id, author_id, kind, title, description, category, keywords, location_en, occurred_on, image_urls, contact_note, status, created_at)
@@ -465,7 +465,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, kind, title, descr, cat, kw, loc, age_days, contact, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, keywords = EXCLUDED.keywords, location_en = EXCLUDED.location_en, occurred_on = EXCLUDED.occurred_on, image_urls = EXCLUDED.image_urls, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, keywords = EXCLUDED.keywords, location_en = EXCLUDED.location_en, occurred_on = EXCLUDED.occurred_on, image_urls = EXCLUDED.image_urls, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status;
 
   -- · sports_challenges (6 rows)
   INSERT INTO public.sports_challenges (id, university_id, author_id, team_name, sport, title, description, preferred_date, venue, status, created_at)
@@ -480,7 +480,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, team, sport, title, descr, doff, venue, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET team_name = EXCLUDED.team_name, sport = EXCLUDED.sport, title = EXCLUDED.title, description = EXCLUDED.description, preferred_date = EXCLUDED.preferred_date, venue = EXCLUDED.venue, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET team_name = EXCLUDED.team_name, sport = EXCLUDED.sport, title = EXCLUDED.title, description = EXCLUDED.description, preferred_date = EXCLUDED.preferred_date, venue = EXCLUDED.venue, status = EXCLUDED.status;
 
   -- · sports_teams (6 rows)
   INSERT INTO public.sports_teams (id, university_id, author_id, name, sport, skill_level, needed_roles, description, contact_note, status, created_at)
@@ -495,7 +495,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, name, sport, level, roles, descr, contact, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sport = EXCLUDED.sport, skill_level = EXCLUDED.skill_level, needed_roles = EXCLUDED.needed_roles, description = EXCLUDED.description, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sport = EXCLUDED.sport, skill_level = EXCLUDED.skill_level, needed_roles = EXCLUDED.needed_roles, description = EXCLUDED.description, contact_note = EXCLUDED.contact_note, status = EXCLUDED.status;
 
   -- · donation_campaigns (6 rows)
   INSERT INTO public.donation_campaigns (id, university_id, author_id, title, story, cause, target_bdt, raised_bdt, donors_count, deadline, cover_image_url, is_verified, status, created_at)
@@ -510,7 +510,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, title, cause, story, target, raised, donors, due, sign, verified, status)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, story = EXCLUDED.story, cause = EXCLUDED.cause, target_bdt = EXCLUDED.target_bdt, raised_bdt = EXCLUDED.raised_bdt, donors_count = EXCLUDED.donors_count, deadline = EXCLUDED.deadline, cover_image_url = EXCLUDED.cover_image_url, is_verified = EXCLUDED.is_verified, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, story = EXCLUDED.story, cause = EXCLUDED.cause, target_bdt = EXCLUDED.target_bdt, raised_bdt = EXCLUDED.raised_bdt, donors_count = EXCLUDED.donors_count, deadline = EXCLUDED.deadline, cover_image_url = EXCLUDED.cover_image_url, is_verified = EXCLUDED.is_verified, status = EXCLUDED.status;
 
   -- · donations (18 rows)
   INSERT INTO public.donations (id, university_id, donor_id, campaign_id, donor_name, amount_bdt, message, is_anonymous, status, created_at)
@@ -537,7 +537,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, campaign_id, donor_name, amount, message, anon, status, n)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET campaign_id = EXCLUDED.campaign_id, donor_name = EXCLUDED.donor_name, amount_bdt = EXCLUDED.amount_bdt, message = EXCLUDED.message, is_anonymous = EXCLUDED.is_anonymous, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET campaign_id = EXCLUDED.campaign_id, donor_name = EXCLUDED.donor_name, amount_bdt = EXCLUDED.amount_bdt, message = EXCLUDED.message, is_anonymous = EXCLUDED.is_anonymous, status = EXCLUDED.status;
 
   -- · donation_ledger (12 rows)
   INSERT INTO public.donation_ledger (id, university_id, campaign_id, entry_type, amount_bdt, description, proof_url)
@@ -557,7 +557,7 @@ BEGIN
         ('JUST', 'demo.tahmina.just@campus360.test', '7a81a17e-0599-5657-bfc3-2ddcedf73a35'::uuid, '75c0bb31-3bb0-5eb8-97d8-1ac8c7a868e1', 'DISBURSEMENT', 2500, 'Disbursement made against verified receipts; copies filed with the hall or department office.')
   ) AS v(campus_code, author_email, id, campaign_id, entry, amount, description)
   JOIN public.universities u ON u.code = v.campus_code
-  ON CONFLICT (id) DO UPDATE SET amount_bdt = EXCLUDED.amount_bdt, description = EXCLUDED.description, proof_url = EXCLUDED.proof_url;,
+  ON CONFLICT (id) DO UPDATE SET amount_bdt = EXCLUDED.amount_bdt, description = EXCLUDED.description, proof_url = EXCLUDED.proof_url;
 
   -- · marketplace_listings (12 rows)
   INSERT INTO public.marketplace_listings (id, university_id, author_id, kind, title, description, category, price_bdt, condition, images, keyword_tags, is_negotiable, rent_period, views_count, status, created_at)
@@ -578,7 +578,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, kind, title, cat, price, cond, descr, tags, nego, views)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, price_bdt = EXCLUDED.price_bdt, condition = EXCLUDED.condition, images = EXCLUDED.images, keyword_tags = EXCLUDED.keyword_tags, is_negotiable = EXCLUDED.is_negotiable, rent_period = EXCLUDED.rent_period, views_count = EXCLUDED.views_count, status = EXCLUDED.status;,
+  ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title, description = EXCLUDED.description, category = EXCLUDED.category, price_bdt = EXCLUDED.price_bdt, condition = EXCLUDED.condition, images = EXCLUDED.images, keyword_tags = EXCLUDED.keyword_tags, is_negotiable = EXCLUDED.is_negotiable, rent_period = EXCLUDED.rent_period, views_count = EXCLUDED.views_count, status = EXCLUDED.status;
 
   -- · reviews (21 rows)
   INSERT INTO public.reviews (id, university_id, author_id, target_type, target_id, rating, title, body, photo_urls, tags, verified_participation, pending_reports_count, is_hidden, created_at)
@@ -608,7 +608,7 @@ BEGIN
   ) AS v(campus_code, author_email, id, ttype, tkind, tgt, rating, title, body, tags, verified)
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
-  ON CONFLICT (id) DO UPDATE SET rating = EXCLUDED.rating, title = EXCLUDED.title, body = EXCLUDED.body, tags = EXCLUDED.tags, verified_participation = EXCLUDED.verified_participation;,
+  ON CONFLICT (id) DO UPDATE SET rating = EXCLUDED.rating, title = EXCLUDED.title, body = EXCLUDED.body, tags = EXCLUDED.tags, verified_participation = EXCLUDED.verified_participation;
 
   -- · governance_notices (6 rows)
   INSERT INTO public.governance_notices (id, university_id, title, body, audience, created_at, updated_at)
@@ -622,7 +622,7 @@ BEGIN
         ('JUST', 'demo.alamin.just@campus360.test', 'c5e25673-9c68-5f75-a528-3030f49e3507'::uuid, 'Day scholar card issuance and central library entry from 25 October', 'Day-scholar identity cards for the 2025-26 session are issued from the students'' office between 25 October and 8 November, 10:00am to 1:00pm. The card is required for central library entry and for the exam form. Students absent from the printed list should apply through the portal before the deadline.', 'STUDENTS', 12)
   ) AS v(campus_code, author_email, id, title, body, audience, age_days)
   JOIN public.universities u ON u.code = v.campus_code
-  ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, audience = EXCLUDED.audience;,
+  ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, audience = EXCLUDED.audience;
 
   -- · club_notices (6 rows)
   INSERT INTO public.club_notices (id, university_id, author_id, club_id, title, body, created_at)
@@ -638,7 +638,7 @@ BEGIN
   JOIN public.universities u ON u.code = v.campus_code
   JOIN public.profiles pr ON pr.email = v.author_email
   JOIN LATERAL (select c.id from public.clubs c where c.university_id = u.id and c.slug = v.slug limit 1) cl on true
-  ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body;,
+  ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body;
 
   -- ---------------------------------------------------------------------
   -- 18 · denormalised counters, recomputed from the rows themselves so no card
