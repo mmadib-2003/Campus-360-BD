@@ -23,9 +23,12 @@ import {
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession, Row } from '@/lib/modules/client';
 import { formatDateTime, initials, timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 export default function CareersPage() {
   const session = useSession();
+  const { t } = useUi();
   const [tab, setTab] = React.useState<'jobs' | 'alumni' | 'messages'>('jobs');
   const [kind, setKind] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -182,6 +185,7 @@ export default function CareersPage() {
                     <Badge tone="blue">{String(opportunity.kind).replace('_', ' ')}</Badge>
                     {opportunity.is_remote && <Badge tone="sky">Remote</Badge>}
                     <Badge tone={statusTone(opportunity.status)}>{String(opportunity.status)}</Badge>
+                    <CampusBadge universityId={opportunity.university_id} />
                     {applied && <Badge tone="emerald">Applied</Badge>}
                     <span className="text-[11px] text-slate-400 ml-auto">{timeAgo(opportunity.created_at)}</span>
                   </div>

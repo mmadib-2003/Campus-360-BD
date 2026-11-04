@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
 
 export function Card({
   children,
@@ -72,6 +73,9 @@ export function ModuleHeader({
   demo?: boolean;
   children?: React.ReactNode;
 }) {
+  const { locale, t } = useUi();
+  const heading = locale === 'bn' && titleBn ? titleBn : title;
+  const body = blurb ? (locale === 'bn' ? t(blurb) : blurb) : undefined;
   return (
     <Card className="p-5 md:p-6 bg-gradient-to-br from-emerald-900/50 via-slate-900 to-teal-950 border-emerald-500/30 !text-slate-100">
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -80,23 +84,22 @@ export function ModuleHeader({
             <span className="text-2xl" aria-hidden>
               {icon}
             </span>
-            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-white">{title}</h1>
+            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-white">{heading}</h1>
             {live && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold">
-                <LiveDot /> REAL-TIME
+                <LiveDot /> {t('LIVE')}
               </span>
             )}
             {demo && (
               <span
-                title="Supabase environment variables are not set on this deployment yet. Data is a local preview."
+                title={t('Preview mode — data is scoped to the selected campus.')}
                 className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-semibold"
               >
-                ● PREVIEW DATA
+                ● {t('Preview data')}
               </span>
             )}
           </div>
-          {titleBn && <p className="text-xs text-emerald-300/80 mt-1">{titleBn}</p>}
-          {blurb && <p className="text-sm text-slate-300 mt-2 max-w-3xl">{blurb}</p>}
+          {body && <p className="text-sm text-slate-300 mt-2 max-w-3xl">{body}</p>}
         </div>
         {children && <div className="flex flex-wrap items-center gap-2 shrink-0">{children}</div>}
       </div>
@@ -350,10 +353,11 @@ export function FilterChips({
   options: Array<{ value: string; label: string }>;
   label?: string;
 }) {
+  const { t } = useUi();
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {label && <span className="text-[11px] uppercase tracking-wide text-slate-400 mr-1">{label}</span>}
-      {[{ value: 'ALL', label: 'All' }, ...options].map((option) => (
+      {[{ value: 'ALL', label: t('All') }, ...options].map((option) => (
         <button
           key={option.value}
           type="button"

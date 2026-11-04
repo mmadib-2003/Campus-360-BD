@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { issueDemoChallenge } from '@/lib/demo-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,34 @@ export async function POST(req: NextRequest) {
   }
 
   const emailDomain = rawEmail.split('@')[1];
+
+  if (!isSupabaseServerConfigured()) {
+    const demo = issueDemoChallenge({
+      email: rawEmail,
+      universityId,
+      role: body?.role ?? body?.signupPayload?.role,
+      fullName: body?.signupPayload?.fullName,
+      studentId: body?.signupPayload?.studentId,
+    });
+    if (!demo.ok) {
+      return apiError('DOMAIN_NOT_WHITELISTED', demo.error, demo.errorBn, demo.status);
+    }
+    return apiSuccess(
+      {
+        email: rawEmail,
+        universityId: demo.challenge.universityId,
+        role: demo.challenge.role,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        cooldownSeconds: 0,
+        demoCode: demo.challenge.code,
+        demo: true,
+      },
+      200,
+      undefined,
+      rlEmail.headers
+    );
+  }
+
   const admin = createSupabaseAdminClient();
 
   // Enforce University Email Domain Whitelist Server-Side
@@ -102,7 +131,7 @@ export async function POST(req: NextRequest) {
     ip_address: ipAddress,
     max_attempts: 5,
     expires_at: expiresAt,
-    signup_payload: body?.signupPayload ?? null,
+    signup_payload: { ...(body?.signupPayload ?? {}), role: body?.role ?? body?.signupPayload?.role ?? 'student' },
   });
 
   if (insertErr) {

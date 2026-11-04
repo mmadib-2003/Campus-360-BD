@@ -23,9 +23,12 @@ import {
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
 import { formatBdt, formatDateTime, toDateInputValue } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 export default function HousingPage() {
   const session = useSession();
+  const { t } = useUi();
   const [tab, setTab] = React.useState<'housing' | 'rideshare' | 'tickets'>('housing');
   const [kind, setKind] = React.useState('ALL');
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -75,9 +78,9 @@ export default function HousingPage() {
       <div className="space-y-6">
         <ModuleHeader
           icon="🏢"
-          title="Housing & Commute"
-          titleBn="আবাসন ও যাতায়াত"
-          blurb="Find mess seats and sub-lets, and match with a rideshare partner for holiday travel."
+          title={t('Housing')}
+          titleBn={t('Housing')}
+          blurb={t('Find a hall seat or a verified off-campus mess near your campus.')}
         />
         <SignInPrompt moduleName="housing and commute" />
       </div>
@@ -90,7 +93,7 @@ export default function HousingPage() {
         icon="🏢"
         title="Housing & Commute"
         titleBn="আবাসন ও যাতায়াত"
-        blurb="A classifieds board for vacant mess and hostel seats plus real-time rideshare partner matching for holiday travel — including bus and train ticket exchange."
+        blurb={t('Find a hall seat or a verified off-campus mess near your campus.')}
         live
         demo={housing.demo}
       >
@@ -142,7 +145,7 @@ export default function HousingPage() {
           {housing.loading ? (
             <SkeletonList rows={2} />
           ) : housing.data.length === 0 ? (
-            <EmptyState icon="🏠" title="No vacant seats listed" description="Post a seat or sub-let to help classmates." action={<Button onClick={() => setCreateOpen(true)}>Post a seat</Button>} />
+            <EmptyState icon="🏠" title={t('No listings found')} description={t('Find a hall seat or a verified off-campus mess near your campus.')} action={<Button onClick={() => setCreateOpen(true)}>{t('New listing')}</Button>} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {housing.data.map((listing) => (
@@ -151,6 +154,7 @@ export default function HousingPage() {
                     <Badge tone="cyan">{String(listing.kind).replace(/_/g, ' ')}</Badge>
                     <Badge tone={statusTone(listing.status)}>{String(listing.status)}</Badge>
                     <Badge tone="slate">{String(listing.gender_policy)}</Badge>
+                    <CampusBadge universityId={listing.university_id} />
                   </div>
                   <h3 className="font-bold text-sm">{listing.title}</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{listing.description}</p>
@@ -234,9 +238,9 @@ export default function HousingPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <SectionHeader icon="🚌" title="Available seats" subtitle="Offers from students travelling your way" />
+              <SectionHeader icon="🚌" title={t('Available')} subtitle={t('Available')} />
               {rides.data.length === 0 ? (
-                <EmptyState icon="🚌" title="No rides offered yet" description="Offer a seat in your bus or car and split the fare." />
+                <EmptyState icon="🚌" title={t('No listings found')} description={t('No listings found')} />
               ) : (
                 rides.data.map((ride) => (
                   <Card key={String(ride.id)} className="p-4 text-xs space-y-1.5">
@@ -285,9 +289,9 @@ export default function HousingPage() {
             </div>
 
             <div className="space-y-2">
-              <SectionHeader icon="🙋" title="Students looking for rides" subtitle="Match them to your route" />
+              <SectionHeader icon="🙋" title={t('Student')} subtitle={t('Student')} />
               {openRequests.length === 0 ? (
-                <EmptyState icon="🙋" title="No open ride requests" description="Requests appear here in real time." />
+                <EmptyState icon="🙋" title={t('No listings found')} description={t('No listings found')} />
               ) : (
                 openRequests.map((request) => (
                   <Card key={String(request.id)} className="p-4 text-xs space-y-1.5">
@@ -315,7 +319,7 @@ export default function HousingPage() {
         <div className="space-y-4">
           <Button onClick={() => setTicketOpen(true)}>+ Post a ticket for exchange</Button>
           {tickets.data.length === 0 ? (
-            <EmptyState icon="🎫" title="No tickets listed" description="Have a spare Eid bus or train ticket? Exchange it with a classmate." />
+            <EmptyState icon="🎫" title={t('No listings found')} description={t('No listings found')} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {tickets.data.map((ticket) => (
@@ -344,7 +348,7 @@ export default function HousingPage() {
         </div>
       )}
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Post a vacant seat" wide>
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={t('New listing')} wide>
         <ModuleForm
           moduleKey="housing"
           omit={['status']}
@@ -363,7 +367,7 @@ export default function HousingPage() {
         />
       </Modal>
 
-      <Modal open={rideOpen} onClose={() => setRideOpen(false)} title="Offer a rideshare seat" wide>
+      <Modal open={rideOpen} onClose={() => setRideOpen(false)} title={t('New listing')} wide>
         <ModuleForm
           moduleKey="rideshare"
           omit={['status']}
@@ -382,7 +386,7 @@ export default function HousingPage() {
         />
       </Modal>
 
-      <Modal open={requestOpen} onClose={() => setRequestOpen(false)} title="I need a ride" wide>
+      <Modal open={requestOpen} onClose={() => setRequestOpen(false)} title={t('New listing')} wide>
         <ModuleForm
           moduleKey="ride-requests"
           omit={['status', 'matched_offer_id']}
@@ -401,7 +405,7 @@ export default function HousingPage() {
         />
       </Modal>
 
-      <Modal open={ticketOpen} onClose={() => setTicketOpen(false)} title="Post a ticket for exchange" wide>
+      <Modal open={ticketOpen} onClose={() => setTicketOpen(false)} title={t('New listing')} wide>
         <ModuleForm
           moduleKey="ticket-exchange"
           omit={['status']}

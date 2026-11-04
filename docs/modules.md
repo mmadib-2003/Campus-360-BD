@@ -176,3 +176,62 @@ live real-time data.
 4. `/health` → post a blood request; matching donors receive a notification toast and a bell entry.
 5. `/lost-found` → post a matching found item; the original reporter receives an instant match alert.
 6. `/admin/console` → resolve a ticket; the student board reflects `RESOLVED` without a refresh.
+
+---
+
+## Multi-university demo data, tracking and RLS hardening
+
+### Seed
+
+`supabase/seed/seed_multiuniverse_demo.sql` seeds DU, BUET, SUST, RU and CU with
+realistic campus data across six modules:
+
+| Module | Rows per campus | Real campus locations |
+|--------|-----------------|-----------------------|
+| `marketplace_listings` | 5 | DU → Nilkhet Book Market, Curzon Hall; BUET → Central Library Locker, Sherebangla Hall; SUST → Shahjalal Hall, Academic Building B; RU → Kazla Gate, Bangabandhu Hall; CU → Suhrawardy Hall, Zero Point |
+| `skill_postings` | 3 | TSC / Curzon Hall, BUET Academic Building B, SUST Central Library, RU Central Library, CU Central Library |
+| `complaints` | 3 | Curzon Hall, TSC gate, BUET Gate 2, Shahjalal Hall, Kazla Gate, Zero Point |
+| `lost_items` | 3 | Nilkhet, TSC, Central Library, Sherebangla Hall, Academic Building B, Kazla Gate, Suhrawardy Hall |
+| `housing_listings` | 3 | Salimullah Hall, Nilkhet, Dhanmondi, Sherebangla Hall, Azimpur, Shahjalal Hall, Sylhet, Bangabandhu Hall, Rajshahi, Suhrawardy Hall |
+| `cafeteria_menus` | 3 (+ items) | Salimullah Hall, TSC, Nilkhet, Sherebangla Hall, BUET cafeteria, Azimpur, Shahjalal Hall, SUST cafeteria, Sylhet, Bangabandhu Hall, RU cafeteria, Kazla, Suhrawardy Hall, CU cafeteria, Chattogram |
+
+The seed is idempotent and includes the exact acceptance-test examples:
+“Cormen Algorithms 3rd ed” at Nilkhet (DU), “Casio FX-991EX” cleared for BUET
+engineering exams, “Hero bicycle” at Shahjalal Hall (SUST), “drawing board” at
+Kazla Gate (RU) and a “mini refrigerator” at Suhrawardy Hall (CU).
+
+```bash
+psql "$SUPABASE_DB_URL" -f supabase/seed/seed.sql
+psql "$SUPABASE_DB_URL" -f supabase/seed/seed_modules.sql
+psql "$SUPABASE_DB_URL" -f supabase/seed/seed_multiuniverse_demo.sql
+```
+
+### Complaint tracking
+
+`/track/[code]` is the public tracker. It resolves a civic ticket by
+`tracking_code` and renders the live timeline
+`Submitted → In Review → Action Taken → Resolved`, SLA deadline, escalation
+history and upvote count. Formal grievances additionally require the
+device-bound secret stored in `localStorage` (`campus360_secret_<CODE>`) or a
+one-time code. The page subscribes to the `complaints` table (Supabase
+Realtime) and to the preview BroadcastChannel, so an admin status change is
+reflected within two seconds without a refresh.
+
+`/complaints/track` redirects to `/track/<code>` and keeps the old query-string
+entry point working.
+
+### RLS hardening
+
+`supabase/migrations/0008_tenant_rls_hardening.sql` adds:
+
+* public `SELECT` policies (`TO anon, authenticated USING (true)`) on
+  `universities` and `university_email_domains` so the signup combobox works
+  without a session;
+* a tenant-scoped `SELECT` policy on every `public` table with a
+  `university_id` column, using `auth.uid()` directly and a subquery against
+  the caller's own `profiles` row (never a self-select on the target table);
+* an explicit `complaints` / `complaint_status_history` tenant policy.
+
+`supabase/tests/rls_isolation.test.sql` now also asserts that a DU student
+cannot read a JU marketplace listing and that the public registry policies
+exist.

@@ -3,7 +3,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getModule } from './registry';
-import { demoDelete, demoInsert, demoList, demoTable, demoUpdate, DEMO_PROFILE, DEMO_UNIVERSITY_ID } from './demo-data';
+import {
+  demoDelete,
+  demoInsert,
+  demoList,
+  demoTable,
+  demoUpdate,
+  getActiveDemoUniversity,
+  getDemoProfile,
+  getDemoSession,
+  isDemoSignedOut,
+  subscribeDemoRealtime,
+  subscribeDemoSession,
+} from './demo-data';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
 
 export type Row = Record<string, any>;
@@ -47,20 +59,38 @@ export function useSession(): SessionState {
 
   useEffect(() => {
     let cancelled = false;
+    let unsubscribeDemo: (() => void) | null = null;
 
     async function load() {
       if (!isSupabaseConfigured()) {
-        if (!cancelled) {
+        const applyDemoSession = () => {
+          if (cancelled) return;
+          if (isDemoSignedOut()) {
+            setState({
+              loading: false,
+              authenticated: false,
+              demo: true,
+              userId: null,
+              profile: null,
+              roles: [],
+              isAdmin: false,
+            });
+            return;
+          }
+          const session = getDemoSession();
+          const profile = getDemoProfile(session);
           setState({
             loading: false,
             authenticated: true,
             demo: true,
-            userId: DEMO_PROFILE.id,
-            profile: DEMO_PROFILE as any,
-            roles: ['STUDENT'],
-            isAdmin: false,
+            userId: profile.id,
+            profile: profile as any,
+            roles: profile.roles,
+            isAdmin: session.role === 'admin',
           });
-        }
+        };
+        applyDemoSession();
+        unsubscribeDemo = subscribeDemoSession(applyDemoSession);
         return;
       }
 
@@ -102,6 +132,7 @@ export function useSession(): SessionState {
     load();
     return () => {
       cancelled = true;
+      unsubscribeDemo?.();
     };
   }, []);
 
@@ -152,7 +183,7 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
           searchColumns: activeSpec.searchColumns,
           orderBy: activeSpec.orderBy,
           limit: options.limit,
-        }).filter((row) => !options.mine || String(row[activeSpec.ownerColumn ?? ''] ?? '') === DEMO_PROFILE.id);
+        }).filter((row) => !options.mine || String(row[activeSpec.ownerColumn ?? ''] ?? '') === getDemoProfile().id);
         if (!cancelled) {
           setDataState(rows as T[]);
           setTotal(rows.length);
@@ -197,6 +228,14 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleKey, filtersKey, options.search, options.limit, options.mine, enabled, tick, session.loading, session.demo]);
 
+  // Preview mode: any write in another tab refreshes this list within ~1s.
+  useEffect(() => {
+    if (isSupabaseConfigured()) return;
+    return subscribeDemoRealtime((event) => {
+      if (event.type === 'store') setTick((value) => value + 1);
+    });
+  }, []);
+
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   const setData = useCallback((updater: (prev: T[]) => T[]) => setDataState((prev) => updater(prev)), []);
 
@@ -215,7 +254,15 @@ export function useRealtimeTable(
   useEffect(() => {
     if (!table || options.enabled === false) return;
     const supabase = trySupabaseBrowser();
-    if (!supabase) return;
+    if (!supabase) {
+      // Preview mode: BroadcastChannel + storage events stand in for Supabase Realtime.
+      return subscribeDemoRealtime((event) => {
+        if (event.table !== table && event.type !== 'store') return;
+        if (event.type === 'insert' && event.row) handlerRef.current.onInsert?.(event.row);
+        if (event.type === 'update' && event.row) handlerRef.current.onUpdate?.(event.row);
+        if (event.type === 'delete' && event.id) handlerRef.current.onDelete?.({ id: event.id });
+      });
+    }
 
     const channel = supabase
       .channel(`campus360:${table}:${filterKey}`)
@@ -263,36 +310,36 @@ export function useModuleMutation(moduleKey: string) {
         if (session.demo || !isSupabaseConfigured()) {
           const systemDefaults: Record<string, Row> = {
             'marketplace-orders': {
-              buyer_id: DEMO_PROFILE.id,
+              buyer_id: getDemoProfile().id,
               order_code: `ORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
             },
             'food-orders': {
-              buyer_id: DEMO_PROFILE.id,
+              buyer_id: getDemoProfile().id,
               order_code: `FOOD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
             },
             conversations: {
-              user_a: DEMO_PROFILE.id,
+              user_a: getDemoProfile().id,
               last_message_at: new Date().toISOString(),
-              ...(values.user_b === DEMO_PROFILE.id ? { user_b: 'demo-user-0003' } : {}),
+              ...(values.user_b === getDemoProfile().id ? { user_b: 'demo-user-0003' } : {}),
             },
             disputes: {
-              opened_by: DEMO_PROFILE.id,
+              opened_by: getDemoProfile().id,
               reference_code: `DSP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
             },
             donations: {
-              donor_id: DEMO_PROFILE.id,
+              donor_id: getDemoProfile().id,
               status: 'CONFIRMED',
-              donor_name: values.is_anonymous ? 'Anonymous' : values.donor_name || DEMO_PROFILE.full_name,
+              donor_name: values.is_anonymous ? 'Anonymous' : values.donor_name || getDemoProfile().full_name,
             },
-            'career-applications': { applicant_id: DEMO_PROFILE.id },
-            'mentorship-bookings': { mentee_id: DEMO_PROFILE.id },
-            'skill-applications': { applicant_id: DEMO_PROFILE.id },
+            'career-applications': { applicant_id: getDemoProfile().id },
+            'mentorship-bookings': { mentee_id: getDemoProfile().id },
+            'skill-applications': { applicant_id: getDemoProfile().id },
           };
           const created = demoInsert(spec.table, {
-            university_id: DEMO_UNIVERSITY_ID,
+            university_id: getActiveDemoUniversity().id,
             ...(systemDefaults[moduleKey] ?? {}),
-            ...(spec.ownerColumn ? { [spec.ownerColumn]: DEMO_PROFILE.id } : {}),
-            profiles: { full_name: DEMO_PROFILE.full_name, trust_level: DEMO_PROFILE.trust_level },
+            ...(spec.ownerColumn ? { [spec.ownerColumn]: getDemoProfile().id } : {}),
+            profiles: { full_name: getDemoProfile().full_name, trust_level: getDemoProfile().trust_level },
             ...values,
           });
           return { ok: true, data: created, demo: true };
@@ -489,6 +536,13 @@ export function useApiList<T extends Row = Row>(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, queryKey, enabled, tick, session.loading, session.demo]);
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) return;
+    return subscribeDemoRealtime((event) => {
+      if (event.type === 'store') setTick((value) => value + 1);
+    });
+  }, []);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   const setData = useCallback((updater: (prev: T[]) => T[]) => setDataState((prev) => updater(prev)), []);

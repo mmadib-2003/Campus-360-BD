@@ -22,10 +22,13 @@ import {
 } from '@/components/modules/ui';
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 import { formatBdt, formatDateTime } from '@/lib/utils';
 
 export default function SportsPage() {
   const session = useSession();
+  const { t } = useUi();
   const [tab, setTab] = React.useState<'teams' | 'fields' | 'fundraising'>('teams');
   const [teamOpen, setTeamOpen] = React.useState(false);
   const [bookingTarget, setBookingTarget] = React.useState<Row | null>(null);
@@ -116,6 +119,7 @@ export default function SportsPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-sm">{team.name}</span>
                     <Badge tone={statusTone(team.status)}>{String(team.status)}</Badge>
+                    <CampusBadge universityId={team.university_id} />
                   </div>
                   <div className="text-slate-400">
                     {team.sport} • {String(team.skill_level)} level

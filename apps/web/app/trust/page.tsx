@@ -22,6 +22,8 @@ import {
 } from '@/components/modules/ui';
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
 import { timeAgo } from '@/lib/utils';
 
@@ -33,6 +35,7 @@ const STEPS = [
 
 export default function TrustPage() {
   const session = useSession();
+  const { t } = useUi();
   const [disputeOpen, setDisputeOpen] = React.useState(false);
   const [idOpen, setIdOpen] = React.useState(false);
   const [activeDispute, setActiveDispute] = React.useState<Row | null>(null);
@@ -187,6 +190,7 @@ export default function TrustPage() {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone={statusTone(dispute.status)}>{String(dispute.status).replace('_', ' ')}</Badge>
+                      <CampusBadge universityId={dispute.university_id} />
                       <span className="text-[11px] font-mono text-slate-400">{dispute.reference_code}</span>
                       <span className="text-[11px] text-slate-400 ml-auto">{timeAgo(dispute.created_at)}</span>
                     </div>
@@ -304,6 +308,7 @@ function DisputeThread({ dispute }: { dispute: Row }) {
       <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs space-y-1">
         <div className="flex items-center gap-2">
           <Badge tone={statusTone(dispute.status)}>{String(dispute.status).replace('_', ' ')}</Badge>
+                      <CampusBadge universityId={dispute.university_id} />
           <span className="text-slate-400">{String(dispute.category)}</span>
         </div>
         <p className="text-slate-600 dark:text-slate-300">{dispute.description}</p>

@@ -22,9 +22,12 @@ import {
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useSession, Row } from '@/lib/modules/client';
 import { formatBdt, toDateInputValue } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 export default function DiningPage() {
   const session = useSession();
+  const { t } = useUi();
   const [tab, setTab] = React.useState<'cafeteria' | 'homefood' | 'orders'>('cafeteria');
   const [meal, setMeal] = React.useState('ALL');
   const [preorderTarget, setPreorderTarget] = React.useState<{ menu: Row; item: Row } | null>(null);
@@ -63,9 +66,9 @@ export default function DiningPage() {
       <div className="space-y-6">
         <ModuleHeader
           icon="🍛"
-          title="Smart Cafeteria & Home-Made Food"
-          titleBn="স্মার্ট ক্যাফেটেরিয়া ও ঘরোয়া খাবার"
-          blurb="Pre-order the daily hall menu to skip queues, and order home-made meals with campus delivery."
+          title={t('Cafeteria & Home Food')}
+          titleBn={t('Cafeteria & Home Food')}
+          blurb={t("Today's hall menu, mess seats and home-made food from verified students.")}
         />
         <SignInPrompt moduleName="campus dining" />
       </div>
@@ -82,7 +85,7 @@ export default function DiningPage() {
         icon="🍛"
         title="Smart Cafeteria & Home-Made Food"
         titleBn="স্মার্ট ক্যাফেটেরিয়া ও ঘরোয়া খাবার"
-        blurb="Pre-order today’s cafeteria menu to avoid the lunch queue, and support student cooks selling home-made food with campus delivery."
+        blurb={t("Today's hall menu, mess seats and home-made food from verified students.")}
         live
         demo={menus.demo}
       >
@@ -101,9 +104,9 @@ export default function DiningPage() {
 
       <div className="flex flex-wrap gap-2">
         {[
-          { key: 'cafeteria', label: '🍽️ Cafeteria menus' },
-          { key: 'homefood', label: '🏠 Home-made food' },
-          { key: 'orders', label: `🧾 My orders (${orders.data.length})` },
+          { key: 'cafeteria', label: t('Dining') },
+          { key: 'homefood', label: t('Dining') },
+          { key: 'orders', label: `${t('My orders')} (${orders.data.length})` },
         ].map((item) => (
           <button
             key={item.key}
@@ -135,7 +138,7 @@ export default function DiningPage() {
                     : 'border-slate-200 dark:border-slate-700 text-slate-500'
                 }`}
               >
-                {value === 'ALL' ? 'All meals' : value}
+                {value === 'ALL' ? t('All') : value}
               </button>
             ))}
           </Card>
@@ -143,7 +146,7 @@ export default function DiningPage() {
           {menus.loading ? (
             <SkeletonList rows={2} />
           ) : menus.data.length === 0 ? (
-            <EmptyState icon="🍽️" title="No menus published" description="The cafeteria has not published today's menu yet." />
+            <EmptyState icon="🍽️" title={t('No listings found')} description={t('No listings found')} />
           ) : (
             <div className="space-y-3">
               {menus.data.map((menu) => {
@@ -152,6 +155,7 @@ export default function DiningPage() {
                   <Card key={String(menu.id)} className="p-4 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="orange">{String(menu.meal)}</Badge>
+                      <CampusBadge universityId={menu.university_id} />
                       <Badge tone={statusTone(menu.is_active ? 'ACTIVE' : 'CLOSED')}>
                         {menu.is_active ? 'Open' : 'Closed'}
                       </Badge>
@@ -174,11 +178,11 @@ export default function DiningPage() {
                             </div>
                           </div>
                           <Button size="sm" variant="secondary" onClick={() => setPreorderTarget({ menu, item })}>
-                            Pre-order
+                            {t('Reserve')}
                           </Button>
                         </div>
                       ))}
-                      {items.length === 0 && <p className="text-xs text-slate-400">No items available right now.</p>}
+                      {items.length === 0 && <p className="text-xs text-slate-400">{t('No listings found')}</p>}
                     </div>
                   </Card>
                 );
@@ -223,7 +227,7 @@ export default function DiningPage() {
         <div className="space-y-2">
           <SectionHeader icon="🧾" title="My food orders" subtitle="Live status from kitchen to counter" />
           {orders.data.length === 0 ? (
-            <EmptyState icon="🧾" title="No orders yet" description="Pre-order a cafeteria meal or a home-made dish." />
+            <EmptyState icon="🧾" title={t('My orders')} description={t('Reserve') + ' a cafeteria meal or a home-made dish.'} />
           ) : (
             orders.data.map((order) => (
               <Card key={String(order.id)} className="p-3 text-xs flex flex-wrap items-center justify-between gap-2">
@@ -319,12 +323,13 @@ function PreorderModal({
   onClose: () => void;
   onSubmit: (payload: { quantity: number }) => Promise<boolean>;
 }) {
+  const { t } = useUi();
   const [quantity, setQuantity] = React.useState(1);
   return (
     <Modal
       open
       onClose={onClose}
-      title={`Pre-order — ${target.item.name_en}`}
+      title={`${t('Reserve')} — ${target.item.name_en}`}
       footer={
         <Button loading={pending} onClick={() => onSubmit({ quantity })}>
           Confirm pre-order ({formatBdt(Number(target.item.price_bdt) * quantity)})
@@ -357,6 +362,7 @@ function HomeFoodModal({
   onClose: () => void;
   onSubmit: (payload: { quantity: number; fulfilment: string; delivery_spot?: string }) => Promise<boolean>;
 }) {
+  const { t } = useUi();
   const [quantity, setQuantity] = React.useState(1);
   const [fulfilment, setFulfilment] = React.useState(listing.delivery_available ? 'CAMPUS_DELIVERY' : 'PICKUP');
   const [spot, setSpot] = React.useState('');

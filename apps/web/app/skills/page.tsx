@@ -22,6 +22,8 @@ import {
 import { ModuleForm } from '@/components/modules/ModuleForm';
 import { useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession, Row } from '@/lib/modules/client';
 import { formatBdt, timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 const TYPE_META: Record<string, { icon: string; label: string }> = {
   TUTORING: { icon: '📘', label: 'Tutoring' },
@@ -32,6 +34,7 @@ const TYPE_META: Record<string, { icon: string; label: string }> = {
 
 export default function SkillsPage() {
   const session = useSession();
+  const { t } = useUi();
   const [type, setType] = React.useState('ALL');
   const [availability, setAvailability] = React.useState('ALL');
   const [search, setSearch] = React.useState('');
@@ -120,9 +123,9 @@ export default function SkillsPage() {
       <div className="space-y-6">
         <ModuleHeader
           icon="🎓"
-          title="Skill Hub, Tutoring & Part-Time Jobs"
-          titleBn="স্কিল হাব, টিউটরিং ও পার্ট-টাইম কাজ"
-          blurb="Offer tutoring or freelance services, publish part-time jobs and get live alerts when matching work is posted."
+          title={t('Skill Hub & Jobs')}
+          titleBn={t('Skill Hub & Jobs')}
+          blurb={t('Peer tutoring, freelance skills and part-time campus jobs.')}
         />
         <SignInPrompt moduleName="the Skill Hub" />
       </div>
@@ -135,7 +138,7 @@ export default function SkillsPage() {
         icon="🎓"
         title="Skill Hub, Tutoring & Part-Time Jobs"
         titleBn="স্কিল হাব, টিউটরিং ও পার্ট-টাইম কাজ"
-        blurb="A searchable board for tutoring, freelance gigs and part-time work. Save your skills once and receive instant alerts whenever a matching posting appears."
+        blurb={t('Peer tutoring, freelance skills and part-time campus jobs.')}
         live
         demo={postings.demo}
       >
@@ -241,6 +244,7 @@ export default function SkillsPage() {
                     {TYPE_META[String(posting.type)]?.icon} {TYPE_META[String(posting.type)]?.label ?? posting.type}
                   </Badge>
                   <Badge tone={statusTone(posting.status)}>{String(posting.status)}</Badge>
+                  <CampusBadge universityId={posting.university_id} />
                   {posting.is_remote && <Badge tone="sky">Remote</Badge>}
                   <span className="text-[11px] text-slate-400 ml-auto">🕒 {timeAgo(posting.created_at)}</span>
                 </div>

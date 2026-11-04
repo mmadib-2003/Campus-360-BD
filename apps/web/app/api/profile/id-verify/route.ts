@@ -8,11 +8,25 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   if (!isSupabaseServerConfigured()) {
-    return apiError(
-      'SUPABASE_NOT_CONFIGURED',
-      'Server database credentials are not configured for this deployment.',
-      'এই ডিপ্লয়মেন্টে সার্ভার ডাটাবেস কনফিগার করা হয়নি।',
-      503
+    const demoBody = await req.json().catch(() => ({}));
+    const status = demoBody?.status === 'VERIFIED' ? 'VERIFIED' : 'MANUAL_REVIEW';
+    return apiSuccess(
+      {
+        demo: true,
+        verification: {
+          id: `demo-idv-${Date.now()}`,
+          student_id_number: String(demoBody?.studentIdNumber ?? ''),
+          name: String(demoBody?.name ?? ''),
+          confidence: Number(demoBody?.confidence ?? 0),
+          status,
+          matches: Boolean(demoBody?.matches),
+          university_code: String(demoBody?.universityCode ?? ''),
+          created_at: new Date().toISOString(),
+        },
+        uploadUrl: null,
+        storagePath: null,
+      },
+      201
     );
   }
 

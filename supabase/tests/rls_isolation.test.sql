@@ -1,7 +1,7 @@
 -- supabase/tests/rls_isolation.test.sql
 -- Run via: supabase test db
 BEGIN;
-SELECT plan(6);
+SELECT plan(10);
 
 -- Create two test users: Student A at JU, Student B at DU
 INSERT INTO auth.users (id, email) VALUES
@@ -88,6 +88,65 @@ SELECT is(
   (SELECT avg_rating FROM public.review_aggregates WHERE target_id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'),
   5.00,
   'Trigger automatically computes avg_rating = 5.00'
+);
+
+
+-- Marketplace tenant isolation: DU Student B creates a listing
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '22222222-2222-2222-2222-222222222222';
+
+INSERT INTO public.marketplace_listings (id, university_id, seller_id, title, description, category, price_bdt, condition, kind, status)
+VALUES (
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+  (SELECT id FROM public.universities WHERE code = 'DU'),
+  '22222222-2222-2222-2222-222222222222',
+  'DU Cormen Algorithms 3rd ed',
+  'Introduction to Algorithms, 3rd edition, pickup at Nilkhet Book Market.',
+  'Books',
+  450.00,
+  'GOOD',
+  'SELL',
+  'AVAILABLE'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM public.marketplace_listings WHERE id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'),
+  1,
+  'DU Student B can read their own DU marketplace listing'
+);
+
+-- Switch back to JU Student A: the DU listing must be invisible
+SET LOCAL "request.jwt.claim.sub" = '11111111-1111-1111-1111-111111111111';
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM public.marketplace_listings WHERE id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'),
+  0,
+  'JU Student A CANNOT read DU marketplace listing (RLS tenant isolation)'
+);
+
+-- Public registry policies exist for anon + authenticated
+SELECT is(
+  (SELECT COUNT(*)::int FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'universities'
+      AND policyname = 'Public read universities'),
+  1,
+  'Public read policy exists on universities'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'university_email_domains'
+      AND policyname = 'Public read email domains'),
+  1,
+  'Public read policy exists on university_email_domains'
+);
+
+SELECT is(
+  (SELECT COUNT(*)::int FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'marketplace_listings'
+      AND policyname = 'Tenant read marketplace_listings'),
+  1,
+  'Tenant-scoped SELECT policy exists on marketplace_listings'
 );
 
 SELECT * FROM finish();

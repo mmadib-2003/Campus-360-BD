@@ -23,9 +23,12 @@ import {
 } from '@/components/modules/ui';
 import { useApiList, useModuleMutation, useRealtimeModuleList, useRealtimeTable, useSession, Row } from '@/lib/modules/client';
 import { formatDateTime, timeAgo } from '@/lib/utils';
+import { useUi } from '@/lib/i18n-client';
+import { CampusBadge } from '@/components/CampusBadge';
 
 export default function EventsPage() {
   const session = useSession();
+  const { t } = useUi();
   const events = useApiList('/api/events', { table: 'events', enabled: !!session.authenticated });
   const rows = events.data;
   const { loading, demo, error, refresh } = events;
@@ -209,6 +212,7 @@ export default function EventsPage() {
                     <Card key={String(event.id)} className="p-4 space-y-2.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge tone="indigo">{String(event.category ?? 'EVENT')}</Badge>
+                        <CampusBadge universityId={event.university_id} />
                         {event.is_public && <Badge tone="teal">Public</Badge>}
                         {Number(event.ticket_price_bdt ?? 0) > 0 ? (
                           <Badge tone="amber">৳{Number(event.ticket_price_bdt)} ticket</Badge>
