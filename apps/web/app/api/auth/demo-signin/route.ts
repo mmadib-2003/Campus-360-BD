@@ -18,8 +18,7 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
-import { createSupabaseRouteClient } from '@/lib/supabase-server';
-import { isDemoAuthMode } from '@/lib/demo-otp';
+import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import {
   findDemoAccount,
   getDemoUniversity,
@@ -50,22 +49,14 @@ export async function POST(req: NextRequest) {
   if (!allowedDemoEmails.has(email) || !account) {
     return apiError('DEMO_SIGNIN_DISABLED', 'Use one of the four demo accounts listed on /demo.', ' /demo পাতায় দেওয়া চারটি ডেমো অ্যাকাউন্ট ব্যবহার করুন।', 403);
   }
+  if (password !== account.password) {
+    return apiError('INVALID_CREDENTIALS', 'The demo password is incorrect.', 'ডেমো পাসওয়ার্ডটি সঠিক নয়।', 401);
+  }
 
   const supabaseConfigured = isSupabaseServerConfigured();
 
-  if (!isDemoAuthMode() && !supabaseConfigured) {
-    // Preview deployments without Supabase still serve the four one-click demo
-    // identities from /signin. Only the known seeded addresses are accepted
-    // below — this is not a bypass for arbitrary credentials.
-    if (!findDemoAccount(email)) {
-      return apiError(
-        'DEMO_SIGNIN_DISABLED',
-        'Demo sign-in is disabled for this deployment.',
-        'এই ডিপ্লয়মেন্টে ডেমো সাইন-ইন নিষ্ক্রিয় করা আছে।',
-        403
-      );
-    }
-  }
+  // The four-email allowlist above is the production-safe bypass. Never gate
+  // those known showcase identities on NEXT_PUBLIC_AUTH_MODE.
 
   // Preview / demo fallback: match against the seeded credential list only.
   if (!supabaseConfigured) {
@@ -109,6 +100,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // SQL-created Auth rows can carry a valid bcrypt hash yet still be in a
+    // GoTrue-inconsistent state. Normalize the allowlisted showcase user using
+    // Auth's Admin API on each demo login; this does NOT create a session and
+    // is never exposed for arbitrary accounts.
+    const admin = createSupabaseAdminClient();
+    const { data: listed, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listError) throw listError;
+
+    const existing = listed.users.find((user) => user.email?.toLowerCase() === email);
+    const appMetadata = {
+      provider: 'email',
+      providers: ['email'],
+      ...(account.role === 'admin' ? { is_platform_admin: true } : {}),
+    };
+    const authResult = existing
+      ? await admin.auth.admin.updateUserById(existing.id, {
+          password,
+          email_confirm: true,
+          user_metadata: { ...existing.user_metadata, university_code: 'DU', full_name: account.fullName },
+          app_metadata: appMetadata,
+        })
+      : await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { university_code: 'DU', full_name: account.fullName },
+          app_metadata: appMetadata,
+        });
+    if (authResult.error || !authResult.data.user) throw authResult.error ?? new Error('Auth Admin API returned no user');
+
+    const { data: university, error: universityError } = await admin
+      .from('universities').select('id').eq('code', 'DU').single();
+    if (universityError || !university) throw universityError ?? new Error('DU university not found');
+
+    const studentIds: Record<string, string> = {
+      student: 'DU-2026-12345', faculty: 'DU-FAC-0142', admin: 'DU-ADM-001', alumni: 'DU-ALM-2019-088',
+    };
+    const { error: profileError } = await admin.from('profiles').upsert({
+      id: authResult.data.user.id,
+      university_id: university.id,
+      email,
+      full_name: account.fullName,
+      student_id: studentIds[account.role],
+      trust_level: 'ID_VERIFIED',
+      onboarding_completed: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+    if (profileError) throw profileError;
+
+    const roleName = account.role.toUpperCase();
+    const { error: roleError } = await admin.from('user_roles').upsert({
+      user_id: authResult.data.user.id,
+      university_id: university.id,
+      role: roleName,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,university_id,role' });
+    if (roleError) throw roleError;
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data?.user || !data.session) {
       console.error('[demo-signin] Supabase password sign-in rejected', {
@@ -139,10 +188,19 @@ export async function POST(req: NextRequest) {
       sessionExpiresAt: data.session.expires_at ?? null,
     });
   } catch (error) {
+    const authError = error as Error & { code?: string; status?: number; details?: string; hint?: string };
     console.error('[demo-signin] Unexpected demo authentication exception', {
       email,
       error: error instanceof Error
-        ? { name: error.name, message: error.message, stack: error.stack }
+        ? {
+            name: error.name,
+            message: error.message,
+            code: authError.code ?? null,
+            status: authError.status ?? null,
+            details: authError.details ?? null,
+            hint: authError.hint ?? null,
+            stack: error.stack,
+          }
         : String(error),
     });
     return apiError(
