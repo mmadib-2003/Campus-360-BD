@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { REGISTRY_NO_STORE, registryError } from '@/lib/registry-cache';
 import { DEMO_UNIVERSITY_HALLS, getDemoUniversity } from '@/lib/modules/demo-data';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,14 @@ export async function GET(req: NextRequest) {
   const universityCode = req.nextUrl.searchParams.get('universityCode')?.trim() ?? '';
 
   if (!universityId && !universityCode) {
-    return apiError('MISSING_UNIVERSITY', 'universityId or universityCode is required.', 'বিশ্ববিদ্যালয় নির্বাচন করা আবশ্যক।', 400);
+    return apiError(
+      'MISSING_UNIVERSITY',
+      'universityId or universityCode is required.',
+      'বিশ্ববিদ্যালয় নির্বাচন করা আবশ্যক।',
+      400,
+      undefined,
+      REGISTRY_NO_STORE
+    );
   }
 
   if (!isSupabaseServerConfigured()) {
@@ -32,7 +40,7 @@ export async function GET(req: NextRequest) {
       type: hall.type,
       is_active: true,
     }));
-    return apiSuccess(halls);
+    return apiSuccess(halls, 200, undefined, REGISTRY_NO_STORE);
   }
 
   const supabase = createSupabaseRouteClient();
@@ -50,13 +58,14 @@ export async function GET(req: NextRequest) {
       .select('id')
       .eq('code', universityCode.toUpperCase())
       .maybeSingle();
-    if (!university) return apiSuccess([]);
+    if (!university) return apiSuccess([], 200, undefined, REGISTRY_NO_STORE);
     query = query.eq('university_id', university.id);
   }
 
   const { data, error } = await query;
   if (error) {
-    return apiError('FETCH_FAILED', error.message, 'হল তালিকা লোড করা যায়নি।', 500);
+    registryError('halls.fetch', error, { universityId, universityCode });
+    return apiError('FETCH_FAILED', error.message, 'হল তালিকা লোড করা যায়নি।', 500, undefined, REGISTRY_NO_STORE);
   }
-  return apiSuccess(data ?? []);
+  return apiSuccess(data ?? [], 200, undefined, REGISTRY_NO_STORE);
 }

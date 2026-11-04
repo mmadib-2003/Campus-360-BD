@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { REGISTRY_NO_STORE, registryError } from '@/lib/registry-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       'SUPABASE_NOT_CONFIGURED',
       'Server database credentials are not configured for this deployment.',
       'এই ডিপ্লয়মেন্টে সার্ভার ডাটাবেস কনফিগার করা হয়নি।',
-      503
+      503,
+      undefined,
+      REGISTRY_NO_STORE
     );
   }
 
@@ -30,7 +33,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .single();
 
   if (error || !data) {
-    return apiError('NOT_FOUND', 'University not found.', 'বিশ্ববিদ্যালয়টি পাওয়া যায়নি।', 404);
+    registryError('university.fetch', error, { id: params.id });
+    return apiError('NOT_FOUND', 'University not found.', 'বিশ্ববিদ্যালয়টি পাওয়া যায়নি।', 404, undefined, REGISTRY_NO_STORE);
   }
-  return apiSuccess(data);
+  return apiSuccess(data, 200, undefined, REGISTRY_NO_STORE);
 }

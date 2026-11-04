@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { REGISTRY_NO_STORE, registryError } from '@/lib/registry-cache';
 import { demoUniversitiesPayload } from '@/lib/demo-auth';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
   if (!isSupabaseServerConfigured()) {
     // Preview deployments still get the full public registry so the signup
     // combobox, filters and domain hints work without any secrets.
-    return apiSuccess(demoUniversitiesPayload());
+    return apiSuccess(demoUniversitiesPayload(), 200, undefined, REGISTRY_NO_STORE);
   }
 
   const supabase = createSupabaseRouteClient();
@@ -33,9 +34,17 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) {
-    return apiError('FETCH_FAILED', error.message, 'বিশ্ববিদ্যালয়ের তালিকা লোড করা যায়নি।', 500);
+    // The one place a registry outage became invisible: the body carried
+    // `error.message`, the client discarded it, and the combobox rendered
+    // "No options found". Log the PostgREST fault under a grep-able prefix.
+    registryError('universities.fetch', error, {
+      category: category ?? null,
+      q: q ?? null,
+      project: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '(unset)',
+    });
+    return apiError('FETCH_FAILED', error.message, 'বিশ্ববিদ্যালয়ের তালিকা লোড করা যায়নি।', 500, undefined, REGISTRY_NO_STORE);
   }
-  return apiSuccess(data);
+  return apiSuccess(data ?? [], 200, { count: (data ?? []).length }, REGISTRY_NO_STORE);
 }
 
 export async function POST(req: NextRequest) {

@@ -9,6 +9,149 @@ import { HallCombobox, type HallOption } from '@/components/auth/HallCombobox';
 
 type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
 
+interface DepartmentOption {
+  id: string;
+  code: string;
+  name_en: string;
+  name_bn: string;
+  faculty_en?: string | null;
+}
+
+interface ProgramOption {
+  id: string;
+  code: string;
+  name_en: string;
+  name_bn: string;
+  cycle: 'UNDERGRADUATE' | 'GRADUATE' | 'DOCTORAL' | 'DIPLOMA';
+  duration_years?: number | null;
+}
+
+/**
+ * Registry reads used to be `.catch(() => undefined)`-swallowed, which made a
+ * server-side fault (missing env, RLS change, unapplied migration) look exactly
+ * like an empty database: a combobox saying "No options found" with nothing in
+ * the runtime logs. This returns the *reason* so the form can show it and offer
+ * a retry. `cache: 'no-store'` mirrors the server's own Cache-Control.
+ */
+async function fetchRegistry<T>(
+  url: string,
+  locale: string
+): Promise<{ data: T[]; error: string | null }> {
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    const payload = await response.json().catch(() => null);
+    if (payload?.success && Array.isArray(payload.data)) {
+      return { data: payload.data as T[], error: null };
+    }
+    const err = payload?.error;
+    const message = err
+      ? (locale === 'bn' ? err.message_bn || err.message_en : err.message_en || err.message_bn)
+      : `HTTP ${response.status}`;
+    return { data: [], error: String(message || 'Request failed') };
+  } catch (cause) {
+    return { data: [], error: cause instanceof Error ? cause.message : 'Network error' };
+  }
+}
+
+const CYCLE_LABEL: Record<ProgramOption['cycle'], string> = {
+  UNDERGRADUATE: 'Undergraduate',
+  GRADUATE: "Master's",
+  DOCTORAL: 'Doctorate',
+  DIPLOMA: 'Diploma',
+};
+
+interface RegistrySelectProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string; group?: string }>;
+  placeholder: string;
+  hint: string;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  required?: boolean;
+}
+
+/** Native <select> (37+ departments per campus) grouped by faculty / cycle. */
+function RegistrySelect({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  hint,
+  loading,
+  error,
+  onRetry,
+  required,
+}: RegistrySelectProps) {
+  const { t } = useUi();
+  const groups = Array.from(new Set(options.map((option) => option.group ?? '')));
+
+  if (loading) {
+    return <div className="h-[70px] rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
+  }
+
+  return (
+    <div>
+      <label className="block font-medium mb-1" htmlFor={id}>
+        {label}
+        {required ? <span className="text-rose-500"> *</span> : null}
+      </label>
+      {options.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-3 text-xs text-slate-500 dark:text-slate-400">
+          {error ?? t('Nothing to pick from yet for this university.')}
+        </div>
+      ) : (
+        <select
+          id={id}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+        >
+          <option value="">{placeholder}</option>
+          {groups.map((group) =>
+            group ? (
+              <optgroup key={group} label={group}>
+                {options
+                  .filter((option) => (option.group ?? '') === group)
+                  .map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+              </optgroup>
+            ) : (
+              options
+                .filter((option) => !option.group)
+                .map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))
+            )
+          )}
+        </select>
+      )}
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+        {error ? (
+          <span className="text-rose-500">
+            {error}{' '}
+            <button type="button" onClick={onRetry} className="font-semibold underline">
+              {t('Try again')}
+            </button>
+          </span>
+        ) : (
+          hint
+        )}
+      </p>
+    </div>
+  );
+}
+
 const ROLES: Array<{ value: DemoRole; icon: string; key: string }> = [
   { value: 'student', icon: '🎓', key: 'Student' },
   { value: 'faculty', icon: '🏫', key: 'Faculty / Staff' },
@@ -21,11 +164,27 @@ export default function SignUpPage() {
   const { locale, t } = useUi();
   const [universities, setUniversities] = React.useState<UniversityOption[]>([]);
   const [loadingUniversities, setLoadingUniversities] = React.useState(true);
+  const [universitiesError, setUniversitiesError] = React.useState<string | null>(null);
+  // Bumped by every "Try again" link: one control that re-runs all four reads.
+  const [reloadKey, setReloadKey] = React.useState(0);
   const [role, setRole] = React.useState<DemoRole | ''>('');
   const [universityId, setUniversityId] = React.useState('');
+
   const [halls, setHalls] = React.useState<HallOption[]>([]);
   const [hallId, setHallId] = React.useState('');
   const [loadingHalls, setLoadingHalls] = React.useState(false);
+  const [hallsError, setHallsError] = React.useState<string | null>(null);
+
+  const [departments, setDepartments] = React.useState<DepartmentOption[]>([]);
+  const [departmentId, setDepartmentId] = React.useState('');
+  const [loadingDepartments, setLoadingDepartments] = React.useState(false);
+  const [departmentsError, setDepartmentsError] = React.useState<string | null>(null);
+
+  const [programs, setPrograms] = React.useState<ProgramOption[]>([]);
+  const [programId, setProgramId] = React.useState('');
+  const [loadingPrograms, setLoadingPrograms] = React.useState(true);
+  const [programsError, setProgramsError] = React.useState<string | null>(null);
+
   const [fullName, setFullName] = React.useState('');
   const [studentId, setStudentId] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -35,50 +194,88 @@ export default function SignUpPage() {
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
+  const bn = locale === 'bn';
+  const pick = React.useCallback(
+    (row: { name_en: string; name_bn?: string | null }) => (bn && row.name_bn ? row.name_bn : row.name_en),
+    [bn]
+  );
+
+  // The two campus-independent registries. `programs` is served from
+  // public.academic_programs (migration 0012); a deployment whose migration has
+  // not run yet just sees the select fall back to "nothing to pick from yet".
   React.useEffect(() => {
     let cancelled = false;
-    fetch('/api/universities')
-      .then((response) => response.json())
-      .then((payload) => {
-        if (cancelled) return;
-        if (payload?.success && Array.isArray(payload.data)) {
-          setUniversities(payload.data as UniversityOption[]);
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setLoadingUniversities(false);
-      });
+    setLoadingUniversities(true);
+    setLoadingPrograms(true);
+    fetchRegistry<UniversityOption>('/api/universities', locale).then(({ data, error }) => {
+      if (cancelled) return;
+      setUniversities(data);
+      setUniversitiesError(error);
+      setLoadingUniversities(false);
+    });
+    fetchRegistry<ProgramOption>('/api/programs', locale).then(({ data, error }) => {
+      if (cancelled) return;
+      setPrograms(data);
+      setProgramsError(error);
+      setLoadingPrograms(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale, reloadKey]);
 
   // Residential halls for the selected university (mandatory for students).
   React.useEffect(() => {
     setHallId('');
+    setHallsError(null);
     if (!universityId) {
       setHalls([]);
       return;
     }
     let cancelled = false;
     setLoadingHalls(true);
-    fetch(`/api/halls?universityId=${encodeURIComponent(universityId)}`)
-      .then((response) => response.json())
-      .then((payload) => {
+    fetchRegistry<HallOption>(`/api/halls?universityId=${encodeURIComponent(universityId)}`, locale).then(
+      ({ data, error }) => {
         if (cancelled) return;
-        if (payload?.success && Array.isArray(payload.data)) {
-          setHalls(payload.data as HallOption[]);
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setLoadingHalls(false);
-      });
+        setHalls(data);
+        setHallsError(error);
+        setLoadingHalls(false);
+      }
+    );
     return () => {
       cancelled = true;
     };
-  }, [universityId]);
+  }, [universityId, locale, reloadKey]);
+
+  // Departments of the selected university (optional: not every campus has a
+  // seeded roster yet, and a wrong department is fixable in the profile).
+  React.useEffect(() => {
+    setDepartmentId('');
+    setDepartmentsError(null);
+    if (!universityId) {
+      setDepartments([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDepartments(true);
+    fetchRegistry<DepartmentOption>(
+      `/api/departments?universityId=${encodeURIComponent(universityId)}`,
+      locale
+    ).then(({ data, error }) => {
+      if (cancelled) return;
+      setDepartments(data);
+      setDepartmentsError(error);
+      setLoadingDepartments(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [universityId, locale, reloadKey]);
+
+  // Registry-backed fields are only enforced when their list actually loaded:
+  // an outage must not turn into an unsolvable form, only into a hint.
+  const departmentRequired = (role === 'student' || role === 'faculty') && departments.length > 0;
+  const programRequired = role === 'student' && programs.length > 0;
 
   const selectedUniversity = universities.find((university) => university.id === universityId);
   const emailDomain = email.includes('@') ? email.split('@')[1]?.toLowerCase() ?? '' : '';
@@ -94,6 +291,12 @@ export default function SignUpPage() {
     if (!universityId) return setErrorMsg(t('Select your university to continue'));
     if (role === 'student' && !hallId) {
       return setErrorMsg(t('Select your residential hall to continue'));
+    }
+    if (departmentRequired && !departmentId) {
+      return setErrorMsg(t('Select your department to continue'));
+    }
+    if (programRequired && !programId) {
+      return setErrorMsg(t('Select your academic program to continue'));
     }
     if (!fullName.trim()) return setErrorMsg(t('Enter your full name'));
     if (!studentId.trim()) return setErrorMsg(t('Enter your student ID'));
@@ -112,7 +315,14 @@ export default function SignUpPage() {
           email,
           universityId,
           role,
-          signupPayload: { fullName, studentId, role, hallId: role === 'student' ? hallId : '' },
+          signupPayload: {
+            fullName,
+            studentId,
+            role,
+            hallId: role === 'student' ? hallId : '',
+            departmentId: role === 'admin' ? '' : departmentId,
+            programId: role === 'student' ? programId : '',
+          },
         }),
       });
       const payload = await response.json();
@@ -130,6 +340,8 @@ export default function SignUpPage() {
             fullName,
             studentId,
             hallId: role === 'student' ? hallId : '',
+            departmentId,
+            programId,
             demoCode: payload.data?.demoCode ?? null,
             demo: Boolean(payload.data?.demo),
             expiresAt: payload.data?.expiresAt ?? null,
@@ -201,6 +413,18 @@ export default function SignUpPage() {
               <span className="font-medium">{t('Public University')}</span>
               <span className="text-[11px] text-slate-400">2 / 3</span>
             </div>
+            {universitiesError && universities.length === 0 ? (
+              <div className="mb-2 rounded-xl border border-rose-500/40 bg-rose-500/5 p-3 text-xs text-rose-600 dark:text-rose-300">
+                {universitiesError}{' '}
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                  className="font-semibold underline"
+                >
+                  {t('Try again')}
+                </button>
+              </div>
+            ) : null}
             {loadingUniversities ? (
               <div className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
             ) : (
@@ -233,6 +457,49 @@ export default function SignUpPage() {
               )}
             </div>
           )}
+
+          {universityId && role !== 'admin' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RegistrySelect
+                id="signup-department"
+                label={t('Department')}
+                value={departmentId}
+                onChange={setDepartmentId}
+                loading={loadingDepartments}
+                error={departmentsError}
+                onRetry={() => setReloadKey((key) => key + 1)}
+                required={departmentRequired}
+                placeholder={t('Select your department…')}
+                hint={t('Routes department notices and course requests to the right office.')}
+                options={departments.map((department) => ({
+                  value: department.id,
+                  label: `${pick(department)} (${department.code})`,
+                  group: department.faculty_en ?? undefined,
+                }))}
+              />
+              {role === 'student' ? (
+                <RegistrySelect
+                  id="signup-program"
+                  label={t('Academic Program')}
+                  value={programId}
+                  onChange={setProgramId}
+                  loading={loadingPrograms}
+                  error={programsError}
+                  onRetry={() => setReloadKey((key) => key + 1)}
+                  required={programRequired}
+                  placeholder={t('Select your academic program…')}
+                  hint={t('Honors, Degree, professional B.Sc., Master\'s or Ph.D. — it sets your term structure.')}
+                  options={programs.map((program) => ({
+                    value: program.id,
+                    label: program.duration_years
+                      ? `${pick(program)} · ${program.duration_years} ${t('yr')}`
+                      : pick(program),
+                    group: t(CYCLE_LABEL[program.cycle]),
+                  }))}
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

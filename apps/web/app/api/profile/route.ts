@@ -48,6 +48,7 @@ export async function PATCH(req: NextRequest) {
     full_name: body.full_name,
     department_id: body.department_id,
     hall_id: body.hall_id,
+    program_id: body.program_id,
     batch: body.batch,
     bio: body.bio,
     avatar_url: body.avatar_url,
