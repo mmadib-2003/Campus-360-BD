@@ -2,46 +2,46 @@
 -- ============================================================================
 -- One-click demo identities for the "Quick Demo Login" panel on /signin.
 --
--- Four accounts, one per role, on the reserved (never-deliverable) domain
--- `demo.campus360.test`:
+-- Four accounts, one per role, on `@demo.campus360.bd` (scoped to JU + IIT):
 --
---   student@demo.campus360.test   → STUDENT
---   faculty@demo.campus360.test   → FACULTY
---   admin@demo.campus360.test     → ADMIN (+ is_platform_admin claim)
---   alumni@demo.campus360.test    → ALUMNI
+--   student@demo.campus360.bd   -> STUDENT
+--   faculty@demo.campus360.bd   -> FACULTY
+--   admin@demo.campus360.bd     -> ADMIN + UNIVERSITY_ADMIN + SUPER_ADMIN
+--   alumni@demo.campus360.bd    -> ALUMNI
 --
--- Every account uses the SAME hardcoded bcrypt hash, which is the hash of the
--- known password  Demo#1234  (cost 10, $2a$). It is hardcoded on purpose so a
--- fresh preview does not need to compute a hash at seed time and so the
--- /signin buttons can document the password. This is demo data only — never
--- run this seed against a production project with real users.
---
--- IMPORTANT: the seed also inserts an `auth.identities` row for every account.
--- GoTrue's password grant resolves the email through auth.identities; a user
--- that exists only in auth.users gets "Invalid login credentials" even with a
--- correct password. The identity row is what makes the one-click login work.
---
--- Idempotent: re-running updates the password/profile and keeps the same
--- auth.users id. Requires migration 0015 (ALUMNI enum value) and seed.sql (DU).
+-- Every account uses the verified hardcoded bcrypt hash of Demo#1234 (cost 10,
+-- $2a$) and explicitly populates GoTrue's non-nullable string token columns
+-- plus auth.identities (`provider = 'email'`, `provider_id = user.id::text`).
 -- ============================================================================
 
 BEGIN;
 
 DO $$
 DECLARE
-  -- bcrypt("Demo#1234"), cost 10. Verified with bcryptjs compareSync.
-  v_demo_password TEXT := '$2a$10$QsYfRPv60gPCkvVDIlYO7u8dvdYGUJ4dbuhViCIpcXIJWCw69ZBwu';
+  -- Verified bcrypt("Demo#1234"), cost 10.
+  v_demo_password TEXT := '$2a$10$mU/SOdhpTcfA2Dn8cLJp6.wlPQ6KRQNnQ4qPVPlhPzgbiY9xltN1C';
   v_university_id UUID;
+  v_department_id UUID;
   v_hall_id UUID;
   v_user_id UUID;
   v_account RECORD;
   v_app_role app_role;
   v_meta JSONB;
+  v_user_meta JSONB;
 BEGIN
-  SELECT id INTO v_university_id FROM public.universities WHERE code = 'DU';
+  SELECT id INTO v_university_id FROM public.universities WHERE code = 'JU';
   IF v_university_id IS NULL THEN
-    RAISE EXCEPTION 'seed_quick_demo_accounts: DU must be seeded first (supabase/seed/seed.sql)';
+    SELECT id INTO v_university_id FROM public.universities WHERE code = 'DU';
   END IF;
+  IF v_university_id IS NULL THEN
+    RAISE EXCEPTION 'seed_quick_demo_accounts: JU or DU must be seeded first (supabase/seed/seed.sql)';
+  END IF;
+
+  SELECT d.id INTO v_department_id
+  FROM public.departments d
+  WHERE d.university_id = v_university_id AND d.code IN ('IIT', 'CSE')
+  ORDER BY CASE WHEN d.code = 'IIT' THEN 0 ELSE 1 END
+  LIMIT 1;
 
   SELECT h.id INTO v_hall_id
   FROM public.university_halls h
@@ -52,50 +52,79 @@ BEGIN
   FOR v_account IN
     SELECT * FROM (
       VALUES
-        ('student', 'student@demo.campus360.test', 'Demo Student', 'STUDENT'::app_role, 'DU-2026-12345', false),
-        ('faculty', 'faculty@demo.campus360.test', 'Demo Faculty', 'FACULTY'::app_role, 'DU-FAC-0142', false),
-        ('admin', 'admin@demo.campus360.test', 'Demo Admin', 'ADMIN'::app_role, 'DU-ADM-001', true),
-        ('alumni', 'alumni@demo.campus360.test', 'Demo Alumni', 'ALUMNI'::app_role, 'DU-ALM-2019-088', false)
+        ('student', 'student@demo.campus360.bd', 'Demo Student', 'STUDENT'::app_role, 'JU-2026-0101', false),
+        ('faculty', 'faculty@demo.campus360.bd', 'Demo Faculty', 'FACULTY'::app_role, 'JU-FAC-0102', false),
+        ('admin', 'admin@demo.campus360.bd', 'Demo Admin', 'ADMIN'::app_role, 'JU-ADM-0103', true),
+        ('alumni', 'alumni@demo.campus360.bd', 'Demo Alumni', 'ALUMNI'::app_role, 'JU-ALM-0104', false)
     ) AS t(role, email, full_name, app_role, student_id, is_platform_admin)
   LOOP
     v_app_role := v_account.app_role;
-    v_meta := CASE
-      WHEN v_account.is_platform_admin
-        THEN jsonb_build_object('provider', 'email', 'providers', ARRAY['email'], 'is_platform_admin', true)
-      ELSE jsonb_build_object('provider', 'email', 'providers', ARRAY['email'])
-    END;
+    v_meta := jsonb_build_object(
+      'provider', 'email',
+      'providers', ARRAY['email'],
+      'role', v_account.role,
+      'is_demo', true,
+      'is_platform_admin', v_account.is_platform_admin
+    );
+    v_user_meta := jsonb_build_object(
+      'university_code', 'JU',
+      'department_code', 'IIT',
+      'full_name', v_account.full_name,
+      'name', v_account.full_name,
+      'role', v_account.role,
+      'email_verified', true,
+      'is_demo', true
+    );
 
-    SELECT id INTO v_user_id FROM auth.users WHERE email = v_account.email;
+    SELECT id INTO v_user_id FROM auth.users WHERE lower(email) = lower(v_account.email);
     IF v_user_id IS NULL THEN
       v_user_id := gen_random_uuid();
       INSERT INTO auth.users (
-        id, email, encrypted_password, email_confirmed_at, created_at, updated_at,
-        raw_app_meta_data, raw_user_meta_data, aud, role
+        instance_id, id, email, encrypted_password, email_confirmed_at, created_at, updated_at,
+        raw_app_meta_data, raw_user_meta_data, aud, role,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        phone_change, phone_change_token, email_change_token_current, reauthentication_token,
+        email_change_confirm_status, is_sso_user, is_anonymous
       ) VALUES (
+        '00000000-0000-0000-0000-000000000000'::uuid,
         v_user_id,
         v_account.email,
         v_demo_password,
         now(), now(), now(),
         v_meta,
-        jsonb_build_object('university_code', 'DU', 'full_name', v_account.full_name),
+        v_user_meta || jsonb_build_object('sub', v_user_id::text, 'email', v_account.email),
         'authenticated',
-        'authenticated'
+        'authenticated',
+        '', '', '', '', '', '', '', '',
+        0, false, false
       );
     ELSE
       UPDATE auth.users
-      SET encrypted_password = v_demo_password,
+      SET instance_id = '00000000-0000-0000-0000-000000000000'::uuid,
+          encrypted_password = v_demo_password,
           raw_app_meta_data = v_meta,
+          raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || v_user_meta,
           email_confirmed_at = COALESCE(email_confirmed_at, now()),
+          confirmation_token = '',
+          recovery_token = '',
+          email_change_token_new = '',
+          email_change = '',
+          phone_change = '',
+          phone_change_token = '',
+          email_change_token_current = '',
+          reauthentication_token = '',
+          email_change_confirm_status = 0,
           updated_at = now()
       WHERE id = v_user_id;
     END IF;
 
     INSERT INTO public.profiles (
-      id, university_id, hall_id, email, full_name, student_id,
+      id, university_id, department_id, hall_id, email, full_name, student_id,
       batch, trust_level, onboarding_completed
     ) VALUES (
       v_user_id,
       v_university_id,
+      v_department_id,
       CASE WHEN v_account.role = 'student' THEN v_hall_id ELSE NULL END,
       v_account.email,
       v_account.full_name,
@@ -106,7 +135,8 @@ BEGIN
     )
     ON CONFLICT (id) DO UPDATE
       SET university_id = EXCLUDED.university_id,
-          hall_id = EXCLUDED.hall_id,
+          department_id = COALESCE(EXCLUDED.department_id, public.profiles.department_id),
+          hall_id = COALESCE(EXCLUDED.hall_id, public.profiles.hall_id),
           email = EXCLUDED.email,
           full_name = EXCLUDED.full_name,
           student_id = EXCLUDED.student_id,
@@ -118,23 +148,31 @@ BEGIN
     VALUES (v_user_id, v_university_id, v_app_role)
     ON CONFLICT (user_id, university_id, role) DO NOTHING;
 
-    -- GoTrue's password grant looks the user up through auth.identities.
-    -- A row in auth.users alone is NOT enough: signInWithPassword returns
-    -- "Invalid login credentials" for a user with no email identity. This
-    -- insert is what makes the one-click buttons work on a fresh project.
+    IF v_account.is_platform_admin THEN
+      INSERT INTO public.user_roles (user_id, university_id, role)
+      VALUES
+        (v_user_id, v_university_id, 'UNIVERSITY_ADMIN'::app_role),
+        (v_user_id, v_university_id, 'SUPER_ADMIN'::app_role)
+      ON CONFLICT (user_id, university_id, role) DO NOTHING;
+    END IF;
+
     INSERT INTO auth.identities (
-      user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+      id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
     ) VALUES (
+      gen_random_uuid(),
       v_user_id,
       v_user_id::text,
       jsonb_build_object('email', v_account.email, 'email_verified', true, 'sub', v_user_id::text),
       'email',
       now(), now(), now()
     )
-    ON CONFLICT (provider_id, provider) DO NOTHING;
+    ON CONFLICT (provider_id, provider) DO UPDATE
+      SET user_id = EXCLUDED.user_id,
+          identity_data = EXCLUDED.identity_data,
+          updated_at = now();
   END LOOP;
 
-  RAISE NOTICE 'Quick demo accounts ready (student/faculty/admin/alumni@demo.campus360.test) — password Demo#1234';
+  RAISE NOTICE 'Quick demo accounts ready (student/faculty/admin/alumni@demo.campus360.bd) — password Demo#1234';
 END $$;
 
 COMMIT;

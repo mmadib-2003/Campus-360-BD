@@ -1,190 +1,171 @@
+'use client';
+
 // apps/web/components/auth/QuickDemoLogin.tsx
 // ============================================================================
-// One-click, role-based demo accounts on /signin.
+// One-click demo login cards on `/signin`:
+//   - Log in as Student  (student@demo.campus360.bd)
+//   - Log in as Faculty  (faculty@demo.campus360.bd)
+//   - Log in as Admin    (admin@demo.campus360.bd)
+//   - Log in as Alumni   (alumni@demo.campus360.bd)
 //
-// Visitors should never have to guess a credential or wait for an OTP email to
-// see the product. Each button fills the canonical demo identity and signs in
-// immediately through /api/auth/demo-signin (GoTrue password grant when
-// Supabase is configured, the offline demo store otherwise).
-//
-// The four addresses are provisioned by
-// supabase/seed/seed_quick_demo_accounts.sql with a hardcoded bcrypt hash of
-// Demo#1234, so this works on a fresh preview and on a live project alike.
+// Posts to `/api/auth/demo-signin`, which establishes a verified Supabase
+// session (or an HMAC-signed HTTP-only `campus360_demo_session` fallback cookie)
+// without requiring email verification, OTP entry, or onboarding.
 // ============================================================================
-
-'use client';
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { useUi } from '@/lib/i18n-client';
 import {
   QUICK_DEMO_ACCOUNTS,
   setDemoSession,
   setDemoSignedOut,
-  type DemoRole,
   type QuickDemoAccount,
   type QuickDemoRole,
 } from '@/lib/modules/demo-data';
 
-const TONES: Record<
-  QuickDemoAccount['tone'],
-  { card: string; icon: string; badge: string; spinner: string }
-> = {
-  emerald: {
-    card: 'border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/70 hover:bg-emerald-500/10',
-    icon: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-    badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-    spinner: 'border-emerald-700/30 border-t-emerald-700 dark:border-emerald-300/30 dark:border-t-emerald-300',
-  },
-  sky: {
-    card: 'border-sky-500/40 bg-sky-500/5 hover:border-sky-500/70 hover:bg-sky-500/10',
-    icon: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-    badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-    spinner: 'border-sky-700/30 border-t-sky-700 dark:border-sky-300/30 dark:border-t-sky-300',
-  },
-  amber: {
-    card: 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/70 hover:bg-amber-500/10',
-    icon: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-    badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-    spinner: 'border-amber-700/30 border-t-amber-700 dark:border-amber-300/30 dark:border-t-amber-300',
-  },
-  violet: {
-    card: 'border-violet-500/40 bg-violet-500/5 hover:border-violet-500/70 hover:bg-violet-500/10',
-    icon: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
-    badge: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
-    spinner: 'border-violet-700/30 border-t-violet-700 dark:border-violet-300/30 dark:border-t-violet-300',
-  },
+const TONE_CLASSES: Record<QuickDemoAccount['tone'], string> = {
+  emerald:
+    'border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/15 hover:border-emerald-500 text-emerald-950 dark:text-emerald-100',
+  sky: 'border-sky-500/40 bg-sky-500/5 hover:bg-sky-500/15 hover:border-sky-500 text-sky-950 dark:text-sky-100',
+  amber:
+    'border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/15 hover:border-amber-500 text-amber-950 dark:text-amber-100',
+  violet:
+    'border-violet-500/40 bg-violet-500/5 hover:bg-violet-500/15 hover:border-violet-500 text-violet-950 dark:text-violet-100',
 };
 
 export function QuickDemoLogin() {
   const router = useRouter();
   const { locale, t } = useUi();
-  const [pending, setPending] = React.useState<QuickDemoRole | null>(null);
+  const [busyRole, setBusyRole] = React.useState<QuickDemoRole | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  async function signIn(account: QuickDemoAccount) {
-    if (pending) return;
+  async function handleClick(account: QuickDemoAccount) {
+    if (busyRole) return;
     setError(null);
-    setPending(account.role);
+    setBusyRole(account.role);
     try {
       const response = await fetch('/api/auth/demo-signin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: account.email, password: account.password }),
+        body: JSON.stringify({
+          email: account.email,
+          password: account.password,
+          role: account.role,
+        }),
       });
       const payload = await response.json().catch(() => null);
-      if (!payload?.success) {
+      if (!response.ok || (!payload?.ok && !payload?.success)) {
+        const err = payload?.error;
         setError(
-          payload?.error?.message_en ??
-            t('Could not start the demo session. Please try again.')
+          (locale === 'bn' ? err?.message_bn || err?.message_en : err?.message_en) ??
+            t('Demo sign-in failed. Please try again.')
         );
         return;
       }
 
-      // Offline/preview mode keeps the session in the local demo store. With
-      // Supabase configured the route has already written the auth cookie.
-      if (payload.data?.demo) {
-        setDemoSignedOut(false);
-        setDemoSession({
-          universityId: payload.data?.account?.universityId ?? '',
-          role: account.role as DemoRole,
-          email: account.email,
-          fullName: account.fullName,
-        });
+      const demoAccount = payload?.data?.account;
+      setDemoSignedOut(false);
+      setDemoSession({
+        universityId: demoAccount?.universityId || 'demo-univ-ju',
+        role: account.role,
+        email: demoAccount?.email || account.email,
+        fullName: demoAccount?.fullName || account.fullName,
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
       }
 
-      router.push(account.landing);
+      const destination: string =
+        payload?.redirectTo ||
+        payload?.data?.redirectTo ||
+        (account.role === 'admin' ? '/admin/console' : account.landing);
+
+      router.push(destination);
       router.refresh();
     } catch {
-      setError(t('Could not start the demo session. Please try again.'));
+      setError(t('Demo sign-in failed. Please try again.'));
     } finally {
-      setPending(null);
+      setBusyRole(null);
     }
   }
 
   return (
     <section
-      className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/40 p-4"
+      aria-labelledby="quick-demo-login-heading"
       data-testid="quick-demo-login"
-      aria-labelledby="quick-demo-heading"
+      className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg space-y-4"
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="quick-demo-heading" className="text-sm font-bold flex items-center gap-1.5">
-            <span aria-hidden>⚡</span> {t('Quick Demo Login')}
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold">
+            ⚡ {locale === 'bn' ? 'এক ক্লিকে ডেমো অ্যাক্সেস' : 'Instant Demo Access'}
+          </span>
+          <h2 id="quick-demo-login-heading" className="text-lg font-bold mt-2">
+            {locale === 'bn' ? 'দ্রুত ডেমো লগইন' : 'Quick Demo Login'}
           </h2>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {t('One click, no OTP. Pick a role to explore the full product instantly.')}
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            {locale === 'bn'
+              ? 'কোনো ওটিপি বা ফর্ম ছাড়াই যেকোনো রোলের অভিজ্ঞতা নিন (জাহাঙ্গীরনগর বিশ্ববিদ্যালয় — JU)।'
+              : 'Explore any role in one click — no OTP, email verification, or onboarding required.'}
           </p>
         </div>
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-          {t('Demo data only')}
-        </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        {QUICK_DEMO_ACCOUNTS.map((account, index) => {
-          const tone = TONES[account.tone];
-          const isPending = pending === account.role;
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {QUICK_DEMO_ACCOUNTS.map((account) => {
+          const isBusy = busyRole === account.role;
           return (
-            <motion.button
-              key={account.email}
+            <button
+              key={account.role}
               type="button"
-              onClick={() => void signIn(account)}
-              disabled={pending !== null}
-              aria-label={`${locale === 'bn' ? account.labelBn : account.label} — ${account.email}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 + index * 0.06, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              whileHover={pending ? undefined : { scale: 1.02, y: -2 }}
-              whileTap={pending ? undefined : { scale: 0.98 }}
-              className={`group text-left rounded-xl border p-3 transition disabled:cursor-wait disabled:opacity-70 ${tone.card}`}
+              data-testid={`quick-demo-${account.role}`}
+              disabled={busyRole !== null}
+              onClick={() => void handleClick(account)}
+              className={`group flex flex-col items-start justify-between text-left rounded-xl border p-3.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 ${TONE_CLASSES[account.tone]}`}
             >
-              <div className="flex items-center gap-2">
-                <span className={`h-8 w-8 rounded-lg flex items-center justify-center text-base shrink-0 ${tone.icon}`} aria-hidden>
-                  {account.icon}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                      {isPending ? t('Signing in…') : locale === 'bn' ? account.labelBn : account.label}
-                    </span>
-                    {isPending && (
-                      <span
-                        className={`h-3 w-3 rounded-full border-2 animate-spin ${tone.spinner}`}
-                        aria-hidden
-                      />
-                    )}
-                  </div>
-                  <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                    {account.email}
-                  </div>
+              <div className="w-full min-w-0">
+                <div className="flex items-center justify-between w-full gap-2">
+                  <span className="text-xl shrink-0" aria-hidden>
+                    {account.icon}
+                  </span>
+                  <span className="text-[11px] font-semibold opacity-75 group-hover:translate-x-0.5 transition-transform shrink-0">
+                    {isBusy ? (locale === 'bn' ? 'লগইন হচ্ছে…' : 'Signing in…') : '→'}
+                  </span>
                 </div>
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${tone.badge}`}>
-                  {account.role}
+                <span className="mt-2 block text-sm font-bold leading-snug">
+                  {locale === 'bn' ? account.labelBn : account.label}
+                </span>
+                <span className="mt-1 block text-[11px] opacity-80 leading-relaxed">
+                  {locale === 'bn' ? account.blurbBn : account.blurb}
                 </span>
               </div>
-              <p className="mt-1.5 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
-                {locale === 'bn' ? account.blurbBn : account.blurb}
-              </p>
-            </motion.button>
+              <span
+                title={account.email}
+                className="mt-2.5 block w-full rounded-md bg-slate-900/5 dark:bg-white/5 px-2 py-1 font-mono text-[11px] leading-snug opacity-85 break-all"
+              >
+                {account.email}
+              </span>
+            </button>
           );
         })}
       </div>
 
       {error && (
-        <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-400" role="alert">
+        <div
+          role="alert"
+          data-testid="quick-demo-error"
+          className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs"
+        >
           {error}
-        </p>
+        </div>
       )}
 
-      <p className="mt-2.5 text-[10px] text-slate-500 dark:text-slate-400">
-        {t('All four demo accounts use the password')}{' '}
-        <code className="px-1 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 font-mono text-[10px]">
-          Demo#1234
-        </code>
-        . {t('No email or OTP is sent.')}
+      <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+        {locale === 'bn'
+          ? 'ডেমো অ্যাকাউন্টগুলো জাহাঙ্গীরনগর বিশ্ববিদ্যালয় (JU • IIT) টেন্যান্টে সংযুক্ত — প্রতিটি ডেমো পাসওয়ার্ড Demo#1234।'
+          : 'Demo accounts are pre-verified under Jahangirnagar University (JU • IIT) — password Demo#1234.'}
       </p>
     </section>
   );

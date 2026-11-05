@@ -25,10 +25,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 function landingFor(role: DemoRole): string {
-  if (role === 'admin') return '/admin/panel';
+  if (role === 'admin') return '/admin/console';
   if (role === 'governance') return '/governance/dashboard';
-  if (role === 'faculty') return '/faculty';
-  if (role === 'alumni') return '/careers';
   return '/feed';
 }
 
@@ -62,7 +60,10 @@ export default function DemoPage() {
           fullName: account.fullName,
         });
       }
-      router.push(landingFor((account?.role as DemoRole) ?? 'student'));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
+      }
+      router.push(payload?.redirectTo ?? landingFor((account?.role as DemoRole) ?? 'student'));
       router.refresh();
     } catch {
       setStatus(t('Verification failed'));

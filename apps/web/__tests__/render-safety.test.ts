@@ -356,15 +356,15 @@ describe('authentic campus imagery and one-click demo identities', () => {
 
   it('provisions the four one-click demo identities with a hardcoded hash', () => {
     for (const email of [
-      'student@demo.campus360.test',
-      'faculty@demo.campus360.test',
-      'admin@demo.campus360.test',
-      'alumni@demo.campus360.test',
+      'student@demo.campus360.bd',
+      'faculty@demo.campus360.bd',
+      'admin@demo.campus360.bd',
+      'alumni@demo.campus360.bd',
     ]) {
       expect(quickSeed).toContain(email);
       expect(demoData).toContain(email);
     }
-    expect(quickSeed).toContain('$2a$10$QsYfRPv60gPCkvVDIlYO7u8dvdYGUJ4dbuhViCIpcXIJWCw69ZBwu');
+    expect(quickSeed).toContain('$2a$10$mU/SOdhpTcfA2Dn8cLJp6.wlPQ6KRQNnQ4qPVPlhPzgbiY9xltN1C');
     expect(quickSeed).toContain("'ALUMNI'::app_role");
     expect(demoData).toContain("'Demo#1234'");
   });

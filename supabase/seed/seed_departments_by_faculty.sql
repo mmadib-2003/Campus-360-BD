@@ -174,7 +174,53 @@ JOIN (VALUES
 
   -- ── Dhaka / Chittagong / Rajshahi campus-specific departments ──────────
   ('CU','ANTR','Anthropology','নৃবিজ্ঞান','Social Sciences','সামাজিক বিজ্ঞান অনুষদ'),
-  ('JU','FST','Film Studies','চলচ্চিত্র অধ্যয়ন','Arts & Humanities','কলা ও মানবিক অনুষদ'),
+
+  -- ── Jahangirnagar University (JU): exact 38 official academic units ────
+  -- Institutes (4)
+  ('JU','IIT','Institute of Information Technology (IIT)','তথ্যপ্রযুক্তি ইনস্টিটিউট (আইআইটি)','Institutes','ইনস্টিটিউটসমূহ'),
+  ('JU','IBA-JU','Institute of Business Administration (IBA-JU)','ব্যবসায় প্রশাসন ইনস্টিটিউট (আইবিএ-জাবি)','Institutes','ইনস্টিটিউটসমূহ'),
+  ('JU','ICLC','Institute of Comparative Literature and Culture','তুলনামূলক সাহিত্য ও সংস্কৃতি ইনস্টিটিউট','Institutes','ইনস্টিটিউটসমূহ'),
+  ('JU','IRS','Institute of Remote Sensing and GIS','রিমোট সেন্সিং ও জিআইএস ইনস্টিটিউট','Institutes','ইনস্টিটিউটসমূহ'),
+  -- Faculty of Mathematical and Physical Sciences (7)
+  ('JU','CSE','Computer Science and Engineering','কম্পিউটার বিজ্ঞান ও প্রকৌশল','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  ('JU','MATH','Mathematics','গণিত','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  ('JU','PHY','Physics','পদার্থবিজ্ঞান','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  ('JU','CHEM','Chemistry','রসায়ন','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  ('JU','STAT','Statistics and Data Science','পরিসংখ্যান ও উপাত্ত বিজ্ঞান','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  ('JU','ENV','Environmental Sciences','পরিবেশ বিজ্ঞান','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  ('JU','GEOL','Geological Sciences','ভূতাত্ত্বিক বিজ্ঞান','Faculty of Mathematical and Physical Sciences','গাণিতিক ও পদার্থবিষয়ক অনুষদ'),
+  -- Faculty of Biological Sciences (7)
+  ('JU','BOT','Botany','উদ্ভিদবিজ্ঞান','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  ('JU','ZOO','Zoology','প্রাণিবিদ্যা','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  ('JU','BMB','Biochemistry and Molecular Biology','প্রাণরসায়ন ও অনুপ্রাণ বিজ্ঞান','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  ('JU','PHARM','Pharmacy','ফার্মেসি','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  ('JU','MIB','Microbiology','মাইক্রোবায়োলজি','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  ('JU','BGE','Biotechnology and Genetic Engineering','বায়োটেকনোলজি অ্যান্ড জেনেটিক ইঞ্জিনিয়ারিং','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  ('JU','PHI','Public Health and Informatics','পাবলিক হেলথ অ্যান্ড ইনফরমেটিক্স','Faculty of Biological Sciences','জীববিজ্ঞান অনুষদ'),
+  -- Faculty of Social Sciences (6)
+  ('JU','ECON','Economics','অর্থনীতি','Faculty of Social Sciences','সমাজবিজ্ঞান অনুষদ'),
+  ('JU','GEOG','Geography and Environment','ভূগোল ও পরিবেশ','Faculty of Social Sciences','সমাজবিজ্ঞান অনুষদ'),
+  ('JU','GOVP','Government and Politics','সরকার ও রাজনীতি','Faculty of Social Sciences','সমাজবিজ্ঞান অনুষদ'),
+  ('JU','ANTH','Anthropology','নৃবিজ্ঞান','Faculty of Social Sciences','সমাজবিজ্ঞান অনুষদ'),
+  ('JU','URP','Urban and Regional Planning','নগর ও অঞ্চল পরিকল্পনা','Faculty of Social Sciences','সমাজবিজ্ঞান অনুষদ'),
+  ('JU','PAD','Public Administration','লোকপ্রশাসন','Faculty of Social Sciences','সমাজবিজ্ঞান অনুষদ'),
+  -- Faculty of Arts and Humanities (9)
+  ('JU','BAN','Bangla','বাংলা','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','ENG','English','ইংরেজি','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','HIST','History','ইতিহাস','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','PHIL','Philosophy','দর্শন','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','DRAMA','Drama and Dramatics','নাটক ও নাট্যতত্ত্ব','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','ARCH','Archaeology','প্রত্নতত্ত্ব','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','IR','International Relations','আন্তর্জাতিক সম্পর্ক','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','JMS','Journalism and Media Studies','জার্নালিজম অ্যান্ড মিডিয়া স্টাডিজ','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  ('JU','FA','Fine Arts','চারুকলা','Faculty of Arts and Humanities','কলা ও মানবিকী অনুষদ'),
+  -- Faculty of Business Studies (4)
+  ('JU','FIN','Finance and Banking','ফিন্যান্স অ্যান্ড ব্যাংকিং','Faculty of Business Studies','বিজনেস স্টাডিজ অনুষদ'),
+  ('JU','MKT','Marketing','মার্কেটিং','Faculty of Business Studies','বিজনেস স্টাডিজ অনুষদ'),
+  ('JU','AIS','Accounting and Information Systems','অ্যাকাউন্টিং অ্যান্ড ইনফরমেশন সিস্টেমস','Faculty of Business Studies','বিজনেস স্টাডিজ অনুষদ'),
+  ('JU','MGT','Management Studies','ম্যানেজমেন্ট স্টাডিজ','Faculty of Business Studies','বিজনেস স্টাডিজ অনুষদ'),
+  -- Faculty of Law (1)
+  ('JU','LAW','Law and Justice','আইন ও বিচার','Faculty of Law','আইন অনুষদ'),
 
   -- ── BOU distance-education programmes with no counterpart elsewhere ────
   ('BOU','HFS','Health and Family Sciences','স্বাস্থ্য ও পরিবার কল্যাণ','Health & Family Sciences','স্বাস্থ্য ও পরিবার কল্যাণ অনুষদ'),
@@ -218,7 +264,7 @@ JOIN (VALUES
   ('BSMMU','ANES','Anesthesiology','অ্যানেসথেসিয়া','Clinical Medicine','চিকিৎসা অনুষদ'),
   ('BSMMU','RAD','Radiology and Imaging','রেডিওলজি ও ইমেজিং','Clinical Medicine','চিকিৎসা অনুষদ')
 ) AS d(target, code, name_en, name_bn, faculty_en, faculty_bn)
-  ON (u.code = d.target OR u.category::text = d.target)
+  ON (u.code = d.target OR (u.code <> 'JU' AND u.category::text = d.target))
 -- Authoritative upsert (same contract as the hall seed): re-running repairs a
 -- department's spelling or faculty grouping instead of leaving the old text.
 -- Anything edited only in /admin/panel is expected to be upstreamed here.
@@ -228,5 +274,17 @@ ON CONFLICT (university_id, code) DO UPDATE
       faculty_en = EXCLUDED.faculty_en,
       faculty_bn = EXCLUDED.faculty_bn,
       updated_at = now();
+
+DELETE FROM public.departments
+WHERE university_id = (SELECT id FROM public.universities WHERE code = 'JU')
+  AND code NOT IN (
+    'IIT', 'IBA-JU', 'ICLC', 'IRS',
+    'CSE', 'MATH', 'PHY', 'CHEM', 'STAT', 'ENV', 'GEOL',
+    'BOT', 'ZOO', 'BMB', 'PHARM', 'MIB', 'BGE', 'PHI',
+    'ECON', 'GEOG', 'GOVP', 'ANTH', 'URP', 'PAD',
+    'BAN', 'ENG', 'HIST', 'PHIL', 'DRAMA', 'ARCH', 'IR', 'JMS', 'FA',
+    'FIN', 'MKT', 'AIS', 'MGT',
+    'LAW'
+  );
 
 COMMIT;

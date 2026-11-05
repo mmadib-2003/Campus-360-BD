@@ -478,7 +478,7 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4 pt-16">
+    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4 pt-16">
       <div
         role="dialog"
         aria-modal="true"
@@ -512,7 +512,7 @@ export function Toast({ message, tone = 'emerald' }: { message: string; tone?: '
       role="status"
       aria-live="polite"
       className={cn(
-        'fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-xl text-xs font-semibold shadow-lg',
+        'fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-xl text-xs font-semibold shadow-lg',
         tones[tone]
       )}
     >

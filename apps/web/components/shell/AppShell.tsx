@@ -61,15 +61,22 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
     | null;
   const [searchQuery, setSearchQuery] = React.useState('');
   const [cmdKOpen, setCmdKOpen] = React.useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
   const [demoSession, setDemoSessionState] = React.useState(() => getDemoSession());
 
   React.useEffect(() => subscribeDemoSession(setDemoSessionState), []);
+
+  React.useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setCmdKOpen((open) => !open);
+      } else if (event.key === 'Escape') {
+        setMobileNavOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -95,6 +102,9 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
       /* ignore */
     }
     setDemoSignedOut(true);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
+    }
     router.push('/signin');
     router.refresh();
   }
@@ -107,43 +117,51 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         : t('Unverified')
     : '';
 
-  // `universities`, `departments` and `halls` are PostgREST embeds and are NULL
-  // whenever the FK is NULL -- a faculty account with no hall, a profile created
-  // before the hall link existed, an alumnus whose department was renamed away.
-  // This component renders above every page, so reading through one of those
-  // directly is the difference between "a chip is missing" and "the deployment
-  // is down"; asRow() makes the null case a row with nothing in it.
   const univ = asRow(profile?.universities);
   const dept = asRow(profile?.departments);
   const hall = asRow(profile?.halls);
   const roles = asArray(session.roles);
+  const dashboardHref = session.isAdmin ? '/admin/console' : '/feed';
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-50 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold text-sm shadow-sm">
-              360
-            </span>
-            <div>
-              <div className="font-bold text-base tracking-tight">{t('Campus360 BD')}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">{t('Verified Multi-University Super-App')}</div>
-            </div>
-          </Link>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen((open) => !open)}
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileNavOpen}
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm shrink-0"
+            >
+              {mobileNavOpen ? '✕' : '☰'}
+            </button>
+            <Link href="/" className="flex items-center gap-2.5 min-w-0">
+              <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold text-sm shadow-sm shrink-0">
+                360
+              </span>
+              <div className="min-w-0">
+                <div className="font-bold text-base tracking-tight truncate">{t('Campus360 BD')}</div>
+                <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {t('Verified Multi-University Super-App')}
+                </div>
+              </div>
+            </Link>
+          </div>
 
           <button
             type="button"
             onClick={() => setCmdKOpen(true)}
-            className="hidden md:flex items-center justify-between w-96 px-3.5 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+            className="hidden lg:flex items-center justify-between w-96 max-w-md px-3.5 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
           >
             <span className="truncate">{t('Search complaints (JU-CASE-...), courses (CSE-301), events, universities...')}</span>
-            <kbd className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 text-[11px] font-mono border border-slate-300 dark:border-slate-700">
+            <kbd className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 text-[11px] font-mono border border-slate-300 dark:border-slate-700 shrink-0 ml-2">
               ⌘K
             </kbd>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
             <button
               type="button"
@@ -157,42 +175,50 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             {profile ? (
               <>
                 <Link
-                  href="/onboarding"
-                  className="hidden sm:inline px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                  href={dashboardHref}
+                  className="hidden sm:inline-block max-w-[160px] truncate px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
                 >
                   {profile.full_name}
                 </Link>
                 <button
                   type="button"
                   onClick={signOut}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-500"
+                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   {t('Sign Out')}
                 </button>
               </>
             ) : (
-              <Link
-                href="/signup"
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
-              >
-                {t('Join Your Campus')}
-              </Link>
+              <>
+                <Link
+                  href="/signin"
+                  className="hidden sm:inline-block px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  {t('Sign In')}
+                </Link>
+                <Link
+                  href="/signup"
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white whitespace-nowrap"
+                >
+                  {t('Join Your Campus')}
+                </Link>
+              </>
             )}
           </div>
         </div>
 
         {profile && (
-          <div className="bg-emerald-950/40 border-t border-emerald-800/30 px-4 py-1.5">
+          <div className="bg-slate-900 dark:bg-emerald-950/95 border-t border-slate-800 dark:border-emerald-800/40 px-4 py-1.5 text-slate-100">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2 text-xs">
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
                 🏛️ {asText(locale === 'bn' ? univ.name_bn : univ.name_en, 'CAMPUS')} ({asText(univ.code, '—')})
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-medium">✓ {trustLabel}</span>
               {asText(dept.code) && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">🎓 {asText(dept.code)}</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200">🎓 {asText(dept.code)}</span>
               )}
               {(asText(hall.name) || asText(hall.name_en)) && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200">
                   🏠 {asText(hall.name) || asText(hall.name_en)}
                 </span>
               )}
@@ -207,7 +233,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                     aria-label={t('Switch campus')}
                     value={demoSession.universityId}
                     onChange={(event) => switchCampus(event.target.value)}
-                    className="px-2 py-1 rounded-lg bg-slate-900 text-emerald-300 border border-emerald-700/50 text-[11px]"
+                    className="px-2 py-1 rounded-lg bg-slate-950 text-emerald-300 border border-emerald-700/50 text-[11px]"
                   >
                     {DEMO_UNIVERSITIES.map((university) => (
                       <option key={university.id} value={university.id}>
@@ -219,7 +245,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                     aria-label={t('Your role')}
                     value={demoSession.role}
                     onChange={(event) => switchRole(event.target.value as DemoRole)}
-                    className="px-2 py-1 rounded-lg bg-slate-900 text-emerald-300 border border-emerald-700/50 text-[11px]"
+                    className="px-2 py-1 rounded-lg bg-slate-950 text-emerald-300 border border-emerald-700/50 text-[11px]"
                   >
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -232,13 +258,45 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             </div>
           </div>
         )}
+
+        {mobileNavOpen && (
+          <nav
+            aria-label="Mobile navigation"
+            className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 max-h-[70vh] overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1"
+          >
+            {MODULES.map((module) => {
+              const active =
+                module.href === '/'
+                  ? pathname === '/'
+                  : pathname === module.href || pathname.startsWith(`${module.href}/`);
+              return (
+                <Link
+                  key={module.href}
+                  href={module.href}
+                  onClick={() => setMobileNavOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
+                    active
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span>{module.icon}</span>
+                  <span>{t(module.key)}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
       </header>
 
-      <div className="max-w-7xl w-full mx-auto flex-1 flex gap-6 px-4 py-6 pb-24 md:pb-8">
+      <div className="relative z-0 max-w-7xl w-full mx-auto flex-1 flex items-start gap-6 px-4 pt-6 pb-24 md:pb-8">
         <aside className="hidden md:block w-64 shrink-0">
-          <nav className="sticky top-28 space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <nav className="sticky top-28 max-h-[calc(100vh-8rem)] overflow-y-auto space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             {MODULES.map((module) => {
-              const active = module.href === '/' ? pathname === '/' : pathname === module.href || pathname.startsWith(`${module.href}/`);
+              const active =
+                module.href === '/'
+                  ? pathname === '/'
+                  : pathname === module.href || pathname.startsWith(`${module.href}/`);
               return (
                 <Link
                   key={module.href}
@@ -260,12 +318,12 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         <main className="flex-1 min-w-0">{children}</main>
       </div>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
         {[
           { href: '/', icon: '🏠', label: t('Campus Feed') },
           { href: '/marketplace', icon: '🛍️', label: t('Marketplace') },
-          { href: '/civic', icon: '🛡️', label: t('Civic Ticketing & Complaint Box') },
-          { href: '/events', icon: '📅', label: t('Events') },
+          { href: '/skills', icon: '🎓', label: t('moduleSkills') },
+          { href: '/mentorship', icon: '📖', label: t('moduleMentorship') },
           { href: '/health', icon: '🩸', label: t('Health') },
         ].map((tab) => (
           <Link
@@ -276,13 +334,13 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             }`}
           >
             <span className="text-base">{tab.icon}</span>
-            <span className="max-w-[64px] truncate">{tab.label}</span>
+            <span className="max-w-[68px] truncate">{tab.label}</span>
           </Link>
         ))}
       </nav>
 
       {cmdKOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 px-4">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 px-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
               <span>🔎</span>
