@@ -33,8 +33,14 @@ import {
 } from '@/lib/supabase-url';
 
 /** Pass as the trailing headers argument of `apiSuccess` / `apiError`. */
+export const REGISTRY_CACHE_VERSION = '2026-11-ju-38-v2';
+
 export const REGISTRY_NO_STORE: Record<string, string> = {
   'Cache-Control': 'no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+  'X-Registry-Version': REGISTRY_CACHE_VERSION,
 };
 
 const PREFIX = '[campus360:registry]';

@@ -1,213 +1,372 @@
 // apps/web/app/api/auth/demo-signin/route.ts
 // ============================================================================
-// DevSignInPanel sign-in — password-based demo credentials (Demo#1234).
+// Password-based demo login endpoint for the Quick Demo Login buttons on
+// `/signin` and `/demo` (`student`, `faculty`, `admin`, `alumni`).
 //
-// Success criterion 1: demo accounts must use password-based sign-in (not OTP)
-// so the Supabase email caps (2/hour, team inboxes only) never block a demo.
-//
-// * With Supabase configured: verifies through GoTrue signInWithPassword and
-//   establishes the normal cookie session for the pre-seeded user.
-// * Without Supabase (fresh preview): falls back to the local demo session so
-//   the DevSignInPanel still signs you in as the matching role.
-//
-// Route is only reachable when NEXT_PUBLIC_AUTH_MODE === 'demo' or the
-// deployment runs without Supabase secrets; it rejects arbitrary production
-// credentials.
+// Resilient two-tier strategy:
+//   1. Attempt Supabase Auth (`signInWithPassword`) when configured; if the
+//      auth row needs self-healing and `SUPABASE_SERVICE_ROLE_KEY` is present,
+//      repair via the admin API and retry once.
+//   2. ALWAYS issue an HMAC-signed HTTP-only `campus360_demo_session` cookie
+//      carrying `{ id, email, role, name, university_id, department_id,
+//      email_verified: true, is_demo: true }`. If Supabase Auth fails or
+//      `SUPABASE_SERVICE_ROLE_KEY` is missing, this route never returns a
+//      500/503 error — the signed session cookie authenticates the demo
+//      session across middleware, `/api/auth/session`, and server API routes.
 // ============================================================================
 
-import { NextRequest } from 'next/server';
-import { apiError, apiSuccess } from '@/lib/api-response';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import {
+  DEMO_PASSWORD,
+  JU_CANONICAL_IIT_DEPARTMENT_ID,
+  JU_CANONICAL_UNIVERSITY_ID,
+  QUICK_DEMO_ACCOUNTS,
   findDemoAccount,
   getDemoUniversity,
   type DemoRole,
 } from '@/lib/modules/demo-data';
+import {
+  DEMO_ROLE_DEFAULTS,
+  isDemoEmail,
+  issueSignedDemoSession,
+} from '@/lib/demo-auth';
 
 export const dynamic = 'force-dynamic';
 
+const ROLE_TO_APP_ROLES: Record<DemoRole, string[]> = {
+  student: ['STUDENT'],
+  faculty: ['FACULTY'],
+  admin: ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN'],
+  alumni: ['ALUMNI'],
+  governance: ['GOVERNANCE'],
+};
+
+function hasPublicSupabaseEnv(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  );
+}
+
+function resolveRequestedDemoIdentity(body: {
+  email?: string;
+  password?: string;
+  role?: string;
+}):
+  | {
+      ok: true;
+      email: string;
+      role: DemoRole;
+      name: string;
+      universityCode: string;
+    }
+  | { ok: false; response: NextResponse } {
+  const rawEmail = (body.email ?? '').trim().toLowerCase();
+  const rawRole = (body.role ?? '').trim().toLowerCase() as DemoRole;
+  const hasPasswordField = typeof body.password === 'string' && body.password.length > 0;
+
+  if (hasPasswordField && body.password !== DEMO_PASSWORD) {
+    return {
+      ok: false,
+      response: apiError(
+        'INVALID_CREDENTIALS',
+        'Invalid demo credentials.',
+        'ভুল ডেমো ইমেইল বা পাসওয়ার্ড।',
+        401
+      ),
+    };
+  }
+
+  if (rawEmail) {
+    const matched = findDemoAccount(rawEmail);
+    if (matched) {
+      // Normalize legacy @demo.campus360.test quick-demo addresses to @demo.campus360.bd
+      const canonicalEmail = rawEmail.endsWith('@demo.campus360.test')
+        ? rawEmail.replace(/@demo\.campus360\.test$/, '@demo.campus360.bd')
+        : matched.email;
+      return {
+        ok: true,
+        email: canonicalEmail,
+        role: matched.role,
+        name: matched.fullName,
+        universityCode: matched.universityCode || 'JU',
+      };
+    }
+
+    if (isDemoEmail(rawEmail)) {
+      const localPart = rawEmail.split('@')[0];
+      const quickMatch = QUICK_DEMO_ACCOUNTS.find((q) => q.role === localPart);
+      if (quickMatch) {
+        return {
+          ok: true,
+          email: quickMatch.email,
+          role: quickMatch.role,
+          name: quickMatch.fullName,
+          universityCode: 'JU',
+        };
+      }
+    }
+
+    return {
+      ok: false,
+      response: apiError(
+        'NOT_DEMO_ACCOUNT',
+        'Only provisioned demo accounts may use /api/auth/demo-signin.',
+        'শুধুমাত্র ডেমো অ্যাকাউন্ট এখানে লগইন করতে পারবে।',
+        403
+      ),
+    };
+  }
+
+  if (rawRole && rawRole in DEMO_ROLE_DEFAULTS) {
+    const defaults = DEMO_ROLE_DEFAULTS[rawRole];
+    return {
+      ok: true,
+      email: defaults.email,
+      role: rawRole,
+      name: defaults.name,
+      universityCode: 'JU',
+    };
+  }
+
+  return {
+    ok: false,
+    response: apiError(
+      'MISSING_CREDENTIALS',
+      'Demo email or role is required.',
+      'ডেমো ইমেইল অথবা রোল আবশ্যক।',
+      400
+    ),
+  };
+}
+
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const password = typeof body?.password === 'string' ? body.password : '';
-
-  if (!email || !password) {
-    return apiError('INVALID_INPUT', 'Email and password are required.', 'ইমেইল এবং পাসওয়ার্ড প্রয়োজন।', 400);
-  }
-
-  // Strict allowlist: this endpoint is exclusively for the four seeded demo
-  // identities. It never requests or sends an OTP; Supabase password grant
-  // writes the normal auth cookies through createSupabaseRouteClient.
-  const account = findDemoAccount(email);
-  const allowedDemoEmails = new Set([
-    'student@demo.campus360.test',
-    'faculty@demo.campus360.test',
-    'admin@demo.campus360.test',
-    'alumni@demo.campus360.test',
-  ]);
-  if (!allowedDemoEmails.has(email) || !account) {
-    return apiError('DEMO_SIGNIN_DISABLED', 'Use one of the four demo accounts listed on /demo.', ' /demo পাতায় দেওয়া চারটি ডেমো অ্যাকাউন্ট ব্যবহার করুন।', 403);
-  }
-  if (password !== account.password) {
-    return apiError('INVALID_CREDENTIALS', 'The demo password is incorrect.', 'ডেমো পাসওয়ার্ডটি সঠিক নয়।', 401);
-  }
-
-  const supabaseConfigured = isSupabaseServerConfigured();
-
-  // The four-email allowlist above is the production-safe bypass. Never gate
-  // those known showcase identities on NEXT_PUBLIC_AUTH_MODE.
-
-  // Preview / demo fallback: match against the seeded credential list only.
-  if (!supabaseConfigured) {
-    const account = findDemoAccount(email);
-    if (!account || account.password !== password) {
-      return apiError(
-        'INVALID_CREDENTIALS',
-        'Unknown demo credentials. Use one of the accounts listed on /demo.',
-        'অজানা ডেমো পরিচয়। /demo পাতায় তালিকাভুক্ত অ্যাকাউন্ট ব্যবহার করুন।',
-        401
-      );
-    }
-    const university = getDemoUniversity(account.universityCode);
-    return apiSuccess({
-      demo: true,
-      account: {
-        email: account.email,
-        role: account.role satisfies DemoRole,
-        fullName: account.fullName,
-        universityCode: account.universityCode,
-        universityId: university?.id ?? '',
-      },
-    });
-  }
-
-  // Supabase mode: clear any visitor's previous local session before making
-  // the role switch, then authenticate with the seeded account credentials.
+  let body: { email?: string; password?: string; role?: string } = {};
   try {
-    const supabase = createSupabaseRouteClient();
-    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-    if (signOutError) {
-      console.error('[demo-signin] Existing-session sign-out failed; refusing role switch', {
-        email, code: signOutError.code, status: signOutError.status,
-        message: signOutError.message,
-      });
-      return apiError(
-        'DEMO_SIGNOUT_FAILED',
-        'Could not clear the existing session. Refresh the page and try again.',
-        'আগের সেশনটি বন্ধ করা যায়নি। পৃষ্ঠা রিফ্রেশ করে আবার চেষ্টা করুন।',
-        500
-      );
-    }
-
-    // SQL-created Auth rows can carry a valid bcrypt hash yet still be in a
-    // GoTrue-inconsistent state. Normalize the allowlisted showcase user using
-    // Auth's Admin API on each demo login; this does NOT create a session and
-    // is never exposed for arbitrary accounts.
-    const admin = createSupabaseAdminClient();
-    const { data: listed, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (listError) throw listError;
-
-    const existing = listed.users.find((user) => user.email?.toLowerCase() === email);
-    const appMetadata = {
-      provider: 'email',
-      providers: ['email'],
-      ...(account.role === 'admin' ? { is_platform_admin: true } : {}),
-    };
-    const authResult = existing
-      ? await admin.auth.admin.updateUserById(existing.id, {
-          password,
-          email_confirm: true,
-          user_metadata: { ...existing.user_metadata, university_code: 'DU', full_name: account.fullName },
-          app_metadata: appMetadata,
-        })
-      : await admin.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { university_code: 'DU', full_name: account.fullName },
-          app_metadata: appMetadata,
-        });
-    if (authResult.error || !authResult.data.user) throw authResult.error ?? new Error('Auth Admin API returned no user');
-
-    const { data: university, error: universityError } = await admin
-      .from('universities').select('id').eq('code', 'DU').single();
-    if (universityError || !university) throw universityError ?? new Error('DU university not found');
-
-    const studentIds: Record<string, string> = {
-      student: 'DU-2026-12345', faculty: 'DU-FAC-0142', admin: 'DU-ADM-001', alumni: 'DU-ALM-2019-088',
-    };
-    const { error: profileError } = await admin.from('profiles').upsert({
-      id: authResult.data.user.id,
-      university_id: university.id,
-      email,
-      full_name: account.fullName,
-      student_id: studentIds[account.role],
-      trust_level: 'ID_VERIFIED',
-      onboarding_completed: true,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
-    if (profileError) throw profileError;
-
-    const roleName = account.role.toUpperCase();
-    const { error: roleError } = await admin.from('user_roles').upsert({
-      user_id: authResult.data.user.id,
-      university_id: university.id,
-      role: roleName,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,university_id,role' });
-    if (roleError) throw roleError;
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data?.user || !data.session) {
-      console.error('[demo-signin] Supabase password sign-in rejected', {
-        email,
-        code: error?.code ?? 'MISSING_SESSION',
-        status: error?.status ?? null,
-        name: error?.name ?? null,
-        message: error?.message ?? 'Auth returned no user/session without an error.',
-      });
-      return apiError(
-        'INVALID_CREDENTIALS',
-        'Demo sign-in failed. Use one of the accounts listed on /demo.',
-        'ডেমো সাইন-ইন ব্যর্থ হয়েছে। /demo পাতায় তালিকাভুক্ত অ্যাকাউন্ট ব্যবহার করুন।',
-        401
-      );
-    }
-
-    return apiSuccess({
-      demo: false,
-      userId: data.user.id,
-      account: {
-        email: account.email,
-        role: account.role satisfies DemoRole,
-        fullName: account.fullName,
-        universityCode: account.universityCode,
-        universityId: getDemoUniversity(account.universityCode)?.id ?? '',
-      },
-      sessionExpiresAt: data.session.expires_at ?? null,
-    });
-  } catch (error) {
-    const authError = error as Error & { code?: string; status?: number; details?: string; hint?: string };
-    console.error('[demo-signin] Unexpected demo authentication exception', {
-      email,
-      error: error instanceof Error
-        ? {
-            name: error.name,
-            message: error.message,
-            code: authError.code ?? null,
-            status: authError.status ?? null,
-            details: authError.details ?? null,
-            hint: authError.hint ?? null,
-            stack: error.stack,
-          }
-        : String(error),
-    });
-    return apiError(
-      'DEMO_SIGNIN_ERROR',
-      'Demo sign-in is temporarily unavailable. Please try again.',
-      'ডেমো সাইন-ইন সাময়িকভাবে অনুপলব্ধ। আবার চেষ্টা করুন।',
-      500
-    );
+    body = (await req.json()) as { email?: string; password?: string; role?: string };
+  } catch {
+    body = {};
   }
+
+  const resolved = resolveRequestedDemoIdentity(body);
+  if (!resolved.ok) {
+    return resolved.response;
+  }
+
+  const { email, role, name, universityCode } = resolved;
+  const defaults = DEMO_ROLE_DEFAULTS[role] ?? DEMO_ROLE_DEFAULTS.student;
+  const demoUniv = getDemoUniversity(universityCode) ?? getDemoUniversity('JU')!;
+
+  let userId = defaults.id;
+  let universityId =
+    universityCode === 'JU'
+      ? JU_CANONICAL_UNIVERSITY_ID
+      : demoUniv.id;
+  let departmentId: string | null =
+    universityCode === 'JU' ? JU_CANONICAL_IIT_DEPARTMENT_ID : null;
+  let supabaseAuthenticated = false;
+
+  // 1. Attempt live Supabase Auth first when public credentials exist.
+  if (hasPublicSupabaseEnv()) {
+    try {
+      const supabase = createSupabaseRouteClient();
+      const firstSignIn = await supabase.auth.signInWithPassword({
+        email,
+        password: DEMO_PASSWORD,
+      });
+
+      if (!firstSignIn.error && firstSignIn.data?.user) {
+        supabaseAuthenticated = true;
+        userId = firstSignIn.data.user.id;
+      } else if (isSupabaseServerConfigured()) {
+        // Opportunistic self-healing via service-role client if GoTrue rejected
+        // or the demo account was not yet provisioned on this project.
+        try {
+          const admin = createSupabaseAdminClient();
+          const { data: uniRow } = await admin
+            .from('universities')
+            .select('id')
+            .eq('code', universityCode)
+            .maybeSingle();
+          if (uniRow?.id) {
+            universityId = uniRow.id;
+          }
+
+          const { data: deptRow } = await admin
+            .from('departments')
+            .select('id')
+            .eq('university_id', universityId)
+            .in('code', ['IIT', 'CSE'])
+            .limit(1)
+            .maybeSingle();
+          if (deptRow?.id) {
+            departmentId = deptRow.id;
+          }
+
+          const { data: existingProfile } = await admin
+            .from('profiles')
+            .select('id')
+            .ilike('email', email)
+            .maybeSingle();
+
+          let targetUserId = existingProfile?.id ?? null;
+
+          if (!targetUserId) {
+            const created = await admin.auth.admin.createUser({
+              email,
+              password: DEMO_PASSWORD,
+              email_confirm: true,
+              user_metadata: {
+                full_name: name,
+                name,
+                role,
+                university_code: universityCode,
+                department_code: 'IIT',
+                email_verified: true,
+                is_demo: true,
+              },
+              app_metadata: {
+                role,
+                is_demo: true,
+                is_platform_admin: role === 'admin',
+              },
+            });
+            targetUserId = created.data?.user?.id ?? null;
+          } else {
+            await admin.auth.admin.updateUserById(targetUserId, {
+              password: DEMO_PASSWORD,
+              email_confirm: true,
+              user_metadata: {
+                full_name: name,
+                name,
+                role,
+                university_code: universityCode,
+                department_code: 'IIT',
+                email_verified: true,
+                is_demo: true,
+              },
+              app_metadata: {
+                role,
+                is_demo: true,
+                is_platform_admin: role === 'admin',
+              },
+            });
+          }
+
+          if (targetUserId) {
+            userId = targetUserId;
+            await admin.from('profiles').upsert(
+              {
+                id: targetUserId,
+                university_id: universityId,
+                department_id: departmentId,
+                email,
+                full_name: name,
+                student_id: defaults.studentId,
+                batch: role === 'alumni' ? '45th Batch' : '51st Batch',
+                trust_level: 'ID_VERIFIED',
+                onboarding_completed: true,
+              },
+              { onConflict: 'id' }
+            );
+
+            for (const appRole of ROLE_TO_APP_ROLES[role] ?? ['STUDENT']) {
+              await admin.from('user_roles').upsert(
+                {
+                  user_id: targetUserId,
+                  university_id: universityId,
+                  role: appRole,
+                },
+                { onConflict: 'user_id,university_id,role' }
+              );
+            }
+
+            const retrySignIn = await supabase.auth.signInWithPassword({
+              email,
+              password: DEMO_PASSWORD,
+            });
+            if (!retrySignIn.error && retrySignIn.data?.user) {
+              supabaseAuthenticated = true;
+              userId = retrySignIn.data.user.id;
+            }
+          }
+        } catch (healErr) {
+          console.warn('[demo-signin] self-heal skipped, using signed cookie session:', healErr);
+        }
+      }
+
+      // Enrich university_id / department_id from profiles if Supabase is reachable.
+      if (supabaseAuthenticated && isSupabaseServerConfigured()) {
+        try {
+          const admin = createSupabaseAdminClient();
+          const { data: prof } = await admin
+            .from('profiles')
+            .select('university_id, department_id')
+            .eq('id', userId)
+            .maybeSingle();
+          if (prof?.university_id) universityId = prof.university_id;
+          if (prof?.department_id) departmentId = prof.department_id;
+        } catch {
+          /* keep canonical JU + IIT IDs */
+        }
+      }
+    } catch (authErr) {
+      console.warn('[demo-signin] Supabase signInWithPassword failed, using signed cookie session:', authErr);
+    }
+  }
+
+  // 2. Always issue the HMAC-signed HTTP-only `campus360_demo_session` cookie.
+  const { payload: signedSession } = issueSignedDemoSession({
+    id: userId,
+    email,
+    role,
+    name,
+    studentId: defaults.studentId,
+    university_id: universityId,
+    universityCode,
+    department_id: departmentId,
+    departmentCode: universityCode === 'JU' ? 'IIT' : 'CSE',
+  });
+
+  const user = {
+    id: signedSession.id,
+    email: signedSession.email,
+    role: signedSession.role,
+    name: signedSession.name,
+    university_id: signedSession.university_id,
+    department_id: signedSession.department_id,
+    email_verified: true as const,
+    is_demo: true as const,
+  };
+
+  const redirectTo = role === 'admin' ? '/admin/console' : '/feed';
+  const isOfflineDemo = !isSupabaseServerConfigured();
+
+  return NextResponse.json(
+    {
+      ok: true,
+      success: true,
+      user,
+      redirectTo,
+      data: {
+        ok: true,
+        demo: isOfflineDemo,
+        supabaseAuthenticated,
+        userId: user.id,
+        user,
+        redirectTo,
+        account: {
+          email: user.email,
+          role: user.role,
+          fullName: user.name,
+          universityCode,
+          universityId: isOfflineDemo ? demoUniv.id : user.university_id,
+        },
+      },
+    },
+    { status: 200 }
+  );
 }

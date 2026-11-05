@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { UniversityCombobox, type UniversityOption } from '@/components/auth/UniversityCombobox';
 import { HallCombobox, type HallOption } from '@/components/auth/HallCombobox';
+import { DEMO_ACADEMIC_PROGRAMS, getStaticJuDepartments } from '@/lib/modules/demo-data';
 
 type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
 
@@ -15,6 +16,7 @@ interface DepartmentOption {
   name_en: string;
   name_bn: string;
   faculty_en?: string | null;
+  faculty_bn?: string | null;
 }
 
 interface ProgramOption {
@@ -206,6 +208,7 @@ export default function SignUpPage() {
   const [hallsError, setHallsError] = React.useState<string | null>(null);
 
   const [departments, setDepartments] = React.useState<DepartmentOption[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = React.useState('');
   const [departmentId, setDepartmentId] = React.useState('');
   const [loadingDepartments, setLoadingDepartments] = React.useState(false);
   const [departmentsError, setDepartmentsError] = React.useState<string | null>(null);
@@ -243,10 +246,10 @@ export default function SignUpPage() {
       setUniversitiesError(error);
       setLoadingUniversities(false);
     });
-    fetchRegistry<ProgramOption>('/api/programs', locale).then(({ data, error }) => {
+    fetchRegistry<ProgramOption>('/api/programs?v=ju38', locale).then(({ data, error }) => {
       if (cancelled) return;
-      setPrograms(data);
-      setProgramsError(error);
+      setPrograms(data.length > 0 ? data : DEMO_ACADEMIC_PROGRAMS);
+      setProgramsError(data.length > 0 ? error : null);
       setLoadingPrograms(false);
     });
     return () => {
@@ -277,30 +280,52 @@ export default function SignUpPage() {
     };
   }, [universityId, locale, reloadKey]);
 
-  // Departments of the selected university (optional: not every campus has a
-  // seeded roster yet, and a wrong department is fixable in the profile).
+  // Departments & Institutes of the selected university.
   React.useEffect(() => {
+    setSelectedFaculty('');
     setDepartmentId('');
     setDepartmentsError(null);
     if (!universityId) {
       setDepartments([]);
       return;
     }
+    const matchedUni = universities.find((u) => u.id === universityId);
+    const uniCode = matchedUni?.code ?? '';
     let cancelled = false;
     setLoadingDepartments(true);
     fetchRegistry<DepartmentOption>(
-      `/api/departments?universityId=${encodeURIComponent(universityId)}`,
+      `/api/departments?universityId=${encodeURIComponent(universityId)}&universityCode=${encodeURIComponent(uniCode)}&v=ju38`,
       locale
     ).then(({ data, error }) => {
       if (cancelled) return;
-      setDepartments(data);
-      setDepartmentsError(error);
+      if (data.length === 0 && uniCode.toUpperCase() === 'JU') {
+        setDepartments(getStaticJuDepartments(universityId));
+        setDepartmentsError(null);
+      } else {
+        setDepartments(data);
+        setDepartmentsError(error);
+      }
       setLoadingDepartments(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [universityId, locale, reloadKey]);
+  }, [universityId, universities, locale, reloadKey]);
+
+  const facultyOptions = React.useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const dept of departments) {
+      const key = dept.faculty_en?.trim();
+      if (!key || seen.has(key)) continue;
+      seen.set(key, bn && dept.faculty_bn ? dept.faculty_bn : key);
+    }
+    return Array.from(seen.entries()).map(([value, label]) => ({ value, label }));
+  }, [departments, bn]);
+
+  const visibleDepartments = React.useMemo(() => {
+    if (!selectedFaculty) return departments;
+    return departments.filter((dept) => (dept.faculty_en ?? '') === selectedFaculty);
+  }, [departments, selectedFaculty]);
 
   // Registry-backed fields are only enforced when their list actually loaded:
   // an outage must not turn into an unsolvable form, only into a hint.
@@ -489,45 +514,84 @@ export default function SignUpPage() {
           )}
 
           {universityId && role !== 'admin' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <RegistrySelect
-                id="signup-department"
-                label={t('Department')}
-                value={departmentId}
-                onChange={setDepartmentId}
-                loading={loadingDepartments}
-                error={departmentsError}
-                onRetry={() => setReloadKey((key) => key + 1)}
-                required={departmentRequired}
-                placeholder={t('Select your department…')}
-                hint={t('Routes department notices and course requests to the right office.')}
-                options={departments.map((department) => ({
-                  value: department.id,
-                  label: `${pick(department)} (${department.code})`,
-                  group: department.faculty_en ?? undefined,
-                }))}
-              />
-              {role === 'student' ? (
+            <div className="space-y-4">
+              {facultyOptions.length > 1 ? (
+                <div>
+                  <label className="block font-medium mb-1" htmlFor="signup-faculty">
+                    {bn ? 'অনুষদ / ইনস্টিটিউট' : 'Faculty / Institute'}
+                  </label>
+                  <select
+                    id="signup-faculty"
+                    value={selectedFaculty}
+                    onChange={(event) => {
+                      const nextFaculty = event.target.value;
+                      setSelectedFaculty(nextFaculty);
+                      if (nextFaculty && departmentId) {
+                        const stillMatches = departments.some(
+                          (d) => d.id === departmentId && (d.faculty_en ?? '') === nextFaculty
+                        );
+                        if (!stillMatches) setDepartmentId('');
+                      }
+                    }}
+                    className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                  >
+                    <option value="">
+                      {bn
+                        ? `সকল অনুষদ ও ইনস্টিটিউট (${departments.length})`
+                        : `All Faculties & Institutes (${departments.length})`}
+                    </option>
+                    {facultyOptions.map((faculty) => (
+                      <option key={faculty.value} value={faculty.value}>
+                        {faculty.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RegistrySelect
-                  id="signup-program"
-                  label={t('Academic Program')}
-                  value={programId}
-                  onChange={setProgramId}
-                  loading={loadingPrograms}
-                  error={programsError}
+                  id="signup-department"
+                  label={bn ? 'বিভাগ / ইনস্টিটিউট' : t('Department')}
+                  value={departmentId}
+                  onChange={setDepartmentId}
+                  loading={loadingDepartments}
+                  error={departmentsError}
                   onRetry={() => setReloadKey((key) => key + 1)}
-                  required={programRequired}
-                  placeholder={t('Select your academic program…')}
-                  hint={t('Honors, Degree, professional B.Sc., Master\'s or Ph.D. — it sets your term structure.')}
-                  options={programs.map((program) => ({
-                    value: program.id,
-                    label: program.duration_years
-                      ? `${pick(program)} · ${program.duration_years} ${t('yr')}`
-                      : pick(program),
-                    group: t(CYCLE_LABEL[program.cycle]),
+                  required={departmentRequired}
+                  placeholder={t('Select your department…')}
+                  hint={t('Routes department notices and course requests to the right office.')}
+                  options={visibleDepartments.map((department) => ({
+                    value: department.id,
+                    label: `${pick(department)} (${department.code})`,
+                    group:
+                      bn && department.faculty_bn
+                        ? department.faculty_bn
+                        : (department.faculty_en ?? undefined),
                   }))}
                 />
-              ) : null}
+                {role === 'student' || role === '' ? (
+                  <RegistrySelect
+                    id="signup-program"
+                    label={t('Academic Program')}
+                    value={programId}
+                    onChange={setProgramId}
+                    loading={loadingPrograms}
+                    error={programsError}
+                    onRetry={() => setReloadKey((key) => key + 1)}
+                    required={programRequired}
+                    placeholder={t('Select your academic program…')}
+                    hint={t('Honors, Degree, professional B.Sc., Master\'s or Ph.D. — it sets your term structure.')}
+                    options={programs.map((program) => ({
+                      value: program.id,
+                      label: program.duration_years
+                        ? `${pick(program)} · ${program.duration_years} ${t('yr')}`
+                        : pick(program),
+                      group: t(CYCLE_LABEL[program.cycle]),
+                    }))}
+                  />
+                ) : null}
+              </div>
             </div>
           ) : null}
 
