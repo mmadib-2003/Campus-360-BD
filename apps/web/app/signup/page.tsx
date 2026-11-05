@@ -344,7 +344,7 @@ export default function SignUpPage() {
 
     if (!role) return setErrorMsg(t('Select your role to continue'));
     if (!universityId) return setErrorMsg(t('Select your university to continue'));
-    if (role === 'student' && !hallId) {
+    if (!hallId) {
       return setErrorMsg(t('Select your residential hall to continue'));
     }
     if (departmentRequired && !departmentId) {
@@ -374,7 +374,7 @@ export default function SignUpPage() {
             fullName,
             studentId,
             role,
-            hallId: role === 'student' ? hallId : '',
+            hallId,
             departmentId: role === 'admin' ? '' : departmentId,
             programId: role === 'student' ? programId : '',
           },
@@ -394,7 +394,8 @@ export default function SignUpPage() {
             role,
             fullName,
             studentId,
-            hallId: role === 'student' ? hallId : '',
+            hallId,
+            hallName: halls.find((hall) => hall.id === hallId)?.name ?? '',
             departmentId,
             programId,
             demoCode: payload.data?.demoCode ?? null,
@@ -495,7 +496,7 @@ export default function SignUpPage() {
             )}
           </div>
 
-          {role === 'student' && universityId && (
+          {universityId && (
             <div>
               {loadingHalls ? (
                 <div className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
@@ -506,7 +507,7 @@ export default function SignUpPage() {
                   onChange={setHallId}
                   label={t('Residential Hall')}
                   placeholder={t('Search your residential hall…')}
-                  hint={t('Required for students — your hall allocation is verified by the hall office.')}
+                  hint={t('Select your residential hall for this university.')}
                   invalid={Boolean(errorMsg && !hallId)}
                 />
               )}

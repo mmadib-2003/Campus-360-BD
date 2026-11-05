@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useUi } from '@/lib/i18n-client';
-import { useModuleList, useSession } from '@/lib/modules/client';
+import { useApiList, useModuleList, useSession } from '@/lib/modules/client';
 import { Badge, Card, ModuleHeader, SkeletonList, SkeletonStat, Stat } from '@/components/modules/ui';
 import { getDemoUniversity } from '@/lib/modules/demo-data';
 import { asArray } from '@/lib/render-safe';
@@ -14,7 +14,7 @@ export default function FeedPage() {
   const { locale, t } = useUi();
   const session = useSession();
   const listings = useModuleList('marketplace', { limit: 3, enabled: session.authenticated });
-  const tickets = useModuleList('complaints', { limit: 3, enabled: session.authenticated });
+  const tickets = useApiList('/api/complaints', { table: 'complaints_public', enabled: session.authenticated });
 
   if (!session.loading && !session.authenticated) {
     return (
@@ -36,12 +36,17 @@ export default function FeedPage() {
       : university.name_en
     : profile?.universities?.code ?? 'CAMPUS';
 
+  const roles = session.roles.map((role) => role.toUpperCase());
+  const dashboard = session.isAdmin ? { icon: '🛡️', title: 'Admin Dashboard' }
+    : roles.includes('FACULTY') ? { icon: '👨‍🏫', title: 'Faculty Dashboard' }
+    : roles.includes('ALUMNI') ? { icon: '🏛️', title: 'Alumni Dashboard' }
+    : { icon: '🎓', title: 'Student Dashboard' };
+
   return (
     <div className="space-y-6">
       <ModuleHeader
-        icon="🎓"
-        title={t('Student Dashboard')}
-        titleBn="শিক্ষার্থীর ড্যাশবোর্ড"
+        icon={dashboard.icon}
+        title={t(dashboard.title)}
         blurb={t('Your campus at a glance')}
         live
         demo={session.demo}
@@ -115,16 +120,19 @@ export default function FeedPage() {
         </div>
         {tickets.loading ? (
           <SkeletonList rows={2} />
+        ) : tickets.error ? (
+          <Card className="p-4 text-xs text-rose-500">{t('Could not load tickets. Please try again.')}</Card>
+        ) : asArray(tickets.data).length ? (
+          <div className="grid gap-2">
+            {asArray(tickets.data).slice(0, 3).map((ticket) => (
+              <Card key={String(ticket.id)} className="p-4 text-xs space-y-1">
+                <p className="font-semibold">{String(ticket.title ?? '')}</p>
+                <p className="text-slate-500">{String(ticket.tracking_code ?? '')} · {String(ticket.status ?? '')}</p>
+              </Card>
+            ))}
+          </div>
         ) : (
-          <Card className="p-4 text-xs space-y-2">
-            <p className="text-slate-500 dark:text-slate-400">{t('Paste your ticket ID to see the live status timeline.')}</p>
-            <Link
-              href="/track/JU-CASE-2026-482913"
-              className="inline-block px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 font-mono text-[11px]"
-            >
-              JU-CASE-2026-482913
-            </Link>
-          </Card>
+          <Card className="p-4 text-xs text-slate-500">{t('You have no tickets yet.')}</Card>
         )}
       </section>
     </div>

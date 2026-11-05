@@ -2,6 +2,8 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
+import { isDemoEmail, readSignedDemoSession } from '@/lib/demo-auth';
+import { demoTickets } from '@/lib/demo-tickets';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,10 @@ const PUBLIC_COLUMNS =
  * description text of sensitive categories.
  */
 export async function GET(req: NextRequest) {
+  const demoSession = readSignedDemoSession();
+  if (!isSupabaseServerConfigured() && demoSession) {
+    return apiSuccess(demoTickets(demoSession.university_id, demoSession.universityCode), 200, { demo: true });
+  }
   if (!isSupabaseServerConfigured()) {
     return apiError(
       'SUPABASE_NOT_CONFIGURED',
@@ -50,7 +56,9 @@ export async function GET(req: NextRequest) {
     return apiError('CIVIC_QUERY_FAILED', error.message, 'টিকিট লোড করা যায়নি।', 400);
   }
 
-  return apiSuccess(data ?? [], 200, { total: data?.length ?? 0, admin: isAdminScope });
+  const rows = data?.length ? data : ((demoSession && demoSession.id === auth.user.id) || isDemoEmail(auth.user.email))
+    ? demoTickets(auth.profile.university_id, auth.profile.universities?.code ?? 'JU').slice(0, limit) : [];
+  return apiSuccess(rows, 200, { total: rows.length, admin: isAdminScope });
 }
 
 /**

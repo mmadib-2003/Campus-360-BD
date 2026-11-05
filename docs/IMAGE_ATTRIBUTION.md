@@ -1,10 +1,15 @@
 # Campus image & logo attribution
 
+> **Local-asset attribution audit pending:** the campus photographs and logo
+> files in `apps/web/public` were sourced separately from the remote Wikimedia
+> files listed below. Do not treat those Wikimedia links as attribution for the
+> local copies until their exact sources, authors and licences have been
+> matched. Institutional logos may be trademarks or non-free works.
+
 The home feed and campus directory show authentic photographs of the flagship
 Bangladeshi public universities. The files are served from Wikimedia Commons
 (`Special:FilePath` for photographs, `upload.wikimedia.org` for the logo
-files). Every file below is free-licensed; the attribution requirements are
-reproduced here so the app can point at this page.
+files). The linked file pages contain the applicable authorship and licence details.
 
 | University | Cover photograph | Author | Licence |
 | --- | --- | --- | --- |
@@ -32,10 +37,9 @@ assets; they are community-contributed Wikimedia Commons files.
 
 ## Local fallback
 
-`apps/web/public/campuses/` still contains the local monogram/illustration
-fallbacks used by the offline demo payload. They are only shown if a remote
-image fails to load and the gradient fallback is not enough; the remote
-Wikimedia URL is always preferred.
+`apps/web/public/campuses/` contains local photographic fallbacks. Their exact
+sources and licence terms still need to be matched to each file before release;
+the Wikimedia links on this page do not establish attribution for those copies.
 
 ## Expanded campus photography (18 additional universities)
 

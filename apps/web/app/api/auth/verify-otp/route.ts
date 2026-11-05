@@ -180,6 +180,9 @@ async function handleVerifyOtp(req: NextRequest) {
 
   if (existingProfile) {
     userId = existingProfile.id;
+    if (payload.hallId && existingProfile.university_id === challenge.university_id) {
+      await admin.from('profiles').update({ hall_id: payload.hallId }).eq('id', userId).eq('university_id', challenge.university_id);
+    }
     await admin
       .from('profiles')
       .update({ trust_level: 'EMAIL_VERIFIED' })

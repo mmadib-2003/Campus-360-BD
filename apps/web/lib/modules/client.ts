@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getModule } from './registry';
+import { demoTickets } from '@/lib/demo-tickets';
 import {
   demoDelete,
   demoInsert,
@@ -100,7 +101,7 @@ export function useSession(): SessionState {
       }
 
       try {
-        const res = await fetch('/api/auth/session', { cache: 'no-store' });
+        const res = await fetch('/api/auth/session', { cache: 'no-store', signal: AbortSignal.timeout(3000) });
         const payload = await res.json();
         const data = payload?.data;
         if (!cancelled) {
@@ -210,7 +211,8 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
     (session.authenticated || session.demo || spec?.publicRead === true);
 
   useEffect(() => {
-    if (!spec || session.loading) return;
+    if (!spec) { setLoading(false); return; }
+    if (session.loading) return;
     if (!enabled) {
       // `enabled: false` means "this list belongs to a session", not "still loading".
       // Without this the guest view of a mixed page (careers, dining, sports) would
@@ -253,7 +255,7 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
         if (options.limit) params.set('limit', String(options.limit));
         if (options.mine) params.set('mine', 'true');
 
-        const res = await fetch(`/api/modules/${moduleKey}?${params.toString()}`, { cache: 'no-store' });
+        const res = await fetch(`/api/modules/${moduleKey}?${params.toString()}`, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
         const payload = await res.json();
         if (cancelled) return;
 
@@ -541,14 +543,18 @@ export function useApiList<T extends Row = Row>(
   const enabled = options.enabled !== false;
 
   useEffect(() => {
-    if (!enabled || session.loading) return;
+    if (!enabled) { setLoading(false); return; }
+    if (session.loading) return;
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       setError(null);
       if (!isSupabaseConfigured() || session.demo) {
-        const rows = toList<T>(options.table ? demoList(options.table, {}) : []);
+        const campus = getActiveDemoUniversity();
+        const rows = toList<T>(endpoint === '/api/complaints'
+          ? demoTickets(campus.id, campus.code)
+          : options.table ? demoList(options.table, {}) : []);
         if (!cancelled) {
           setDataState(rows);
           setTotal(rows.length);
@@ -562,7 +568,7 @@ export function useApiList<T extends Row = Row>(
         for (const [key, value] of Object.entries(options.query ?? {})) {
           if (value !== undefined && value !== '') params.set(key, String(value));
         }
-        const res = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store' });
+        const res = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
         const payload = await res.json();
         if (cancelled) return;
         if (payload.success) {

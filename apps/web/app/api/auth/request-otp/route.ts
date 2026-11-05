@@ -99,6 +99,7 @@ async function handleOtpRequest(req: NextRequest) {
       role: body?.role ?? body?.signupPayload?.role,
       fullName: body?.signupPayload?.fullName,
       studentId: body?.signupPayload?.studentId,
+      hallId: body?.signupPayload?.hallId,
       code: demoCode,
     });
     if (!demo.ok) {
@@ -134,17 +135,12 @@ async function handleOtpRequest(req: NextRequest) {
 
   // Enforce University Email Domain Whitelist Server-Side.
   //
-  // NOTE (known gap, deliberately not changed while untested against a live
-  // PostgREST): `.eq('is_active', true)` here filters the *domain* row. The
-  // `universities!inner(...)` embed selects the parent's `is_active` but does
-  // not filter on it, so deactivating a university still lets its domains
-  // request codes. Tightening it to `.eq('universities.is_active', true)` is a
-  // one-liner, but it changes who can sign up — do it with a staging check.
   let domainQuery = admin
     .from('university_email_domains')
     .select('id, university_id, domain, universities!inner(id, code, name_en, name_bn, is_active)')
     .eq('domain', emailDomain)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('universities.is_active', true);
 
   if (universityId) {
     domainQuery = domainQuery.eq('university_id', universityId);
@@ -185,6 +181,14 @@ async function handleOtpRequest(req: NextRequest) {
       undefined,
       rlEmail.headers
     );
+  }
+
+  const hallId = typeof body?.signupPayload?.hallId === 'string' ? body.signupPayload.hallId : '';
+  if (hallId) {
+    const { data: hall, error: hallError } = await admin.from('university_halls').select('id')
+      .eq('id', hallId).eq('university_id', domainMatch.university_id).eq('is_active', true).maybeSingle();
+    if (hallError) return apiError('HALL_LOOKUP_FAILED', 'Could not validate the selected hall.', 'হল যাচাই করা যায়নি।', 503);
+    if (!hall) return apiError('INVALID_HALL', 'Please select a hall belonging to your university.', 'আপনার বিশ্ববিদ্যালয়ের হল নির্বাচন করুন।', 400);
   }
 
   const university = (domainMatch.universities ?? {}) as { code?: string; name_en?: string; name_bn?: string };
