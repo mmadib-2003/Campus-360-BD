@@ -72,6 +72,13 @@ export async function GET() {
           Boolean(user.user_metadata?.is_demo);
 
         if (profile) {
+          // Real OTP accounts carry trust_level (EMAIL_VERIFIED and up) rather
+          // than an email_verified column; surface a uniform boolean so clients
+          // can redirect verified users away from /verify-email and /signin.
+          const trustVerified = ['EMAIL_VERIFIED', 'ID_VERIFIED', 'TRUSTED'].includes(
+            String(profile.trust_level ?? '')
+          );
+          const emailVerified = Boolean(user.email_confirmed_at) || trustVerified;
           const enrichedProfile = userIsDemo
             ? {
                 ...profile,
@@ -81,7 +88,11 @@ export async function GET() {
                 is_verified: true,
                 is_demo: true,
               }
-            : profile;
+            : {
+                ...profile,
+                email_verified: emailVerified,
+                is_verified: emailVerified,
+              };
 
           let effectiveRoles = roles ?? [];
           if (userIsDemo && effectiveRoles.length === 0) {
@@ -138,6 +149,7 @@ export async function GET() {
           demo: false,
           user: { id: user.id, email: user.email },
           profile: null,
+          email_verified: Boolean(user.email_confirmed_at),
           roles: roles ?? [],
         });
       }

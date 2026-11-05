@@ -19,7 +19,11 @@ export async function middleware(req: NextRequest) {
   const demoSession = await verifyDemoSessionTokenEdge(rawDemoCookie);
 
   // 2. Refresh Supabase Auth session cookies when configured.
-  let supabaseUser: { email?: string | null; user_metadata?: Record<string, unknown> } | null = null;
+  let supabaseUser: {
+    email?: string | null;
+    email_confirmed_at?: string | null;
+    user_metadata?: Record<string, unknown>;
+  } | null = null;
   const url = resolveSupabaseUrl();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (url.url && !url.problem && anonKey) {
@@ -62,14 +66,17 @@ export async function middleware(req: NextRequest) {
         (supabaseUser?.email?.toLowerCase().startsWith('admin@') ? 'admin' : 'student')
     ).toLowerCase();
 
-    // Bypass `/verify-email` and `/onboarding` (and redirect away from `/signin`)
-    // for all demo accounts; grant full platform access including `/admin/console`
-    // and `/admin/panel` when `role === 'admin'`.
-    if (
-      pathname === '/verify-email' ||
-      pathname === '/onboarding' ||
-      pathname === '/signin'
-    ) {
+    // A demo session is verified by construction (email_verified: true): it must
+    // never sit on /verify-email or /signin — redirect straight to the dashboard.
+    if (pathname === '/verify-email' || pathname === '/signin') {
+      const redirect = NextResponse.redirect(new URL('/', req.url));
+      res.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+      return redirect;
+    }
+
+    // Bypass `/onboarding` for demo accounts; grant full platform access
+    // including `/admin/console` and `/admin/panel` when `role === 'admin'`.
+    if (pathname === '/onboarding') {
       const destination = req.nextUrl.clone();
       destination.pathname = effectiveRole === 'admin' ? '/admin/console' : '/feed';
       destination.search = '';
@@ -83,11 +90,21 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  if (pathname === '/signin' && supabaseUser) {
-    const destination = req.nextUrl.clone();
-    destination.pathname = '/feed';
-    destination.search = '';
-    const redirect = NextResponse.redirect(destination);
+  // Verified Supabase sessions must never be sent back to the OTP form or the
+  // sign-in page. Accounts are provisioned with email_confirm: true, so a valid
+  // session carries email_confirmed_at; honor the explicit metadata flags too.
+  // (Any signed-in user is also kept off /signin, matching the previous rule.)
+  const sessionEmailVerified =
+    Boolean(supabaseUser?.email_confirmed_at) ||
+    supabaseUser?.user_metadata?.email_verified === true ||
+    supabaseUser?.user_metadata?.is_verified === true;
+
+  if (
+    supabaseUser &&
+    (pathname === '/verify-email' || pathname === '/signin') &&
+    (sessionEmailVerified || pathname === '/signin')
+  ) {
+    const redirect = NextResponse.redirect(new URL('/', req.url));
     res.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
     return redirect;
   }

@@ -198,3 +198,102 @@ describe('log hygiene', () => {
     expect(redactEmail('garbage')).toBe('***');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Serverless-safe signed cookie backup (campus360_otp_challenge) and the
+// 120-second verification receipt (campus360_otp_verified) that makes
+// duplicate verify-otp calls idempotent across Vercel instances.
+// ---------------------------------------------------------------------------
+import {
+  OTP_IDEMPOTENCY_WINDOW_SECONDS,
+  otpVerifiedReceiptMatches,
+  signOtpChallengeCookie,
+  signOtpVerifiedReceipt,
+  verifyOtpChallengeCookie,
+  type OtpChallengeCookiePayload,
+} from '../lib/otp-challenge-cookie';
+
+function challengePayload(overrides: Partial<OtpChallengeCookiePayload> = {}): OtpChallengeCookiePayload {
+  return {
+    email: EMAIL,
+    otpHash: hashOtp(EMAIL, '482913'),
+    salt: 'nonce-abc123',
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    universityId: '9b0f2a6e-0000-4000-8000-000000000001',
+    hallId: 'hall-1',
+    departmentId: 'dept-1',
+    challengeId: 'cha-1',
+    iat: Date.now(),
+    ...overrides,
+  };
+}
+
+describe('otp challenge cookie (serverless backup)', () => {
+  it('seals and reopens the digest-only payload', () => {
+    const payload = challengePayload();
+    const token = signOtpChallengeCookie(payload);
+    expect(token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    // The plaintext code is never inside the cookie.
+    expect(token).not.toContain('482913');
+    const opened = verifyOtpChallengeCookie(token);
+    expect(opened).toBeTruthy();
+    expect(opened!.email).toBe(EMAIL);
+    expect(opened!.otpHash).toBe(payload.otpHash);
+    expect(opened!.universityId).toBe(payload.universityId);
+    expect(otpHashMatches(opened!.otpHash, EMAIL, '482913')).toBe(true);
+  });
+
+  it('rejects tampered payloads and signatures', () => {
+    const token = signOtpChallengeCookie(challengePayload());
+    const [payloadPart, sigPart] = token.split('.');
+    // Flip a character in the payload (signature no longer matches).
+    const tamperedPayload = (payloadPart[0] === 'A' ? 'B' : 'A') + payloadPart.slice(1);
+    expect(verifyOtpChallengeCookie(`${tamperedPayload}.${sigPart}`)).toBeNull();
+    // Flip a character in the signature.
+    const tamperedSig = (sigPart[0] === 'A' ? 'B' : 'A') + sigPart.slice(1);
+    expect(verifyOtpChallengeCookie(`${payloadPart}.${tamperedSig}`)).toBeNull();
+    expect(verifyOtpChallengeCookie('garbage')).toBeNull();
+    expect(verifyOtpChallengeCookie(null)).toBeNull();
+    expect(verifyOtpChallengeCookie('')).toBeNull();
+  });
+
+  it('refuses an expired challenge cookie', () => {
+    const token = signOtpChallengeCookie(challengePayload({ expiresAt: new Date(Date.now() - 1000).toISOString() }));
+    expect(verifyOtpChallengeCookie(token)).toBeNull();
+  });
+
+  it('refuses malformed payloads (missing salt, bad digest, no university)', () => {
+    expect(verifyOtpChallengeCookie(signOtpChallengeCookie(challengePayload({ salt: '' })))).toBeNull();
+    expect(verifyOtpChallengeCookie(signOtpChallengeCookie(challengePayload({ otpHash: 'not-hex' })))).toBeNull();
+    expect(verifyOtpChallengeCookie(signOtpChallengeCookie(challengePayload({ universityId: '' })))).toBeNull();
+  });
+});
+
+describe('otp verification receipt (idempotent duplicate calls)', () => {
+  const code = '482913';
+  const receipt = (verifiedAt: number) =>
+    signOtpVerifiedReceipt({ email: EMAIL, otpHash: hashOtp(EMAIL, code), verifiedAt });
+
+  it('accepts the same email + code inside the 120s window', () => {
+    expect(OTP_IDEMPOTENCY_WINDOW_SECONDS).toBe(120);
+    expect(otpVerifiedReceiptMatches(receipt(Date.now() - 5_000), EMAIL, code)).toBe(true);
+    // Case/whitespace-insensitive email, like the rest of the flow.
+    expect(otpVerifiedReceiptMatches(receipt(Date.now()), ' Student.Du@DU.AC.BD ', code)).toBe(true);
+  });
+
+  it('rejects a different code, a different email, and a stale receipt', () => {
+    const fresh = receipt(Date.now());
+    expect(otpVerifiedReceiptMatches(fresh, EMAIL, '000000')).toBe(false);
+    expect(otpVerifiedReceiptMatches(fresh, 'other.du@du.ac.bd', code)).toBe(false);
+    expect(otpVerifiedReceiptMatches(receipt(Date.now() - 121_000), EMAIL, code)).toBe(false);
+    expect(otpVerifiedReceiptMatches(null, EMAIL, code)).toBe(false);
+    expect(otpVerifiedReceiptMatches('garbage', EMAIL, code)).toBe(false);
+  });
+
+  it('rejects a tampered receipt', () => {
+    const token = receipt(Date.now());
+    const [payloadPart, sigPart] = token.split('.');
+    const tamperedSig = (sigPart[0] === 'A' ? 'B' : 'A') + sigPart.slice(1);
+    expect(otpVerifiedReceiptMatches(`${payloadPart}.${tamperedSig}`, EMAIL, code)).toBe(false);
+  });
+});
