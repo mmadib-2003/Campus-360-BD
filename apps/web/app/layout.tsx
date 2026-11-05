@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Viewport } from 'next';
 import { headers, cookies } from 'next/headers';
 import { NextIntlClientProvider } from 'next-intl';
 import en from '../messages/en.json';
@@ -26,6 +27,17 @@ export const metadata = {
       'Verified academic archive, tracked grievance resolution, live campus events map, and student services across all public universities in Bangladesh.',
     images: ['/logos/campus360-logo.jpg'],
   },
+};
+
+// Mobile-first viewport: device-width rendering, pinch-zoom still allowed
+// (maximumScale 5 keeps accessibility), safe-area coverage for notched
+// phones, and a theme color that matches the dark shell.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+  themeColor: '#020617',
 };
 
 const MESSAGES = { en, bn } as const;

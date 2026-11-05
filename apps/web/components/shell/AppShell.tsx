@@ -71,10 +71,22 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
 
   React.useEffect(() => subscribeDemoSession(setDemoSessionState), []);
 
+  // Any navigation (drawer link, bottom tab, browser back) closes the drawer.
   React.useEffect(() => {
     setMobileNavOpen(false);
     window.scrollTo(0, 0);
   }, [pathname]);
+
+  // Lock body scroll while the slide-over drawer is open so the page behind
+  // it does not scroll on touch. Guarded for non-DOM renderers (tests).
+  React.useEffect(() => {
+    if (!mobileNavOpen || typeof document === 'undefined') return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [mobileNavOpen]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -83,6 +95,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         setCmdKOpen((open) => !open);
       } else if (event.key === 'Escape') {
         setMobileNavOpen(false);
+        setCmdKOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -109,6 +122,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
     }
     setDemoSignedOut(true);
     notifyAuthChanged();
+    setMobileNavOpen(false);
     router.push('/signin');
     router.refresh();
   }
@@ -136,38 +150,43 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   // The map renders its own toggle inside the page.
   const showScope = session.authenticated && pathname !== '/events/map' && scopePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   const scopedHref = (href: string) => withCampusScope(href, scope);
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
-      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-50 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
+    <div className="min-h-screen w-full max-w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-40 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="max-w-7xl mx-auto px-3 py-2.5 sm:px-6 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Hamburger: the only way into the module list below lg. */}
             <button
               type="button"
-              onClick={() => setMobileNavOpen((open) => !open)}
-              aria-label="Toggle navigation menu"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label={t('Open main menu')}
               aria-expanded={mobileNavOpen}
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm shrink-0"
+              className="lg:hidden inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-base shrink-0"
             >
-              {mobileNavOpen ? '✕' : '☰'}
+              ☰
             </button>
             <Link href="/" className="flex items-center gap-2.5 min-w-0">
               {/* Official Campus360 BD mark (user-supplied brand asset, see
-                  docs/IMAGE_ATTRIBUTION.md) replaces the old "360" text badge. */}
+                  docs/IMAGE_ATTRIBUTION.md). */}
               <img
                 src="/logos/campus360-logo.jpg"
                 alt="Campus360 BD"
                 className="h-10 w-10 rounded-full object-cover bg-white p-0.5 shadow-sm shrink-0"
               />
-              <div className="min-w-0">
+              {/* Wordmark yields to the controls on the narrowest phones. */}
+              <div className="hidden sm:block min-w-0">
                 <div className="font-bold text-base tracking-tight truncate">{t('Campus360 BD')}</div>
-                <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 truncate">
+                <div className="hidden md:block text-xs text-slate-500 dark:text-slate-400 truncate">
                   {t('Verified Multi-University Super-App')}
                 </div>
               </div>
             </Link>
           </div>
 
+          {/* Desktop command palette trigger. */}
           <button
             type="button"
             onClick={() => setCmdKOpen(true)}
@@ -179,25 +198,38 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             </kbd>
           </button>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <ThemeToggle />
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+            {/* Compact search: opens the same palette as a full-width modal. */}
+            <button
+              type="button"
+              onClick={() => setCmdKOpen(true)}
+              aria-label={t('Search')}
+              className="lg:hidden inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-base"
+            >
+              🔍
+            </button>
+            {/* Theme toggle stays in the bar from 375px up; on the narrowest
+                320px phones it lives in the drawer so nothing wraps. */}
+            <span className="hidden min-[375px]:inline-flex">
+              <ThemeToggle />
+            </span>
             <button
               type="button"
               onClick={toggleLocale}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
+              className="inline-flex h-11 min-h-[44px] items-center px-2.5 sm:px-3 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
               aria-label={locale === 'en' ? 'বাংলা' : 'English'}
             >
               {locale === 'en' ? 'বাংলা' : 'EN'}
             </button>
             <NotificationBell />
             {session.loading ? (
-              <div role="status" aria-label={t('Loading account')} className="h-9 w-28 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+              <div role="status" aria-label={t('Loading account')} className="h-11 w-20 sm:w-28 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
             ) : session.authenticated ? (
               <>
                 <Link
                   href={dashboardHref}
                   aria-label={`${displayName} — ${roleLabel}`}
-                  className="max-w-[130px] sm:max-w-[180px] min-w-0 rounded-xl px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+                  className="max-w-[88px] min-[375px]:max-w-[110px] sm:max-w-[180px] min-w-0 min-h-[44px] flex flex-col justify-center rounded-xl px-2 sm:px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white shrink"
                 >
                   <span className="block truncate font-semibold">{displayName}</span>
                   <span className="block truncate text-[10px] text-emerald-100">{roleLabel}</span>
@@ -205,26 +237,26 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                 <button
                   type="button"
                   onClick={signOut}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="hidden sm:inline-flex min-h-[44px] items-center px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   {t('Sign Out')}
                 </button>
               </>
             ) : session.error ? (
-              <button type="button" onClick={session.refresh} className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700">
+              <button type="button" onClick={session.refresh} className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700">
                 {t('Retry account')}
               </button>
             ) : (
               <>
                 <Link
                   href="/signin"
-                  className="hidden sm:inline-block px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="inline-flex min-h-[44px] min-w-0 items-center px-2.5 sm:px-3 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap overflow-hidden"
                 >
                   {t('Sign In')}
                 </Link>
                 <Link
                   href="/signup"
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white whitespace-nowrap"
+                  className="hidden sm:inline-flex min-h-[44px] items-center px-3.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white whitespace-nowrap"
                 >
                   {t('Join Your Campus')}
                 </Link>
@@ -234,7 +266,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         </div>
 
         {session.authenticated && profile && (
-          <div className="bg-slate-900 dark:bg-emerald-950/95 border-t border-slate-800 dark:border-emerald-800/40 px-4 py-1.5 text-slate-100">
+          <div className="bg-slate-900 dark:bg-emerald-950/95 border-t border-slate-800 dark:border-emerald-800/40 px-3 sm:px-6 py-1.5 text-slate-100">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2 text-xs">
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
                 🏛️ {asText(locale === 'bn' ? univ.name_bn : univ.name_en, 'CAMPUS')} ({asText(univ.code, '—')})
@@ -259,7 +291,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                     aria-label={t('Switch campus')}
                     value={demoSession.universityId}
                     onChange={(event) => switchCampus(event.target.value)}
-                    className="px-2 py-1 rounded-lg bg-slate-950 text-emerald-300 border border-emerald-700/50 text-[11px]"
+                    className="max-w-[46vw] sm:max-w-none px-2 py-1 rounded-lg bg-slate-950 text-emerald-300 border border-emerald-700/50 text-[11px]"
                   >
                     {DEMO_UNIVERSITIES.map((university) => (
                       <option key={university.id} value={university.id}>
@@ -284,45 +316,95 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             </div>
           </div>
         )}
-
-        {mobileNavOpen && (
-          <nav
-            aria-label="Mobile navigation"
-            className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 max-h-[70vh] overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1"
-          >
-            {MODULES.map((module) => {
-              const active =
-                module.href === '/'
-                  ? pathname === '/'
-                  : pathname === module.href || pathname.startsWith(`${module.href}/`);
-              return (
-                <Link
-                  key={module.href}
-                  href={scopedHref(module.href)}
-                  onClick={() => setMobileNavOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
-                    active
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
-                >
-                  <span>{module.icon}</span>
-                  <span>{t(module.key)}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        )}
       </header>
 
-      <div className="relative z-0 max-w-7xl w-full mx-auto flex-1 flex items-start gap-6 px-4 pt-6 pb-24 md:pb-8">
-        <aside className="hidden md:block w-64 shrink-0">
-          <nav className="sticky top-28 max-h-[calc(100vh-8rem)] overflow-y-auto space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* Slide-over navigation drawer (<lg). Backdrop tap, Escape and any
+          route change all close it; body scroll is locked while it is open. */}
+      {mobileNavOpen && (
+        <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('Navigation menu')}>
+          <div
+            className="campus360-backdrop absolute inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+          <nav
+            aria-label="Mobile navigation"
+            className="campus360-drawer fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-slate-950 border-r border-slate-800 overflow-y-auto overscroll-contain p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          >
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <Link href="/" className="flex items-center gap-2 min-w-0" onClick={() => setMobileNavOpen(false)}>
+                <img
+                  src="/logos/campus360-logo.jpg"
+                  alt="Campus360 BD"
+                  className="h-9 w-9 rounded-full object-cover bg-white p-0.5 shrink-0"
+                />
+                <span className="font-bold text-sm text-white truncate">{t('Campus360 BD')}</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                aria-label={t('Close menu')}
+                className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-300 shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {MODULES.map((module) => {
+                const active = isActive(module.href);
+                return (
+                  <Link
+                    key={module.href}
+                    href={scopedHref(module.href)}
+                    onClick={() => setMobileNavOpen(false)}
+                    className={`flex items-center gap-3 min-h-[44px] px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                      active
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                        : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                    }`}
+                  >
+                    <span aria-hidden>{module.icon}</span>
+                    <span className="min-w-0 truncate">{t(module.key)}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+              {/* The theme toggle relocates here on the narrowest phones. */}
+              <div className="flex min-[375px]:hidden items-center justify-between gap-2 px-1">
+                <span className="text-xs text-slate-400">{t('Theme')}</span>
+                <ThemeToggle />
+              </div>
+              {session.authenticated ? (
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="sm:hidden w-full min-h-[44px] px-3 rounded-xl text-sm font-semibold border border-slate-700 text-slate-200 hover:bg-slate-800"
+                >
+                  {t('Sign Out')}
+                </button>
+              ) : (
+                <Link
+                  href="/signup"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="flex w-full min-h-[44px] items-center justify-center px-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
+                >
+                  {t('Join Your Campus')}
+                </Link>
+              )}
+            </div>
+          </nav>
+        </div>
+      )}
+
+      <div className="relative z-0 max-w-7xl w-full mx-auto flex-1 flex items-start gap-6 px-3 sm:px-6 pt-6">
+        {/* Persistent sidebar only on lg+; smaller screens use the drawer. */}
+        <aside className="hidden lg:flex lg:w-64 lg:shrink-0">
+          <nav className="sticky top-28 w-full max-h-[calc(100vh-8rem)] overflow-y-auto space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             {MODULES.map((module) => {
-              const active =
-                module.href === '/'
-                  ? pathname === '/'
-                  : pathname === module.href || pathname.startsWith(`${module.href}/`);
+              const active = isActive(module.href);
               return (
                 <Link
                   key={module.href}
@@ -341,43 +423,69 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
           </nav>
         </aside>
 
-        <main className="flex-1 min-w-0">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
+        {/* pb-20 keeps content clear of the fixed bottom quick-nav on mobile. */}
+        <main className="flex-1 min-w-0 max-w-full pb-20 lg:pb-8">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
       </div>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
+      {/* Mobile bottom quick-nav: five thumb-reachable tabs, safe-area aware. */}
+      <nav
+        aria-label="Quick navigation"
+        className="fixed bottom-0 inset-x-0 z-40 flex lg:hidden bg-slate-950/95 backdrop-blur border-t border-slate-800 pb-[env(safe-area-inset-bottom)]"
+      >
         {[
-          { href: '/', icon: '🏠', label: t('Campus Feed') },
-          { href: '/marketplace', icon: '🛍️', label: t('Marketplace') },
-          { href: '/skills', icon: '🎓', label: t('moduleSkills') },
-          { href: '/mentorship', icon: '📖', label: t('moduleMentorship') },
-          { href: '/health', icon: '🩸', label: t('Health') },
+          { href: '/', icon: '🏠', label: t('Home') },
+          { href: '/feed', icon: '📰', label: t('Feed') },
+          { href: '/marketplace', icon: '🛍️', label: t('Market') },
+          { href: '/events', icon: '📅', label: t('Events') },
         ].map((tab) => (
           <Link
             key={tab.href}
             href={scopedHref(tab.href)}
-            className={`flex flex-col items-center text-[10px] ${
-              pathname === tab.href ? 'text-emerald-500 font-semibold' : 'text-slate-500'
+            aria-current={isActive(tab.href) ? 'page' : undefined}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium ${
+              isActive(tab.href) ? 'text-emerald-400' : 'text-slate-400'
             }`}
           >
-            <span className="text-base">{tab.icon}</span>
+            <span className="text-base leading-none" aria-hidden>{tab.icon}</span>
             <span className="max-w-[68px] truncate">{tab.label}</span>
           </Link>
         ))}
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label={t('More')}
+          aria-expanded={mobileNavOpen}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium text-slate-400"
+        >
+          <span className="text-base leading-none" aria-hidden>☰</span>
+          <span>{t('More')}</span>
+        </button>
       </nav>
 
       {cmdKOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 px-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+        <div
+          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-20 sm:pt-24 px-3 sm:px-4"
+          onClick={() => setCmdKOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 sm:gap-3">
               <span>🔎</span>
               <input
                 autoFocus
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder={t('Search complaints (JU-CASE-...), courses (CSE-301), events, universities...')}
-                className="w-full bg-transparent text-sm outline-none"
+                className="w-full min-w-0 min-h-[44px] bg-transparent text-base sm:text-sm outline-none"
               />
-              <button type="button" onClick={() => setCmdKOpen(false)} className="text-xs text-slate-400 hover:text-slate-200">
+              <button
+                type="button"
+                onClick={() => setCmdKOpen(false)}
+                aria-label={t('Close menu')}
+                className="min-h-[44px] min-w-[44px] rounded-xl text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
                 ESC
               </button>
             </div>
@@ -389,7 +497,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                     setCmdKOpen(false);
                     router.push(`/track/${encodeURIComponent(searchQuery.trim().toUpperCase())}`);
                   }}
-                  className="w-full text-left p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 font-medium"
+                  className="w-full min-h-[44px] text-left p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 font-medium"
                 >
                   🛡️ {t('Track Grievance Case')}: {searchQuery.toUpperCase()}
                 </button>
@@ -400,7 +508,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                   setCmdKOpen(false);
                   router.push(`/archive?q=${encodeURIComponent(searchQuery)}`);
                 }}
-                className="w-full text-left p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="w-full min-h-[44px] text-left p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 📚 {t('Search Academic Archive for')} “{searchQuery || '...'}”
               </button>
@@ -410,7 +518,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                   setCmdKOpen(false);
                   router.push(`/events?q=${encodeURIComponent(searchQuery)}`);
                 }}
-                className="w-full text-left p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="w-full min-h-[44px] text-left p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 📍 {t('Search Live Campus Events for')} “{searchQuery || '...'}”
               </button>

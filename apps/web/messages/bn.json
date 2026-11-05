@@ -573,7 +573,15 @@
     "Live module": "লাইভ মডিউল",
     "Authentic campus photography and institutional logos via Wikimedia Commons.": "Wikimedia Commons-এর মাধ্যমে আসল ক্যাম্পাস ছবি ও প্রাতিষ্ঠানিক লোগো।",
     "The registry is warming up": "রেজিস্ট্রি প্রস্তুত হচ্ছে",
-    "Campus cards will appear as soon as the registry responds.": "রেজিস্ট্রি সাড়া দিলে ক্যাম্পাস কার্ড দেখা যাবে।"
+    "Campus cards will appear as soon as the registry responds.": "রেজিস্ট্রি সাড়া দিলে ক্যাম্পাস কার্ড দেখা যাবে।",
+    "Home": "হোম",
+    "Feed": "ফিড",
+    "Market": "মার্কেট",
+    "More": "আরও",
+    "Theme": "থিম",
+    "Open main menu": "প্রধান মেনু খুলুন",
+    "Close menu": "মেনু বন্ধ করুন",
+    "Navigation menu": "নেভিগেশন মেনু"
   },
   "roles": {
     "student": "শিক্ষার্থী",

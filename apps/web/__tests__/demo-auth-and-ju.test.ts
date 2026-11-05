@@ -144,9 +144,11 @@ describe('Task 2 — Jahangirnagar University 38 official academic units', () =>
 });
 
 describe('Task 3 — Navbar anchoring, email display, and module labels', () => {
-  it('anchors AppShell header at top-0 z-50 and avoids truncating demo emails', () => {
+  it('anchors AppShell header at top-0 z-40 (below the z-50 drawer) and avoids truncating demo emails', () => {
     const shell = read('apps/web/components/shell/AppShell.tsx');
-    expect(shell).toContain('sticky top-0 inset-x-0 z-50 w-full');
+    // The mobile slide-over drawer and its backdrop sit at z-50 so they can
+    // cover the sticky navbar while open; the navbar itself stays anchored.
+    expect(shell).toContain('sticky top-0 inset-x-0 z-40 w-full');
 
     const quickLogin = read('apps/web/components/auth/QuickDemoLogin.tsx');
     expect(quickLogin).toContain('break-all');
