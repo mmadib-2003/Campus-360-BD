@@ -42,6 +42,8 @@ export interface DemoChallenge {
   role: DemoRole;
   fullName: string;
   studentId: string;
+  hallId?: string;
+  hallName?: string;
   code: string;
   createdAt: number;
 }
@@ -209,6 +211,8 @@ export function issueSignedDemoSession(input: {
   universityCode?: string;
   department_id?: string | null;
   departmentCode?: string | null;
+  hall_id?: string | null;
+  hall_name?: string | null;
 }): { payload: SignedDemoSessionPayload; token: string } {
   const defaults = DEMO_ROLE_DEFAULTS[input.role] ?? DEMO_ROLE_DEFAULTS.student;
   const now = Date.now();
@@ -230,6 +234,8 @@ export function issueSignedDemoSession(input: {
     universityCode,
     department_id: departmentId,
     departmentCode: input.departmentCode === undefined ? 'IIT' : input.departmentCode,
+    hall_id: input.hall_id ?? null,
+    hall_name: input.hall_name ?? null,
     email_verified: true,
     is_demo: true,
     iat: now,
@@ -262,7 +268,8 @@ export function buildDemoProfileFromSession(
   overrides?: { university_id?: string; department_id?: string | null }
 ) {
   const university = getDemoUniversity(session.universityCode || session.university_id) ?? DEMO_UNIVERSITIES[0];
-  const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code);
+  const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.id === session.hall_id && h.universityCode === university.code)
+    ?? DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code);
   const universityId = overrides?.university_id ?? session.university_id ?? university.id;
   const departmentId =
     overrides?.department_id !== undefined ? overrides.department_id : session.department_id;
@@ -299,7 +306,8 @@ export function buildDemoProfileFromSession(
           ? 'তথ্যপ্রযুক্তি ইনস্টিটিউট (আইআইটি)'
           : 'কম্পিউটার বিজ্ঞান ও প্রকৌশল',
     },
-    halls: hall
+    hall_id: session.hall_id ?? hall?.id ?? null,
+    halls: session.hall_name ? { name: session.hall_name } : hall
       ? { name: hall.name, name_bn: hall.name_bn, type: hall.type }
       : { name: 'Al-Beruni Hall', name_bn: 'আল বেরুনী হল', type: 'RESIDENTIAL' },
   };
@@ -318,6 +326,7 @@ export function issueDemoChallenge(input: {
   role?: unknown;
   fullName?: string;
   studentId?: string;
+  hallId?: string;
   code?: string;
 }): { ok: true; challenge: DemoChallenge } | { ok: false; error: string; errorBn: string; status: number } {
   const email = String(input.email ?? '').trim().toLowerCase();
@@ -339,6 +348,8 @@ export function issueDemoChallenge(input: {
       status: 403,
     };
   }
+  const selectedHall = input.hallId ? DEMO_UNIVERSITY_HALLS.find((hall) => hall.id === input.hallId && hall.universityCode === byDomain.code) : undefined;
+  if (input.hallId && !selectedHall) return { ok: false, error: 'Please select a hall belonging to your university.', errorBn: 'আপনার বিশ্ববিদ্যালয়ের হল নির্বাচন করুন।', status: 400 };
   const role = normalizeDemoRole(input.role);
   const code = input.code?.trim() || DEMO_UNIVERSAL_OTP;
   const challenge: DemoChallenge = {
@@ -347,6 +358,8 @@ export function issueDemoChallenge(input: {
     role,
     fullName: input.fullName?.trim() || 'Demo Student',
     studentId: input.studentId?.trim() || `${byDomain.code}-2026-12345`,
+    hallId: selectedHall?.id,
+    hallName: selectedHall?.name,
     code,
     createdAt: Date.now(),
   };
@@ -411,6 +424,8 @@ export function verifyDemoChallenge(
     studentId: challenge.studentId,
     university_id: challenge.universityId,
     universityCode: univ?.code || 'JU',
+    hall_id: challenge.hallId,
+    hall_name: challenge.hallName,
   });
   cookies().delete(DEMO_OTP_COOKIE);
   return { ok: true, session: payload };
@@ -448,7 +463,13 @@ const DEMO_CAMPUS_COVERS: Record<string, string> = {
   RU: '/campuses/ru.jpg',
   CU: '/campuses/cu.jpg',
   SUST: '/campuses/sust.jpg',
-  JUST: '/campuses/just.jpg',
+  JNU: '/campuses/jnu.jpg',
+  BUTEX: '/campuses/butex.jpg',
+  RUET: '/campuses/ruet.jpg',
+  CUET: '/campuses/cuet.jpg',
+  KUET: '/campuses/kuet.jpg',
+  BAU: '/campuses/bau.jpg',
+  IU: '/campuses/iu.jpg',
 };
 
 const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
@@ -464,6 +485,9 @@ const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   KUET: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/86/KUET_Central_field.jpg/1920px-KUET_Central_field.jpg',
   CUET: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/CUET_GATE.jpg/1920px-CUET_GATE.jpg',
   BAU: 'https://upload.wikimedia.org/wikipedia/commons/e/ed/Bangladesh_Agricultural_University_%28BAU%29.jpg',
+  BUTEX: 'https://upload.wikimedia.org/wikipedia/commons/5/5f/Butex..jpg',
+  RUET: 'https://upload.wikimedia.org/wikipedia/commons/5/58/Ruet_campus_gate.jpg',
+  IU: 'https://upload.wikimedia.org/wikipedia/commons/4/43/Main_gate_IU.jpg',
 };
 
 const DEMO_CAMPUS_LOGOS: Record<string, string> = {
@@ -479,6 +503,9 @@ const DEMO_CAMPUS_LOGOS: Record<string, string> = {
   KUET: 'https://upload.wikimedia.org/wikipedia/en/7/74/Logo_KUET.svg',
   CUET: 'https://upload.wikimedia.org/wikipedia/en/0/0e/CUET_Vector_Logo.svg',
   BAU: 'https://upload.wikimedia.org/wikipedia/en/a/a2/Bangladesh_Agriculture_University_logo.svg',
+  BUTEX: 'https://upload.wikimedia.org/wikipedia/en/f/f8/Bangladesh_University_of_Textiles_logo.svg',
+  RUET: 'https://upload.wikimedia.org/wikipedia/en/8/87/RUET_logo.svg',
+  IU: 'https://upload.wikimedia.org/wikipedia/en/7/7b/Islamic_University%2C_Bangladesh_logo.svg',
 };
 
 export function demoUniversitiesPayload() {

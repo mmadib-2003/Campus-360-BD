@@ -37,7 +37,9 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch('/api/universities')
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    fetch('/api/universities', { signal: controller.signal })
       .then((response) => response.json())
       .then((payload) => {
         if (!cancelled && payload?.success && Array.isArray(payload.data)) {
@@ -46,10 +48,13 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
       })
       .catch(() => undefined)
       .finally(() => {
+        clearTimeout(timeout);
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
     };
   }, []);
 
@@ -81,7 +86,7 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
             </span>
-            🇧🇩 {t('All 50+ Bangladesh Public Universities Supported')}
+            🇧🇩 {t('13 Bangladesh Public Universities Supported')}
           </span>
           <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-4">
             {t('One verified super-app for every public university campus in Bangladesh')}

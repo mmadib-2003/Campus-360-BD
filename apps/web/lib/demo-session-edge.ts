@@ -19,6 +19,8 @@ export interface SignedDemoSessionPayload {
   universityCode: string;
   department_id: string | null;
   departmentCode: string | null;
+  hall_id?: string | null;
+  hall_name?: string | null;
   email_verified: true;
   is_demo: true;
   iat: number;

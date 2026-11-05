@@ -68,6 +68,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
 
   React.useEffect(() => {
     setMobileNavOpen(false);
+    window.scrollTo(0, 0);
   }, [pathname]);
 
   React.useEffect(() => {
@@ -125,7 +126,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
 
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
-      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-50 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-50 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
@@ -318,7 +319,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         <main className="flex-1 min-w-0">{children}</main>
       </div>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
         {[
           { href: '/', icon: '🏠', label: t('Campus Feed') },
           { href: '/marketplace', icon: '🛍️', label: t('Marketplace') },

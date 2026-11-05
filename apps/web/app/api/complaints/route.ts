@@ -3,9 +3,29 @@ import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
+import { isDemoEmail, readSignedDemoSession } from '@/lib/demo-auth';
+import { demoTickets } from '@/lib/demo-tickets';
 
 export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  const demoSession = readSignedDemoSession();
+  if (!isSupabaseServerConfigured() && demoSession) {
+    return apiSuccess(demoTickets(demoSession.university_id, demoSession.universityCode), 200, { demo: true });
+  }
+  const { auth, response } = await requireAuth();
+  if (!auth) return response!;
+  // Never return other users' complaints, especially confidential grievances.
+  const { data, error } = await auth.admin.from('complaints')
+    .select('id, university_id, tracking_code, title, category, status, severity, created_at')
+    .eq('university_id', auth.profile.university_id).eq('student_id', auth.user.id)
+    .order('created_at', { ascending: false }).limit(30);
+  if (error) return apiError('COMPLAINT_QUERY_FAILED', 'Could not load tickets.', 'টিকিট লোড করা যায়নি।', 500);
+  const rows = data?.length ? data : ((demoSession && demoSession.id === auth.user.id) || isDemoEmail(auth.user.email))
+    ? demoTickets(auth.profile.university_id, auth.profile.universities?.code ?? 'JU') : [];
+  return apiSuccess(rows, 200, { total: rows.length });
+}
 
 export async function POST(req: NextRequest) {
   if (!isSupabaseServerConfigured()) {
