@@ -1,8 +1,9 @@
 // apps/web/app/api/reviews/route.ts
 import { NextRequest } from 'next/server';
-import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
+import { createSupabaseAdminClient, createSupabaseRouteClient, createSupabasePublicClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
+import { parseCampusScope } from '@/lib/campus-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,34 +19,38 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const supabase = createSupabaseRouteClient();
+  const { auth } = await requireAuth();
   const sp = req.nextUrl.searchParams;
+  const allCampuses = parseCampusScope(sp.get('scope')) === 'all';
+  const supabase = allCampuses || !auth ? createSupabasePublicClient() : auth.supabase;
   const targetType = sp.get('targetType');
   const targetId = sp.get('targetId');
 
   let query = supabase
     .from('reviews')
-    .select('*, profiles(full_name, avatar_url, trust_level)')
+    .select(allCampuses || !auth ? 'id, university_id, author_id, target_type, target_id, rating, title, body, photo_urls, tags, verified_participation, pending_reports_count, is_hidden, deleted_at, created_at, updated_at, profiles(full_name, avatar_url, trust_level)' : '*, profiles(full_name, avatar_url, trust_level)')
     .is('deleted_at', null)
     .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(50);
 
+  if (auth && !allCampuses) query = query.eq('university_id', auth.profile.university_id);
   if (targetType) query = query.eq('target_type', targetType);
   if (targetId) query = query.eq('target_id', targetId);
 
   const { data: reviews, error } = await query;
   if (error) return apiError('REVIEWS_FETCH_FAILED', error.message, 'রিভিউ লোড করা যায়নি।', 400);
 
-  const { data: aggregate } =
-    targetType && targetId
-      ? await supabase
-          .from('review_aggregates')
-          .select('*')
-          .eq('target_type', targetType)
-          .eq('target_id', targetId)
-          .maybeSingle()
-      : { data: null };
+  // Cross-campus averages use the visible returned reviews, not private aggregates.
+  if (allCampuses || !auth) {
+    const ratings = (reviews ?? []).map((review: any) => Number(review.rating)).filter(Number.isFinite);
+    return apiSuccess({ reviews, aggregate: ratings.length ? { avg_rating: ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length } : null });
+  }
+  let aggregateQuery = supabase.from('review_aggregates').select('*');
+  if (auth) aggregateQuery = aggregateQuery.eq('university_id', auth.profile.university_id);
+  const { data: aggregate } = targetType && targetId
+    ? await aggregateQuery.eq('target_type', targetType).eq('target_id', targetId).maybeSingle()
+    : { data: null };
 
   return apiSuccess({ reviews, aggregate });
 }

@@ -2,7 +2,8 @@
 import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
+import { parseCampusScope } from '@/lib/campus-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +17,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const supabase = createSupabaseRouteClient();
   const sp = req.nextUrl.searchParams;
+  const allCampuses = parseCampusScope(sp.get('scope')) === 'all';
+  const { auth, response } = await requireAuth();
+  if (!auth && (!allCampuses || response?.status !== 401)) return response!;
+  const supabase = auth?.supabase ?? createSupabaseRouteClient();
   const page = Math.max(1, Number(sp.get('page') || 1));
   const pageSize = Math.min(50, Math.max(1, Number(sp.get('pageSize') || 20)));
   const from = (page - 1) * pageSize;
@@ -25,12 +29,14 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('academic_files')
-    .select('*, departments(code, name_en, name_bn), universities(code, name_en, name_bn)', { count: 'exact' })
+    .select('id, university_id, department_id, uploader_id, course_code, course_title, semester, academic_year, category, language, visibility, requires_same_university_verification, tags, current_version, original_filename, scan_status, views_count, downloads_count, upvotes_count, dmca_quarantined, created_at, departments(code, name_en, name_bn), universities(code, name_en, name_bn)', { count: 'exact' })
     .is('deleted_at', null)
     .eq('dmca_quarantined', false)
     .order('created_at', { ascending: false })
     .range(from, to);
 
+  if (allCampuses) query = query.eq('visibility', 'PUBLIC');
+  else if (auth) query = query.eq('university_id', auth.profile.university_id);
   if (sp.get('universityId')) query = query.eq('university_id', sp.get('universityId')!);
   if (sp.get('departmentId')) query = query.eq('department_id', sp.get('departmentId')!);
   if (sp.get('courseCode')) query = query.ilike('course_code', `%${sp.get('courseCode')}%`);

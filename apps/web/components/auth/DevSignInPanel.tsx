@@ -7,6 +7,7 @@
 // via signInWithPassword, bypassing the Supabase OTP email limits entirely.
 
 import React from 'react';
+import { notifyAuthChanged } from '@/lib/auth-events';
 import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import {
@@ -61,9 +62,7 @@ export function DevSignInPanel({ compact = false }: { compact?: boolean }) {
           fullName: account.fullName,
         });
       }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
-      }
+      notifyAuthChanged();
       router.push(payload?.redirectTo ?? landingFor((account?.role as DemoRole) ?? 'student'));
       router.refresh();
     } catch {
