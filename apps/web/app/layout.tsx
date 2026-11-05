@@ -13,9 +13,19 @@ import { SafeSection } from '@/components/SafeSection';
 import './globals.css';
 
 export const metadata = {
+  metadataBase: new URL('https://campus-360-bd.vercel.app'),
   title: 'Campus360 BD — Multi-University Verified Super-App',
   description:
     'Verified academic archive, tracked grievance resolution, live campus events map, and student services across all public universities in Bangladesh.',
+  // Official brand mark (user-supplied asset, docs/IMAGE_ATTRIBUTION.md):
+  // browser-tab favicon, Apple touch icon and link-preview image.
+  icons: { icon: '/logos/campus360-logo.jpg', apple: '/logos/campus360-logo.jpg' },
+  openGraph: {
+    title: 'Campus360 BD — Multi-University Verified Super-App',
+    description:
+      'Verified academic archive, tracked grievance resolution, live campus events map, and student services across all public universities in Bangladesh.',
+    images: ['/logos/campus360-logo.jpg'],
+  },
 };
 
 const MESSAGES = { en, bn } as const;

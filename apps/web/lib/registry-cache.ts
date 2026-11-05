@@ -33,7 +33,7 @@ import {
 } from '@/lib/supabase-url';
 
 /** Pass as the trailing headers argument of `apiSuccess` / `apiError`. */
-export const REGISTRY_CACHE_VERSION = '2026-11-ju-shaheed-minar-v3';
+export const REGISTRY_CACHE_VERSION = '2026-11-cu-sust-kuet-covers-v1';
 
 export const REGISTRY_NO_STORE: Record<string, string> = {
   'Cache-Control': 'no-store, max-age=0',
