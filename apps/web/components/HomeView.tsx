@@ -69,7 +69,7 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="relative overflow-hidden p-8 rounded-2xl bg-gradient-to-br from-emerald-900/60 via-slate-900 to-teal-950 border border-emerald-500/30 shadow-xl"
+        className="relative overflow-hidden p-5 sm:p-8 rounded-2xl bg-gradient-to-br from-emerald-900/60 via-slate-900 to-teal-950 border border-emerald-500/30 shadow-xl"
       >
         {/* Slow ambient blobs — the page should feel alive before any data lands. */}
         <motion.div
@@ -93,29 +93,29 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
             </span>
             🇧🇩 {t('13 Bangladesh Public Universities Supported')}
           </span>
-          {session.authenticated && <div className="mt-4 max-w-xl"><CampusScopeToggle universityCode={session.profile?.universities?.code} /></div>}
-          <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-4">
+          {session.authenticated && <div className="mt-4 w-full max-w-xl"><CampusScopeToggle universityCode={session.profile?.universities?.code} /></div>}
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white mt-4">
             {t('One verified super-app for every public university campus in Bangladesh')}
           </h1>
           <p className="text-sm text-slate-300 mt-2 max-w-2xl">
             {session.authenticated ? t(scope === 'all' ? 'Showing public listings across supported universities.' : 'Showing listings and activity for your university only.') : t('Strict institutional email OTP verification, row-level tenant isolation, a 50 MB virus-scanned Academic Archive, SLA-tracked anonymous grievance resolution, and live campus events.')}
           </p>
-          <div className="flex flex-wrap gap-3 mt-6">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mt-6">
             <Link
               href="/signup"
-              className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow transition hover:scale-[1.03] hover:shadow-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+              className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow transition hover:scale-[1.03] hover:shadow-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             >
               {t('Join Your Campus')}
             </Link>
             <Link
               href="/track/JU-CASE-2026-482913"
-              className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition hover:scale-[1.02]"
+              className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition hover:scale-[1.02]"
             >
               {t('Track Grievance Case')} (JU-CASE-...)
             </Link>
             <Link
               href="/signin"
-              className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-white/10 hover:bg-white/15 text-white border border-white/20 transition hover:scale-[1.02]"
+              className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-white/10 hover:bg-white/15 text-white border border-white/20 transition hover:scale-[1.02]"
             >
               ⚡ {t('Quick Demo Login')}
             </Link>
@@ -127,7 +127,7 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
 
       {!compact && (
         <section className="space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end sm:justify-between gap-2">
             <div>
               <h2 className="text-lg font-bold">{t('Supported Public Universities Registry')}</h2>
               <p className="text-[11px] text-slate-400">
@@ -148,14 +148,14 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
               description={t('Campus cards will appear as soon as the registry responds.')}
             />
           ) : (
-            <StaggerGroup className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {universities.slice(0, 12).map((university) => (
+            <StaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {universities.map((university) => (
                 <StaggerItem key={university.id} className="h-full">
                   <motion.article
                     {...cardHover}
                     className="card-glow h-full overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
                   >
-                    <div className="relative h-24 bg-gradient-to-br from-emerald-900/70 via-slate-900 to-teal-950">
+                    <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-emerald-900/70 via-slate-900 to-teal-950">
                       {university.cover_image_url ? (
                         <img
                           src={university.cover_image_url}
@@ -164,7 +164,7 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
                           decoding="async"
                           referrerPolicy="no-referrer"
                           onError={hideOnBrokenImage}
-                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                          className="aspect-video w-full object-cover transition-transform duration-500 hover:scale-105"
                         />
                       ) : null}
                       <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-slate-950/85 to-transparent" />

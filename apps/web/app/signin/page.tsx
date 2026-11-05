@@ -90,9 +90,10 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto my-8 px-4">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)] gap-6 items-start">
-      <section className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div className="w-full max-w-full lg:max-w-7xl mx-auto my-8 px-3 sm:px-6">
+      {/* Single column on mobile: email sign-in first, quick demo below. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <section className="lg:col-span-7 p-4 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
       <div className="flex items-center gap-3">
         <img
           src="/logos/campus360-logo.jpg"
@@ -125,14 +126,14 @@ export default function SignInPage() {
             placeholder="student@du.ac.bd"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+            className="w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
           />
         </div>
         {error && <p className="text-xs text-rose-500">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold disabled:opacity-60"
+          className="w-full min-h-[44px] py-2.5 rounded-xl bg-emerald-600 text-white font-semibold disabled:opacity-60"
         >
           {loading ? t('Sending OTP…') : t('Send 6-Digit Verification OTP')}
         </button>
@@ -149,7 +150,7 @@ export default function SignInPage() {
       <DevSignInPanel />
       </div>
       </section>
-      <aside className="lg:sticky lg:top-24">
+      <aside className="lg:col-span-5 lg:sticky lg:top-24 w-full max-w-full">
         <QuickDemoLogin />
       </aside>
       </div>

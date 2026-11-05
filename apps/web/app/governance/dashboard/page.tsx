@@ -256,19 +256,24 @@ export default function GovernanceDashboardPage() {
         }
         subtitle={t('Every action is scoped to your university.')}
         actions={
-          <>
+          <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 -mx-3 px-3 sm:mx-0 sm:px-0 w-full sm:w-auto">
             {(['complaints', 'allocations', 'notices'] as const).map((key) => (
               <Button
                 key={key}
                 size="sm"
                 variant={tab === key ? 'primary' : 'outline'}
                 onClick={() => setTab(key)}
+                className="shrink-0 whitespace-nowrap"
               >
                 {t(key === 'complaints' ? 'Civic complaints' : key === 'allocations' ? 'Hall allocations' : 'Notice broadcasts')}
               </Button>
             ))}
-            {tab === 'notices' && <Button size="sm" onClick={() => setNoticeOpen(true)}>＋ {t('Broadcast notice')}</Button>}
-          </>
+            {tab === 'notices' && (
+              <Button size="sm" onClick={() => setNoticeOpen(true)} className="shrink-0 whitespace-nowrap">
+                ＋ {t('Broadcast notice')}
+              </Button>
+            )}
+          </div>
         }
       />
 

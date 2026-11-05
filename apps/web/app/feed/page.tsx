@@ -59,7 +59,7 @@ export default function FeedPage() {
         <CampusScopeToggle universityCode={profile?.universities?.code} />
       </ModuleHeader>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {session.loading || listings.loading || tickets.loading ? (
           Array.from({ length: 4 }).map((_, index) => <SkeletonStat key={index} />)
         ) : (
@@ -87,7 +87,7 @@ export default function FeedPage() {
             {t('Campus Feed')} →
           </Link>
         </div>
-        <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <StaggerGroup className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {[
             { href: '/marketplace', label: t('Marketplace'), icon: '🛍️' },
             { href: '/civic', label: t('Civic Ticketing & Complaint Box'), icon: '🛡️' },
@@ -102,7 +102,7 @@ export default function FeedPage() {
               <motion.div {...cardHover} className="h-full">
                 <Link
                   href={withCampusScope(module.href, scope)}
-                  className="group card-glow flex h-full flex-col rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-3 text-xs font-medium"
+                  className="group card-glow flex h-full min-h-[44px] flex-col rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-3 text-xs font-medium"
                 >
                   <span className="text-base transition-transform duration-200 group-hover:scale-110" aria-hidden>
                     {module.icon}

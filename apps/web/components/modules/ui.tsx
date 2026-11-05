@@ -49,7 +49,7 @@ export function SectionHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div className="min-w-0">
         <h2 className="text-lg font-bold flex items-center gap-2">
           {icon && <span aria-hidden>{icon}</span>}
@@ -57,7 +57,7 @@ export function SectionHeader({
         </h2>
         {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
         {actions}
         {right}
       </div>
@@ -86,8 +86,9 @@ export function ModuleHeader({
   const heading = locale === 'bn' && titleBn ? titleBn : title;
   const body = blurb ? (locale === 'bn' ? t(blurb) : blurb) : undefined;
   return (
-    <Card className="p-5 md:p-6 bg-gradient-to-br from-emerald-900/50 via-slate-900 to-teal-950 border-emerald-500/30 !text-slate-100">
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+    <Card className="p-4 sm:p-5 md:p-6 bg-gradient-to-br from-emerald-900/50 via-slate-900 to-teal-950 border-emerald-500/30 !text-slate-100">
+      {/* Title stacks above badges / scope toggle on mobile. */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-2xl" aria-hidden>
@@ -110,7 +111,7 @@ export function ModuleHeader({
           </div>
           {body && <p className="text-sm text-slate-300 mt-2 max-w-3xl">{body}</p>}
         </div>
-        {children && <div className="flex flex-wrap items-center gap-2 shrink-0">{children}</div>}
+        {children && <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:shrink-0">{children}</div>}
       </div>
     </Card>
   );
@@ -223,7 +224,7 @@ export function Button({
       {...props}
       disabled={props.disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px] sm:min-h-0',
         size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
         variants[variant],
         className
@@ -237,11 +238,13 @@ export function Button({
   );
 }
 
+// text-base (16px) on mobile prevents iOS Safari / Android Chrome auto-zoom
+// on focus; sm:text-sm restores the compact desktop size.
 const inputClass =
-  'w-full rounded-xl px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500';
+  'w-full max-w-full rounded-xl px-3 py-2 text-base sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500';
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cn(inputClass, props.className)} />;
+  return <input {...props} className={cn(inputClass, 'min-h-[44px]', props.className)} />;
 }
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -257,7 +260,7 @@ export function Select({
   placeholder?: string;
 }) {
   return (
-    <select {...props} className={cn(inputClass, props.className)}>
+    <select {...props} className={cn(inputClass, 'min-h-[44px]', props.className)}>
       {placeholder && <option value="">{placeholder}</option>}
       {options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -430,15 +433,17 @@ export function FilterChips({
 }) {
   const { t } = useUi();
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {label && <span className="text-[11px] uppercase tracking-wide text-slate-400 mr-1">{label}</span>}
+    // Touch-scrollable pill row on mobile (edge-to-edge inside the card),
+    // wrapping back to a normal row from sm upward.
+    <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:items-center">
+      {label && <span className="text-[11px] uppercase tracking-wide text-slate-400 mr-1 shrink-0">{label}</span>}
       {[{ value: 'ALL', label: t('All') }, ...options].map((option) => (
         <button
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
           className={cn(
-            'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition',
+            'shrink-0 whitespace-nowrap min-h-[44px] sm:min-h-0 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition',
             value === option.value
               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
               : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -478,24 +483,29 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-4 pt-16">
+    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-3 sm:p-4 pt-14 sm:pt-16 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl',
+          'w-full max-w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl',
           wide ? 'max-w-3xl' : 'max-w-xl'
         )}
       >
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
-          <h3 className="font-bold text-sm">{title}</h3>
-          <button type="button" onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Close">
+        <div className="flex items-center justify-between gap-2 p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800">
+          <h3 className="font-bold text-sm min-w-0 truncate">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
-        <div className="p-4 max-h-[70vh] overflow-y-auto">{children}</div>
-        {footer && <div className="p-4 border-t border-slate-200 dark:border-slate-800">{footer}</div>}
+        <div className="p-3 sm:p-4 max-h-[70vh] overflow-y-auto overscroll-contain">{children}</div>
+        {footer && <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800">{footer}</div>}
       </div>
     </div>
   );
@@ -512,7 +522,7 @@ export function Toast({ message, tone = 'emerald' }: { message: string; tone?: '
       role="status"
       aria-live="polite"
       className={cn(
-        'fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-xl text-xs font-semibold shadow-lg',
+        'fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] px-4 py-2 rounded-xl text-xs font-semibold shadow-lg',
         tones[tone]
       )}
     >
@@ -566,14 +576,14 @@ export function SignInPrompt({ moduleName }: { moduleName: string }) {
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
         তালিকা দেখা সবার জন্য উন্মুক্ত। পোস্ট করতে, বুক করতে ও যোগাযোগের বিবরণ দেখতে বিশ্ববিদ্যালয়ের ইমেইলে সাইন-ইন করুন।
       </p>
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <a
           href="/signin"
-          className="px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
+          className="min-h-[44px] inline-flex items-center justify-center px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
         >
           Sign in
         </a>
-        <a href="/signup" className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 dark:border-slate-700">
+        <a href="/signup" className="min-h-[44px] inline-flex items-center justify-center px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 dark:border-slate-700">
           Join your campus
         </a>
       </div>
