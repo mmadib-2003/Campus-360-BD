@@ -14,6 +14,7 @@ interface SignupContext {
   fullName: string;
   studentId: string;
   hallId?: string;
+  hallName?: string;
   departmentId?: string;
   programId?: string;
   demoCode?: string | null;
@@ -111,6 +112,8 @@ function VerifyEmailForm() {
           role: context.role,
           email: context.email,
           fullName: context.fullName,
+          hallId: context.hallId,
+          hallName: context.hallName,
         });
       }
       router.refresh();

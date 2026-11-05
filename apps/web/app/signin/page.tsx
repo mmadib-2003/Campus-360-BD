@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { DevSignInPanel } from '@/components/auth/DevSignInPanel';
 import { QuickDemoLogin } from '@/components/auth/QuickDemoLogin';
+import { UniversityCombobox, type UniversityOption } from '@/components/auth/UniversityCombobox';
+import { HallCombobox, type HallOption } from '@/components/auth/HallCombobox';
 
 function inferRole(email: string): 'student' | 'faculty' | 'alumni' | 'admin' | 'governance' {
   const local = email.split('@')[0]?.toLowerCase() ?? '';
@@ -20,19 +22,42 @@ export default function SignInPage() {
   const router = useRouter();
   const { t } = useUi();
   const [email, setEmail] = React.useState('');
+  const [universities, setUniversities] = React.useState<UniversityOption[]>([]);
+  const [universityId, setUniversityId] = React.useState('');
+  const [halls, setHalls] = React.useState<HallOption[]>([]);
+  const [hallId, setHallId] = React.useState('');
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/universities', { cache: 'no-store', signal: controller.signal })
+      .then((r) => r.json()).then((p) => setUniversities(Array.isArray(p.data) ? p.data : []))
+      .catch(() => { if (!controller.signal.aborted) setError('Could not load universities. Please try again.'); });
+    return () => controller.abort();
+  }, []);
+  React.useEffect(() => {
+    setHallId('');
+    setHalls([]);
+    if (!universityId) return;
+    const controller = new AbortController();
+    fetch(`/api/halls?universityId=${encodeURIComponent(universityId)}`, { cache: 'no-store', signal: controller.signal })
+      .then((r) => r.json()).then((p) => setHalls(Array.isArray(p.data) ? p.data : []))
+      .catch(() => { if (!controller.signal.aborted) setError('Could not load halls. Please try again.'); });
+    return () => controller.abort();
+  }, [universityId]);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
   async function handleOtpSignIn(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!universityId) { setError('Please select your university'); return; }
+    if (!hallId || !halls.some((hall) => hall.id === hallId)) { setError('Please select your residential hall'); return; }
     setLoading(true);
     try {
       const role = inferRole(email);
       const response = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role, signupPayload: { role } }),
+        body: JSON.stringify({ email, universityId, role, signupPayload: { role, hallId } }),
       });
       const payload = await response.json();
       if (!payload.success) {
@@ -44,7 +69,9 @@ export default function SignInPage() {
           'campus360.signup',
           JSON.stringify({
             email,
-            universityId: payload.data?.universityId ?? '',
+            universityId: payload.data?.universityId ?? universityId,
+            hallId,
+            hallName: halls.find((hall) => hall.id === hallId)?.name ?? '',
             role: payload.data?.role ?? role,
             fullName: email.split('@')[0] ?? 'Demo Student',
             studentId: '',
@@ -74,6 +101,10 @@ export default function SignInPage() {
           {t('Or sign in with your university email')}
         </p>
         <form onSubmit={handleOtpSignIn} className="mt-3 max-w-md space-y-4 text-sm">
+        <UniversityCombobox universities={universities} value={universityId} onChange={setUniversityId}
+          label={t('Public University')} placeholder={t('Search university by name, code or city…')} />
+        <HallCombobox halls={halls} value={hallId} onChange={setHallId}
+          label={t('Residential Hall')} placeholder={t('Search your residential hall…')} disabled={!universityId} />
         <div>
           <label className="block font-medium mb-1" htmlFor="signin-email">
             {t('University Email')}
