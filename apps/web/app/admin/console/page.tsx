@@ -196,7 +196,7 @@ export default function AdminConsolePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Stat label={t('Open tickets')} value={stats.open} tone="amber" hint={t('In queue')} />
         <Stat label={t('SLA breached')} value={stats.breached} tone="rose" hint={t('Needs escalation')} />
         <Stat label={t('Critical')} value={stats.critical} tone="rose" hint={t('Handle first')} />

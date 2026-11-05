@@ -226,8 +226,9 @@ export default function AdminPanelPage() {
         </Link>
       </ModuleHeader>
 
-      <Card className="p-3 overflow-x-auto">
-        <div className="flex flex-wrap gap-1.5">
+      <Card className="p-3">
+        {/* Section tabs swipe horizontally on touch, wrap from sm upward. */}
+        <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap">
           {ADMIN_SECTIONS.map((item) => (
             <button
               key={item.key}
@@ -236,7 +237,7 @@ export default function AdminPanelPage() {
                 setSectionKey(item.key);
                 setSearch('');
               }}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition ${
+              className={`shrink-0 whitespace-nowrap min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition ${
                 item.key === sectionKey
                   ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
                   : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -259,7 +260,7 @@ export default function AdminPanelPage() {
               placeholder={t('Search')}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="!w-56"
+              className="w-full sm:!w-56"
             />
             <Button onClick={openCreate}>＋ {t('Create')}</Button>
           </>
@@ -276,8 +277,11 @@ export default function AdminPanelPage() {
           action={<Button onClick={openCreate}>＋ {t('Create')}</Button>}
         />
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="w-full text-xs">
+        <Card>
+          {/* Wide moderation queues scroll inside their own container so the
+              mobile page itself never scrolls horizontally. */}
+          <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+          <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-300 text-left">
                 {section.columns.map((column) => (
@@ -314,6 +318,7 @@ export default function AdminPanelPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 

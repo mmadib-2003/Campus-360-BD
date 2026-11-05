@@ -49,14 +49,14 @@ export function ModuleHub() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">{t('Campus360 Interactive Modules')}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('Twelve real-time modules — every status change, RSVP, ticket and match updates live via Supabase Realtime.')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge tone="emerald">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> {t('LIVE')}
           </Badge>

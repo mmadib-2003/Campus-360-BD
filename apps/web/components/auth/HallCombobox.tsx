@@ -97,11 +97,11 @@ export function HallCombobox({
       : '';
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative w-full max-w-full">
       <label className="block font-medium mb-1 text-sm">
         {label} <span className="text-rose-500">*</span>
       </label>
-      <div className="relative">
+      <div className="relative w-full max-w-full">
         <input
           type="text"
           role="combobox"
@@ -119,7 +119,7 @@ export function HallCombobox({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className={`w-full rounded-xl p-2.5 pr-9 text-sm bg-slate-100 dark:bg-slate-800 border ${
+          className={`w-full max-w-full truncate min-h-[44px] rounded-xl p-2.5 pr-9 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border ${
             invalid ? 'border-rose-500' : 'border-slate-300 dark:border-slate-700'
           } disabled:opacity-60`}
         />
@@ -133,7 +133,7 @@ export function HallCombobox({
         <ul
           id="hall-combobox-list"
           role="listbox"
-          className="absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
+          className="absolute z-30 mt-1 w-full max-w-full max-h-60 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
         >
           {filtered.length === 0 && (
             <li className="px-3 py-3 text-xs text-slate-500">
@@ -146,16 +146,17 @@ export function HallCombobox({
                 type="button"
                 onMouseEnter={() => setHighlight(index)}
                 onClick={() => choose(hall)}
-                className={`w-full text-left px-3 py-2 flex items-center gap-2 text-sm ${
+                className={`w-full min-h-[44px] text-left px-3 py-2 flex items-center gap-2 text-sm ${
                   index === highlight ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : ''
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
+                  {/* Long hall names wrap inside the option instead of clipping. */}
+                  <span className="block break-words font-medium">
                     {locale === 'bn' && hall.name_bn ? hall.name_bn : hall.name}
                   </span>
                   {hall.type && (
-                    <span className="block truncate text-[11px] text-slate-400">
+                    <span className="block break-words text-[11px] text-slate-400">
                       {hall.type === 'DAY_SCHOLAR' ? t('Day scholar') : t('Residential')}
                     </span>
                   )}

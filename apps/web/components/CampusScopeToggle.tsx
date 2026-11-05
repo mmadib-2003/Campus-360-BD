@@ -16,13 +16,14 @@ export function CampusScopeToggle({
   const setScope = onScopeChange ?? urlState.setScope;
   const { t } = useUi();
   return (
-    <div className="mb-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="mb-4 w-full max-w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
         <span className="text-xs font-semibold">{t('Campus scope')}</span>
-        <div role="group" aria-label={t('Campus scope')} className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+        {/* Full-width 2-up grid on mobile so each option is a thumb target. */}
+        <div role="group" aria-label={t('Campus scope')} className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
           {(['my_campus', 'all'] as const).map((value) => (
             <button key={value} type="button" aria-pressed={scope === value} onClick={() => setScope(value)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold ${scope === value ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+              className={`min-h-[44px] sm:min-h-0 min-w-0 truncate rounded-md px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold ${scope === value ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}>
               {value === 'all' ? `🌐 ${t('All Universities')}` : `🎓 ${t('My University Only')}${universityCode ? ` (${universityCode})` : ''}`}
             </button>
           ))}

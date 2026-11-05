@@ -142,7 +142,7 @@ function RegistrySelect({
           id={id}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+          className="w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
         >
           <option value="">{placeholder}</option>
           {groups.map((group) =>
@@ -413,9 +413,9 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto my-8 space-y-5">
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-        <div className="flex items-start justify-between gap-3">
+    <div className="w-full max-w-2xl mx-auto my-8 px-3 sm:px-6 space-y-5">
+      <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
               src="/logos/campus360-logo.jpg"
@@ -447,7 +447,7 @@ export default function SignUpPage() {
                     type="button"
                     onClick={() => setRole(option.value)}
                     aria-pressed={active}
-                    className={`rounded-xl border p-3 text-left transition ${
+                    className={`rounded-xl border p-3 min-h-[44px] text-left transition ${
                       active
                         ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                         : 'border-slate-200 dark:border-slate-700 hover:border-emerald-500/40'
@@ -541,7 +541,7 @@ export default function SignUpPage() {
                         if (!stillMatches) setDepartmentId('');
                       }
                     }}
-                    className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                    className="w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
                   >
                     <option value="">
                       {bn
@@ -557,7 +557,7 @@ export default function SignUpPage() {
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <RegistrySelect
                   id="signup-department"
                   label={bn ? 'বিভাগ / ইনস্টিটিউট' : t('Department')}
@@ -603,7 +603,7 @@ export default function SignUpPage() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block font-medium mb-1" htmlFor="signup-name">
                 {t('Full Name')}
@@ -614,7 +614,7 @@ export default function SignUpPage() {
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
                 placeholder={locale === 'bn' ? 'নুসরাত জাহান' : 'Nusrat Jahan'}
-                className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                className="w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
               />
             </div>
             <div>
@@ -627,7 +627,7 @@ export default function SignUpPage() {
                 value={studentId}
                 onChange={(event) => setStudentId(event.target.value)}
                 placeholder={selectedUniversity ? `${selectedUniversity.code}-2026-12345` : 'DU-2026-12345'}
-                className="w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                className="w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
               />
             </div>
           </div>
@@ -647,7 +647,7 @@ export default function SignUpPage() {
                   ? `name@${selectedUniversity.university_email_domains[0].domain}`
                   : 'name@du.ac.bd'
               }
-              className={`w-full rounded-xl p-2.5 bg-slate-100 dark:bg-slate-800 border ${
+              className={`w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border ${
                 email && !domainApproved ? 'border-rose-500' : 'border-slate-300 dark:border-slate-700'
               }`}
             />
@@ -663,17 +663,18 @@ export default function SignUpPage() {
           </div>
 
           <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={consentTerms} onChange={(event) => setConsentTerms(event.target.checked)} />
+            <label className="flex items-center gap-2 min-h-[44px]">
+              <input type="checkbox" className="h-5 w-5 shrink-0" checked={consentTerms} onChange={(event) => setConsentTerms(event.target.checked)} />
               <span>{t('I agree to the Terms of Service')}</span>
             </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={consentPrivacy} onChange={(event) => setConsentPrivacy(event.target.checked)} />
+            <label className="flex items-center gap-2 min-h-[44px]">
+              <input type="checkbox" className="h-5 w-5 shrink-0" checked={consentPrivacy} onChange={(event) => setConsentPrivacy(event.target.checked)} />
               <span>{t('I agree to the Privacy & Data Retention Policy')}</span>
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 min-h-[44px]">
               <input
                 type="checkbox"
+                className="h-5 w-5 shrink-0"
                 checked={consentGuidelines}
                 onChange={(event) => setConsentGuidelines(event.target.checked)}
               />
@@ -690,7 +691,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-3 rounded-xl font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow disabled:opacity-60"
+            className="w-full min-h-[44px] py-3 rounded-xl font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow disabled:opacity-60"
           >
             {submitting ? t('Sending OTP…') : t('Send 6-Digit Verification OTP')}
           </button>

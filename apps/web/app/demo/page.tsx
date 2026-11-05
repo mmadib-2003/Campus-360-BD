@@ -89,8 +89,8 @@ export default function DemoPage() {
         </div>
       )}
 
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <table className="w-full text-xs">
+      <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <table className="w-full min-w-[640px] text-xs">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-300 text-left">
               <th className="px-4 py-2.5 font-semibold">{t('Role')}</th>

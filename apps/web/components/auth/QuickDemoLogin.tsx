@@ -94,7 +94,7 @@ export function QuickDemoLogin() {
     <section
       aria-labelledby="quick-demo-login-heading"
       data-testid="quick-demo-login"
-      className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg space-y-4"
+      className="w-full max-w-full p-4 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg space-y-4"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -122,7 +122,7 @@ export function QuickDemoLogin() {
               data-testid={`quick-demo-${account.role}`}
               disabled={busyRole !== null}
               onClick={() => void handleClick(account)}
-              className={`group flex flex-col items-start justify-between text-left rounded-xl border p-3.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 ${TONE_CLASSES[account.tone]}`}
+              className={`group flex flex-col items-start justify-between text-left rounded-xl border p-3.5 min-h-[44px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 ${TONE_CLASSES[account.tone]}`}
             >
               <div className="w-full min-w-0">
                 <div className="flex items-center justify-between w-full gap-2">

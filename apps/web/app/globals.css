@@ -64,6 +64,17 @@
   color-scheme: dark;
 }
 
+/* ---------------------------------------------------------------------------
+   Mobile overflow guard (320px–768px): no element may push the document
+   wider than the viewport. Wide content (admin tables, filter rows) scrolls
+   inside its own overflow-x container instead of the page.
+   --------------------------------------------------------------------------- */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -72,14 +83,101 @@ body {
   color: hsl(var(--foreground));
 }
 
+/* The slide-over drawer and its backdrop live at z-50; the sticky navbar
+   sits one layer below so the drawer can cover it while open. */
 .campus360-top-navbar {
   position: sticky;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 40;
   width: 100%;
   margin-top: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile input ergonomics.
+   1. iOS Safari (and Android Chrome) auto-zoom focused form controls whose
+      font-size is below 16px. Force 16px on small screens regardless of the
+      utility class on the element; components additionally carry
+      `text-base sm:text-sm` so the intent is visible in the markup.
+   2. Touch targets: buttons and combobox triggers get a 44x44 minimum on
+      <lg screens (Apple HIG / WCAG 2.5.5). Navigation links carry the
+      min-h-[44px] utility directly in the shell.
+   --------------------------------------------------------------------------- */
+@media (max-width: 639.98px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  button,
+  [role='button'],
+  [role='combobox'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Remove the 300ms tap delay / double-tap zoom on interactive elements. */
+button,
+[role='button'],
+a,
+input,
+select,
+textarea,
+summary {
+  touch-action: manipulation;
+}
+
+/* Hide scrollbars on touch-scrollable filter rows while keeping scroll. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* A 2px backdrop blur for the drawer overlay (Tailwind 3 has no xs step). */
+.backdrop-blur-xs {
+  --tw-backdrop-blur: blur(2px);
+  -webkit-backdrop-filter: var(--tw-backdrop-blur);
+  backdrop-filter: var(--tw-backdrop-blur);
+}
+
+/* Smooth slide-over drawer entrance (disabled under reduced motion). */
+@keyframes campus360-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.campus360-drawer {
+  animation: campus360-drawer-in 220ms ease-out;
+}
+@keyframes campus360-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.campus360-backdrop {
+  animation: campus360-fade-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .campus360-drawer,
+  .campus360-backdrop {
+    animation: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------

@@ -109,7 +109,8 @@ export function ModuleForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Single column on mobile; two columns from sm upward. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {fields.map((field) => {
           const meta = fieldLabel(field.column);
           const value = values[field.column];
@@ -212,12 +213,12 @@ export function ModuleForm({
         </p>
       )}
 
-      <div className="flex items-center gap-2 pt-1">
-        <Button type="submit" loading={pending}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+        <Button type="submit" loading={pending} className="w-full sm:w-auto min-h-[44px]">
           {submitLabel}
         </Button>
         {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto min-h-[44px]">
             Cancel
           </Button>
         )}
