@@ -581,7 +581,9 @@
     "Theme": "থিম",
     "Open main menu": "প্রধান মেনু খুলুন",
     "Close menu": "মেনু বন্ধ করুন",
-    "Navigation menu": "নেভিগেশন মেনু"
+    "Navigation menu": "নেভিগেশন মেনু",
+    "Verified! Redirecting to your campus dashboard...": "যাচাই সম্পন্ন! আপনার ক্যাম্পাস ড্যাশবোর্ডে নেওয়া হচ্ছে...",
+    "Checking your session…": "আপনার সেশন যাচাই করা হচ্ছে…"
   },
   "roles": {
     "student": "শিক্ষার্থী",

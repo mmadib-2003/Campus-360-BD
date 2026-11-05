@@ -226,6 +226,37 @@ export async function readActiveOtpChallenge(
   return row;
 }
 
+/**
+ * Newest challenge for the address that was *successfully verified* within the
+ * last `withinSeconds` (default 120s). Used by verify-otp's idempotency guard:
+ * a duplicate/retried submission right after a success must not be answered
+ * with "No active OTP challenge found".
+ *
+ * `verified_at >= since` also excludes NULL rows in PostgREST (NULL comparisons
+ * are never true), so unverified challenges can never match. Base columns only:
+ * this read must work on the pre-0011 schema too.
+ */
+export async function readRecentVerifiedOtpChallenge(
+  admin: SupabaseClient,
+  email: string,
+  withinSeconds = 120
+): Promise<OtpChallenge | null> {
+  const since = new Date(Date.now() - withinSeconds * 1000).toISOString();
+  const { data, error } = await admin
+    .from('verification_attempts')
+    .select(OTP_BASE_COLUMNS)
+    .eq('email', email)
+    .gte('verified_at', since)
+    .order('verified_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn('[otp] recent-verified lookup failed', { code: error.code, message: error.message });
+    return null;
+  }
+  return (data as unknown as OtpChallenge | null) ?? null;
+}
+
 /** True when `seconds` have not elapsed since the last request for the address. */
 export async function isOtpRequestInCooldown(
   admin: SupabaseClient,

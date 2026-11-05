@@ -307,6 +307,39 @@ describe('otp challenge store', () => {
     expect(await store.isOtpRequestInCooldown(store.admin, 'nobody.du@du.ac.bd', 60)).toBe(false);
   });
 
+  it('finds a challenge verified within the idempotency window (duplicate verify-otp)', async () => {
+    const store = await loadStore();
+    await store.createOtpChallenge({ admin: store.admin, email: EMAIL, universityId: UNIV, code: '777777' });
+    const active = await store.readActiveOtpChallenge(store.admin, EMAIL);
+    expect(active).toBeTruthy();
+
+    // Not verified yet: the idempotency lookup must not match.
+    expect(await store.readRecentVerifiedOtpChallenge(store.admin, EMAIL, 120)).toBeNull();
+
+    await store.consumeOtpChallenge(store.admin, active!.id, { verified: true, clearHash: true });
+    const recent = await store.readRecentVerifiedOtpChallenge(store.admin, EMAIL, 120);
+    expect(recent).toBeTruthy();
+    expect(recent!.id).toBe(active!.id);
+    expect(recent!.verified_at).toBeTruthy();
+
+    // A different address never matches.
+    expect(await store.readRecentVerifiedOtpChallenge(store.admin, 'other.du@du.ac.bd', 120)).toBeNull();
+  });
+
+  it('ignores verifications older than the idempotency window', async () => {
+    const store = await loadStore();
+    await store.createOtpChallenge({ admin: store.admin, email: EMAIL, universityId: UNIV, code: '888888' });
+    const active = await store.readActiveOtpChallenge(store.admin, EMAIL);
+    await store.consumeOtpChallenge(store.admin, active!.id, { verified: true, clearHash: true });
+
+    // Age the verified row past the 120s window.
+    const [row] = store.tables.verification_attempts;
+    row.verified_at = new Date(Date.now() - 121_000).toISOString();
+    expect(await store.readRecentVerifiedOtpChallenge(store.admin, EMAIL, 120)).toBeNull();
+    // A wider window still sees it.
+    expect(await store.readRecentVerifiedOtpChallenge(store.admin, EMAIL, 300)).toBeTruthy();
+  });
+
   it('degrades to the pre-0011 schema instead of failing sign-up', async () => {
     const store = await loadStore({ extendedSchema: false });
     const code = '666666';

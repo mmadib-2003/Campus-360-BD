@@ -581,7 +581,9 @@
     "Theme": "Theme",
     "Open main menu": "Open main menu",
     "Close menu": "Close menu",
-    "Navigation menu": "Navigation menu"
+    "Navigation menu": "Navigation menu",
+    "Verified! Redirecting to your campus dashboard...": "Verified! Redirecting to your campus dashboard...",
+    "Checking your session…": "Checking your session…"
   },
   "roles": {
     "student": "Student",

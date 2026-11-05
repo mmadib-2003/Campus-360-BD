@@ -30,7 +30,7 @@ import {
   remainingOtpSeconds,
 } from '@/lib/demo-otp';
 import { isSmtpConfigured, sendOtpEmail } from '@/lib/otp-email';
-import { otpSecurityConfigError } from '@/lib/otp-crypto';
+import { hashOtp, otpSecurityConfigError } from '@/lib/otp-crypto';
 import {
   createOtpChallenge,
   deleteOtpChallenge,
@@ -38,6 +38,7 @@ import {
   markOtpEmailSent,
   storeProfileDemoOtp,
 } from '@/lib/otp-store';
+import { clearOtpChallengeCookie, setOtpChallengeCookie } from '@/lib/otp-challenge-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -254,6 +255,24 @@ async function handleOtpRequest(req: NextRequest) {
     );
   }
 
+  // Serverless-safe backup: seal the same digest into an HTTP-only HMAC-signed
+  // cookie so a verify-otp call that lands on a different Vercel instance (or
+  // hits a transient RLS/cold-start miss on verification_attempts) can still
+  // validate the code. Digest only — the plaintext code never leaves the email.
+  setOtpChallengeCookie({
+    email: rawEmail,
+    otpHash: hashOtp(rawEmail, otpCode),
+    expiresAt: challenge.expiresAt,
+    universityId: domainMatch.university_id,
+    hallId: typeof signupPayload.hallId === 'string' ? signupPayload.hallId : null,
+    departmentId: typeof signupPayload.departmentId === 'string' ? signupPayload.departmentId : null,
+    programId: typeof signupPayload.programId === 'string' ? signupPayload.programId : null,
+    fullName: typeof signupPayload.fullName === 'string' ? signupPayload.fullName : null,
+    studentId: typeof signupPayload.studentId === 'string' ? signupPayload.studentId : null,
+    role: typeof signupPayload.role === 'string' ? signupPayload.role : 'student',
+    challengeId: challenge.id,
+  });
+
   if (demoMode) {
     // No email is sent: mirror the code onto profiles.demo_otp for the panel
     // and for the pre-signup case where the profile does not exist yet.
@@ -296,6 +315,7 @@ async function handleOtpRequest(req: NextRequest) {
     // Roll the challenge back: an undelivered code must not sit in the table
     // (and deleting it clears the 60s cooldown so the user can retry now).
     await deleteOtpChallenge(admin, challenge.id);
+    clearOtpChallengeCookie(); // the cookie backup must die with the row
     authError('request-otp.delivery-failed', new Error(delivery.error), {
       email: redactEmail(rawEmail),
       provider: delivery.provider,

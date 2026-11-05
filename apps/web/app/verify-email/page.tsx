@@ -2,11 +2,10 @@
 
 import React from 'react';
 import { notifyAuthChanged } from '@/lib/auth-events';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
-import { IdVerificationCard, type IdVerificationOutcome } from '@/components/auth/IdVerificationCard';
 import { DemoOtpPanel } from '@/components/auth/DemoOtpPanel';
-import { getDemoUniversity, setDemoSession, setDemoSignedOut, type DemoRole } from '@/lib/modules/demo-data';
+import { setDemoSession, setDemoSignedOut, type DemoRole } from '@/lib/modules/demo-data';
 
 interface SignupContext {
   email: string;
@@ -48,23 +47,58 @@ function readContext(): SignupContext | null {
   }
 }
 
+/** True when /api/auth/session reports a signed-in, email-verified account. */
+function isVerifiedSessionPayload(payload: unknown): boolean {
+  const data = (payload as { data?: Record<string, unknown> })?.data;
+  if (!data || data.authenticated !== true) return false;
+  const profile = data.profile as Record<string, unknown> | null | undefined;
+  return (
+    profile?.email_verified === true ||
+    profile?.is_verified === true ||
+    data.email_verified === true ||
+    ['EMAIL_VERIFIED', 'ID_VERIFIED', 'TRUSTED'].includes(String(profile?.trust_level ?? ''))
+  );
+}
+
 function VerifyEmailForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useUi();
+  const nextUrl = searchParams.get('next');
   const [context, setContext] = React.useState<SignupContext | null>(null);
   const [email, setEmail] = React.useState(searchParams.get('email') ?? '');
   const [otp, setOtp] = React.useState('');
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
-  const [verified, setVerified] = React.useState(false);
-  const [nextStep, setNextStep] = React.useState('/feed');
-  const [outcome, setOutcome] = React.useState<IdVerificationOutcome | null>(null);
+  const [isRedirecting, setIsRedirecting] = React.useState(false);
+  // The form is not rendered until the session check resolves, so an already
+  // verified user never sees the OTP form or a stale challenge error.
+  const [sessionChecked, setSessionChecked] = React.useState(false);
   const [demoCode, setDemoCode] = React.useState<string | null>(null);
   // Real email OTP: TTL countdown + resend cooldown, both driven by the
   // /api/auth/request-otp response (secondsRemaining / cooldownSeconds).
   const [expiresIn, setExpiresIn] = React.useState<number | null>(null);
   const [cooldown, setCooldown] = React.useState(0);
+  // Submission lock: auto-submit (6th digit) and the button can never fire two
+  // concurrent or back-to-back POST /api/auth/verify-otp requests.
+  const isSubmittingRef = React.useRef(false);
+
+  // Already verified? Leave immediately — no OTP form, no error message.
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (isVerifiedSessionPayload(payload)) {
+          window.location.replace(nextUrl || '/');
+          return;
+        }
+        setSessionChecked(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSessionChecked(true);
+      });
+    return () => controller.abort();
+  }, [nextUrl]);
 
   React.useEffect(() => {
     const stored = readContext();
@@ -86,26 +120,25 @@ function VerifyEmailForm() {
     return () => window.clearInterval(timer);
   }, [countdownActive]);
 
-  const university = getDemoUniversity(context?.universityId ?? '');
-  const role = context?.role ?? 'student';
-
-  async function handleVerify(event: React.FormEvent) {
-    event.preventDefault();
+  async function submitOtp(codeOverride?: string) {
+    const code = codeOverride ?? otp;
+    if (isSubmittingRef.current) return;
+    if (!/^\d{6}$/.test(code)) return;
+    isSubmittingRef.current = true;
     setLoading(true);
     setErrorMsg(null);
+    let redirecting = false;
     try {
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ email, otp: code }),
       });
       const payload = await response.json();
-      if (!payload.success) {
+      if (!response.ok || !payload.success) {
         setErrorMsg(payload?.error?.message_en ?? t('Verification failed'));
         return;
       }
-      setVerified(true);
-      setNextStep(payload.data?.nextStep ?? '/feed');
       if (payload.data?.demo && context) {
         setDemoSignedOut(false);
         setDemoSession({
@@ -118,17 +151,31 @@ function VerifyEmailForm() {
         });
       }
       notifyAuthChanged();
-      router.refresh();
+      // Hard navigation: the session cookie is fresh, so the dashboard (and the
+      // middleware) see the verified user on the very next request. Staying on
+      // this page and calling router.refresh() is what left verified users
+      // staring at a consumed challenge.
+      redirecting = true;
+      setIsRedirecting(true);
+      window.location.replace(payload.data?.redirectTo || payload.data?.nextStep || '/');
     } catch {
       setErrorMsg(t('Verification failed'));
     } finally {
       setLoading(false);
+      // Keep the lock held while the redirect is in flight.
+      if (!redirecting) isSubmittingRef.current = false;
     }
+  }
+
+  function handleVerify(event: React.FormEvent) {
+    event.preventDefault();
+    void submitOtp();
   }
 
   async function resend() {
     const targetEmail = context?.email ?? email;
-    if (!targetEmail) return;
+    if (!targetEmail || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       const response = await fetch('/api/auth/request-otp', {
@@ -169,135 +216,103 @@ function VerifyEmailForm() {
       setErrorMsg(t('Verification failed'));
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   }
 
-  function finish() {
-    if (outcome) {
-      try {
-        window.sessionStorage.setItem('campus360.idverification', JSON.stringify(outcome));
-      } catch {
-        /* ignore */
-      }
-    }
-    router.push(nextStep);
-  }
-
-  if (!verified) {
+  if (isRedirecting) {
     return (
-      <div className="max-w-md mx-auto my-16 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <h1 className="text-xl font-bold">{t('Verify 6-Digit OTP')}</h1>
-        <p className="text-xs text-slate-500 mt-1">{t('Enter the 6-digit code sent to your university email.')}</p>
-        {email && (
-          <p className="text-xs text-slate-500 mt-1">
-            {t('Email')}: <strong>{email}</strong>
-          </p>
-        )}
-        {/* Track B — Demo OTP panel. Renders only when the server issued a demo code. */}
-        <DemoOtpPanel email={email} code={demoCode} />
+      <div
+        role="status"
+        className="max-w-md mx-auto my-16 p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center"
+      >
+        <h1 className="text-lg font-bold text-emerald-700 dark:text-emerald-300">✓ {t('Email verified')}</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+          {t('Verified! Redirecting to your campus dashboard...')}
+        </p>
+      </div>
+    );
+  }
 
-        {!demoCode && (
-          <p className="mt-3 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-            {t('A 6-digit code has been emailed to your university address. It expires 5 minutes after it is sent.')}
-          </p>
-        )}
-        {expiresIn !== null && (
-          <p
-            className={`mt-2 text-[11px] font-semibold ${
-              expiresIn === 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'
-            }`}
-            data-testid="otp-countdown"
-          >
-            {expiresIn === 0
-              ? t('Session expired')
-              : t('Code expires in {time}', { time: formatClock(expiresIn) })}
-          </p>
-        )}
-
-        <form onSubmit={handleVerify} className="mt-5 space-y-4">
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-xl p-2.5 text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
-          />
-          <input
-            required
-            maxLength={6}
-            pattern="\d{6}"
-            inputMode="numeric"
-            placeholder={t('e.g. 482910')}
-            value={otp}
-            onChange={(event) => setOtp(event.target.value)}
-            className="w-full rounded-xl p-3 text-center text-2xl tracking-[0.5em] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
-          />
-          {errorMsg && <p className="text-xs text-rose-500">{errorMsg}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm disabled:opacity-60"
-          >
-            {loading ? t('Verifying…') : t('Verify & Continue')}
-          </button>
-          <button
-            type="button"
-            onClick={resend}
-            disabled={loading || cooldown > 0}
-            className="w-full text-xs text-emerald-600 dark:text-emerald-400 hover:underline disabled:text-slate-400 disabled:no-underline dark:disabled:text-slate-500"
-          >
-            {cooldown > 0 ? t('Resend code in {seconds}s', { seconds: cooldown }) : t('Resend code')}
-          </button>
-        </form>
+  if (!sessionChecked) {
+    return (
+      <div role="status" className="max-w-md mx-auto my-16 p-6 text-center text-sm text-slate-500 dark:text-slate-400">
+        {t('Checking your session…')}
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto my-10 space-y-4">
-      <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
-        <h1 className="text-lg font-bold text-emerald-700 dark:text-emerald-300">✓ {t('Email verified')}</h1>
-        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-          {t('Signed in as')} {context?.fullName ?? email} • {t('Your role')}: {t(role === 'admin' ? 'University Admin' : role === 'faculty' ? 'Faculty / Staff' : role === 'alumni' ? 'Alumni' : 'Student')}
-          {university ? ` • ${university.code}` : ''}
+    <div className="max-w-md mx-auto my-16 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+      <h1 className="text-xl font-bold">{t('Verify 6-Digit OTP')}</h1>
+      <p className="text-xs text-slate-500 mt-1">{t('Enter the 6-digit code sent to your university email.')}</p>
+      {email && (
+        <p className="text-xs text-slate-500 mt-1">
+          {t('Email')}: <strong>{email}</strong>
         </p>
-      </div>
+      )}
+      {/* Track B — Demo OTP panel. Renders only when the server issued a demo code. */}
+      <DemoOtpPanel email={email} code={demoCode} />
 
-      {!outcome && (
-        <IdVerificationCard
-          studentId={context?.studentId ?? ''}
-          fullName={context?.fullName ?? ''}
-          universityCode={university?.code ?? 'BD'}
-          onComplete={(result) => setOutcome(result)}
-          onSkip={finish}
+      {!demoCode && (
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          {t('A 6-digit code has been emailed to your university address. It expires 5 minutes after it is sent.')}
+        </p>
+      )}
+      {expiresIn !== null && (
+        <p
+          className={`mt-2 text-[11px] font-semibold ${
+            expiresIn === 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'
+          }`}
+          data-testid="otp-countdown"
+        >
+          {expiresIn === 0
+            ? t('Session expired')
+            : t('Code expires in {time}', { time: formatClock(expiresIn) })}
+        </p>
+      )}
+
+      <form onSubmit={handleVerify} className="mt-5 space-y-4">
+        <input
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className="w-full rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
         />
-      )}
-
-      {outcome && (
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 text-sm">
-          <div className="flex items-center gap-2">
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                outcome.status === 'VERIFIED'
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
-                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-300'
-              }`}
-            >
-              {outcome.status === 'VERIFIED' ? t('ID verified') : t('Manual review')}
-            </span>
-            <span className="text-xs text-slate-500">{t('OCR confidence')}: {outcome.confidence}%</span>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {outcome.status === 'VERIFIED' ? t('verified') : t('manualReview')}
-          </p>
-          <button
-            type="button"
-            onClick={finish}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
-          >
-            {t('Continue to dashboard')}
-          </button>
-        </div>
-      )}
+        <input
+          required
+          maxLength={6}
+          pattern="\d{6}"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder={t('e.g. 482910')}
+          value={otp}
+          onChange={(event) => {
+            const digits = event.target.value.replace(/\D/g, '').slice(0, 6);
+            setOtp(digits);
+            // Auto-submit the moment the 6th digit lands; the ref lock makes
+            // this safe even if the user also clicks "Verify & Continue".
+            if (digits.length === 6) void submitOtp(digits);
+          }}
+          className="w-full rounded-xl p-3 text-center text-2xl tracking-[0.5em] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+        />
+        {errorMsg && <p className="text-xs text-rose-500">{errorMsg}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full min-h-[44px] py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm disabled:opacity-60"
+        >
+          {loading ? t('Verifying…') : t('Verify & Continue')}
+        </button>
+        <button
+          type="button"
+          onClick={resend}
+          disabled={loading || cooldown > 0}
+          className="w-full min-h-[44px] text-xs text-emerald-600 dark:text-emerald-400 hover:underline disabled:text-slate-400 disabled:no-underline dark:disabled:text-slate-500"
+        >
+          {cooldown > 0 ? t('Resend code in {seconds}s', { seconds: cooldown }) : t('Resend code')}
+        </button>
+      </form>
     </div>
   );
 }

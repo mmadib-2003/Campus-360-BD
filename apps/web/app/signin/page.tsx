@@ -18,6 +18,19 @@ function inferRole(email: string): 'student' | 'faculty' | 'alumni' | 'admin' | 
   return 'student';
 }
 
+/** True when /api/auth/session reports a signed-in, email-verified account. */
+function isVerifiedSessionPayload(payload: unknown): boolean {
+  const data = (payload as { data?: Record<string, unknown> })?.data;
+  if (!data || data.authenticated !== true) return false;
+  const profile = data.profile as Record<string, unknown> | null | undefined;
+  return (
+    profile?.email_verified === true ||
+    profile?.is_verified === true ||
+    data.email_verified === true ||
+    ['EMAIL_VERIFIED', 'ID_VERIFIED', 'TRUSTED'].includes(String(profile?.trust_level ?? ''))
+  );
+}
+
 export default function SignInPage() {
   const router = useRouter();
   const { t } = useUi();
@@ -26,6 +39,29 @@ export default function SignInPage() {
   const [universityId, setUniversityId] = React.useState('');
   const [halls, setHalls] = React.useState<HallOption[]>([]);
   const [hallId, setHallId] = React.useState('');
+  const [sessionChecked, setSessionChecked] = React.useState(false);
+  // Lock so a double-click can never fire two request-otp calls back-to-back.
+  const isSubmittingRef = React.useRef(false);
+
+  // Already signed in and verified? Go straight to the dashboard — never show
+  // the sign-in form (or a stale OTP error) to a verified user.
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (isVerifiedSessionPayload(payload)) {
+          const next = new URLSearchParams(window.location.search).get('next');
+          window.location.replace(next || '/');
+          return;
+        }
+        setSessionChecked(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSessionChecked(true);
+      });
+    return () => controller.abort();
+  }, []);
   React.useEffect(() => {
     const controller = new AbortController();
     fetch('/api/universities', { cache: 'no-store', signal: controller.signal })
@@ -48,9 +84,11 @@ export default function SignInPage() {
 
   async function handleOtpSignIn(event: React.FormEvent) {
     event.preventDefault();
+    if (isSubmittingRef.current) return;
     setError(null);
     if (!universityId) { setError('Please select your university'); return; }
     if (!hallId || !halls.some((hall) => hall.id === hallId)) { setError('Please select your residential hall'); return; }
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       const role = inferRole(email);
@@ -86,7 +124,16 @@ export default function SignInPage() {
       setError(t('Verification failed'));
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
+  }
+
+  if (!sessionChecked) {
+    return (
+      <div role="status" className="w-full max-w-full mx-auto my-16 px-3 sm:px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+        {t('Checking your session…')}
+      </div>
+    );
   }
 
   return (
