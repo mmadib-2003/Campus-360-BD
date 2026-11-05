@@ -307,7 +307,10 @@ describe('campus imagery assets line up with what the database points at', () =>
   });
 
   it('ships the file behind every cover path the demo payload advertises', () => {
-    const covers = [...demoAuth.matchAll(/'\/campuses\/[a-z0-9]+\.jpg'/g)].map((m) => m[0].replace(/'/g, ''));
+    // Includes the cache-busted local covers (?v=...) and the KUET webp twin.
+    const covers = [...demoAuth.matchAll(/'\/campuses\/[a-z0-9]+\.(?:jpg|webp)(?:\?[^']*)?'/g)].map((m) =>
+      m[0].replace(/'/g, '').split('?')[0]
+    );
     expect(covers.length).toBeGreaterThanOrEqual(6);
     for (const rel of covers) {
       expect(fs.existsSync(path.join(repoRoot, 'apps/web/public', rel.replace(/^\//, ''))), rel).toBe(true);
@@ -339,9 +342,17 @@ describe('authentic campus imagery and one-click demo identities', () => {
       ['CU', 'Campus,_University_of_Chittagong_1.jpg'],
       ['RU', 'Rajshahi_University_Campus.jpg'],
     ] as const;
+    // JU, CU and SUST previews use the bundled user-supplied photos (see
+    // docs/IMAGE_ATTRIBUTION.md and migrations 0023/0024) instead of the
+    // Wikimedia files the seed still records for a fresh database.
+    const localPreviewCovers: Record<string, string> = {
+      JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
+      CU: '/campuses/cu.jpg?v=cu-monument-2026',
+      SUST: '/campuses/sust.jpg?v=sust-gate-2026',
+    };
     for (const [code, file] of expected) {
       expect(seed, `${code} cover`).toContain(file);
-      expect(demoAuth, `${code} preview cover`).toContain(code === 'JU' ? '/campuses/ju.jpg?v=ju-shaheed-minar' : file);
+      expect(demoAuth, `${code} preview cover`).toContain(localPreviewCovers[code] ?? file);
     }
     expect(seed).toContain('commons.wikimedia.org/wiki/Special:FilePath');
     expect(demoAuth).toContain('commons.wikimedia.org/wiki/Special:FilePath');
@@ -401,16 +412,25 @@ describe('expanded authentic campus imagery (24 universities)', () => {
       expect(expanded, `${code} migration cover`).toContain(file);
     }
     // The offline preview payload must carry the same authentic files for the
-    // demo campuses it serves.
+    // demo campuses it serves. KUET is the exception: its preview cover is the
+    // bundled user-supplied landmark photo (migration 0024), checked below.
     for (const file of [
       'Jagannath_University_Bird_View.jpg',
       'BUP_Campus_Aerial_View_2.jpg',
       'Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg',
-      'KUET_Central_field.jpg',
       'CUET_GATE.jpg',
       'Bangladesh_Agricultural_University_%28BAU%29.jpg',
     ]) {
       expect(demoAuth, `demo payload ${file}`).toContain(file);
+    }
+    expect(demoAuth, 'demo payload KUET landmark').toContain('/campuses/kuet.webp?v=kuet-landmark-2026');
+    const kuetMigration = read('supabase/migrations/0024_update_cu_sust_kuet_cover_images.sql');
+    for (const cover of [
+      '/campuses/cu.jpg?v=cu-monument-2026',
+      '/campuses/sust.jpg?v=sust-gate-2026',
+      '/campuses/kuet.webp?v=kuet-landmark-2026',
+    ]) {
+      expect(kuetMigration, `0024 ${cover}`).toContain(cover);
     }
   });
 });

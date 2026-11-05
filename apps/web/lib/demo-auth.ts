@@ -461,13 +461,15 @@ const DEMO_CAMPUS_COVERS: Record<string, string> = {
   JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
   BUET: '/campuses/buet.jpg',
   RU: '/campuses/ru.jpg',
-  CU: '/campuses/cu.jpg',
-  SUST: '/campuses/sust.jpg',
+  // User-supplied authentic photos (2026-11, docs/IMAGE_ATTRIBUTION.md);
+  // the query string busts browser/CDN caches of the older covers.
+  CU: '/campuses/cu.jpg?v=cu-monument-2026',
+  SUST: '/campuses/sust.jpg?v=sust-gate-2026',
   JNU: '/campuses/jnu.jpg',
   BUTEX: '/campuses/butex.jpg',
   RUET: '/campuses/ruet.jpg',
   CUET: '/campuses/cuet.jpg',
-  KUET: '/campuses/kuet.jpg',
+  KUET: '/campuses/kuet.webp?v=kuet-landmark-2026',
   BAU: '/campuses/bau.jpg',
   IU: '/campuses/iu.jpg',
 };
@@ -476,13 +478,15 @@ const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   DU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Curzon_Hall,_University_of_Dhaka,_Dhaka.jpg?width=1600',
   JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
   BUET: 'https://commons.wikimedia.org/wiki/Special:FilePath/BUET_Campus_(01).jpg?width=1600',
-  SUST: 'https://commons.wikimedia.org/wiki/Special:FilePath/Sust_campus_5.JPG?width=1600',
-  CU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Campus,_University_of_Chittagong_1.jpg?width=1600',
+  // CU, SUST and KUET now use the user-supplied authentic landmark photos
+  // bundled in /public/campuses (migration 0024) instead of Wikimedia files.
+  SUST: '/campuses/sust.jpg?v=sust-gate-2026',
+  CU: '/campuses/cu.jpg?v=cu-monument-2026',
   RU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Rajshahi_University_Campus.jpg?width=1600',
   JNU: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/Jagannath_University_Bird_View.jpg/1920px-Jagannath_University_Bird_View.jpg',
   BUP: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/BUP_Campus_Aerial_View_2.jpg/1920px-BUP_Campus_Aerial_View_2.jpg',
   JUST: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg/1920px-Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg',
-  KUET: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/86/KUET_Central_field.jpg/1920px-KUET_Central_field.jpg',
+  KUET: '/campuses/kuet.webp?v=kuet-landmark-2026',
   CUET: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/CUET_GATE.jpg/1920px-CUET_GATE.jpg',
   BAU: 'https://upload.wikimedia.org/wikipedia/commons/e/ed/Bangladesh_Agricultural_University_%28BAU%29.jpg',
   BUTEX: 'https://upload.wikimedia.org/wikipedia/commons/5/5f/Butex..jpg',

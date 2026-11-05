@@ -4,19 +4,23 @@ import { registryGate } from '@/lib/registry-gate';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { REGISTRY_NO_STORE, registryFailure, registryRead } from '@/lib/registry-cache';
+import { demoUniversitiesPayload } from '@/lib/demo-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   if (!isSupabaseServerConfigured()) {
-    return apiError(
-      'SUPABASE_NOT_CONFIGURED',
-      'Server database credentials are not configured for this deployment.',
-      'এই ডিপ্লয়মেন্টে সার্ভার ডাটাবেস কনফিগার করা হয়নি।',
-      503,
-      undefined,
-      REGISTRY_NO_STORE
+    // Same static fallback as the list route: the demo payload carries the
+    // versioned local covers (CU monument, SUST gate, KUET landmark —
+    // migration 0024), so a secret-less preview shows the same photos.
+    const key = params.id.trim().toLowerCase();
+    const university = demoUniversitiesPayload().find(
+      (candidate) => candidate.id.toLowerCase() === key || candidate.code.toLowerCase() === key
     );
+    if (!university) {
+      return apiError('NOT_FOUND', 'University not found.', 'বিশ্ববিদ্যালয়টি পাওয়া যায়নি।', 404, undefined, REGISTRY_NO_STORE);
+    }
+    return apiSuccess(university, 200, undefined, REGISTRY_NO_STORE);
   }
 
   // The gate is what keeps a broken `NEXT_PUBLIC_SUPABASE_URL` from escaping as

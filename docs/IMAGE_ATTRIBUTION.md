@@ -1,10 +1,31 @@
 # Campus image & logo attribution
 
-> **Local-asset attribution audit pending:** the campus photographs and logo
-> files in `apps/web/public` were sourced separately from the remote Wikimedia
-> files listed below. Do not treat those Wikimedia links as attribution for the
-> local copies until their exact sources, authors and licences have been
-> matched. Institutional logos may be trademarks or non-free works.
+## User-supplied authentic media (cleared for release)
+
+The following assets were supplied directly by the project owner (November
+2026) as authentic brand/campus media for this platform. They are first-party
+uploads for use in Campus360 BD — no third-party attribution is required and
+no attribution check should block the release on their account:
+
+| Asset | Local path(s) | Description |
+| --- | --- | --- |
+| Campus360 BD brand logo | `/logos/campus360-logo.jpg`, `/icon.jpg` | Green-and-red orbital monument logo with the "Campus 360 BD" wordmark; used for the navbar brand, favicon, Apple touch icon and OpenGraph preview. |
+| University of Chittagong (CU) cover | `/campuses/cu.jpg` | Central Shaheed Minar monument relief wall on the CU campus. Served as `/campuses/cu.jpg?v=cu-monument-2026`. |
+| SUST cover | `/campuses/sust.jpg` | Yellow "SUST" landmark sign at the Shahjalal University of Science and Technology entrance. Served as `/campuses/sust.jpg?v=sust-gate-2026`. |
+| KUET cover | `/campuses/kuet.webp`, `/campuses/kuet.jpg` | White "KUET" landmark sign on the lawn at Khulna University of Engineering & Technology. Served as `/campuses/kuet.webp?v=kuet-landmark-2026` (JPEG twin kept so both extensions resolve). |
+
+These local files supersede the Wikimedia Commons photographs previously used
+for the CU, SUST and KUET covers (rows below are kept for history). Migration
+`0024_update_cu_sust_kuet_cover_images.sql` points `public.universities` at the
+versioned local paths.
+
+> **Local-asset attribution audit pending (remaining files only):** the *other*
+> campus photographs and logo files in `apps/web/public` were sourced
+> separately from the remote Wikimedia files listed below. Do not treat those
+> Wikimedia links as attribution for the local copies until their exact
+> sources, authors and licences have been matched. Institutional logos may be
+> trademarks or non-free works. The user-supplied assets in the table above are
+> exempt from this pending audit.
 
 The home feed and campus directory show authentic photographs of the flagship
 Bangladeshi public universities. The files are served from Wikimedia Commons
@@ -37,9 +58,11 @@ assets; they are community-contributed Wikimedia Commons files.
 
 ## Local fallback
 
-`apps/web/public/campuses/` contains local photographic fallbacks. Their exact
-sources and licence terms still need to be matched to each file before release;
-the Wikimedia links on this page do not establish attribution for those copies.
+`apps/web/public/campuses/` contains local photographic fallbacks. Except for
+the user-supplied files listed at the top of this page (`cu.jpg`, `sust.jpg`,
+`kuet.webp`, `kuet.jpg` — cleared for release), their exact sources and licence
+terms still need to be matched to each file before release; the Wikimedia links
+on this page do not establish attribution for those copies.
 
 ## Expanded campus photography (18 additional universities)
 
