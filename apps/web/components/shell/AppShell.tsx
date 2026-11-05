@@ -152,9 +152,13 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               {mobileNavOpen ? '✕' : '☰'}
             </button>
             <Link href="/" className="flex items-center gap-2.5 min-w-0">
-              <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold text-sm shadow-sm shrink-0">
-                360
-              </span>
+              {/* Official Campus360 BD mark (user-supplied brand asset, see
+                  docs/IMAGE_ATTRIBUTION.md) replaces the old "360" text badge. */}
+              <img
+                src="/logos/campus360-logo.jpg"
+                alt="Campus360 BD"
+                className="h-10 w-10 rounded-full object-cover bg-white p-0.5 shadow-sm shrink-0"
+              />
               <div className="min-w-0">
                 <div className="font-bold text-base tracking-tight truncate">{t('Campus360 BD')}</div>
                 <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 truncate">

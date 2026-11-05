@@ -11,13 +11,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   if (!isSupabaseServerConfigured()) {
     // Preview deployments still get the full public registry so the signup
-    // combobox, filters and domain hints work without any secrets.
-    const universities = demoUniversitiesPayload().map((university) =>
-      university.code === 'JU'
-        ? { ...university, cover_image_url: '/campuses/ju.jpg?v=ju-shaheed-minar' }
-        : university
-    );
-    return apiSuccess(universities, 200, undefined, REGISTRY_NO_STORE);
+    // combobox, filters and domain hints work without any secrets. The
+    // versioned local covers (JU shaheed minar, CU monument, SUST gate, KUET
+    // landmark — see DEMO_CAMPUS_PHOTOS/COVERS in lib/demo-auth.ts and
+    // migration 0024) are carried by the payload itself, so the fallback and
+    // the database answer with the same cache-busted image URLs.
+    return apiSuccess(demoUniversitiesPayload(), 200, undefined, REGISTRY_NO_STORE);
   }
 
   // The gate is what keeps a broken `NEXT_PUBLIC_SUPABASE_URL` from escaping as

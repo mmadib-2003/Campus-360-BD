@@ -416,9 +416,16 @@ export default function SignUpPage() {
     <div className="max-w-2xl mx-auto my-8 space-y-5">
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{t('Join Your Campus')}</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('Create your verified campus account')}</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/logos/campus360-logo.jpg"
+              alt="Campus360 BD"
+              className="h-12 w-12 rounded-full object-cover bg-white p-0.5 shadow-sm shrink-0"
+            />
+            <div>
+              <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{t('Join Your Campus')}</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('Create your verified campus account')}</p>
+            </div>
           </div>
           <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[11px] font-semibold">
             {universities.length || 12}+ {t('Public University')}
