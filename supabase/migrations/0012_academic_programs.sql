@@ -59,6 +59,8 @@ FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
 -- live project ends in the same state (the UI needs rows the moment it ships).
 INSERT INTO public.academic_programs (code, name_en, name_bn, cycle, duration_years, sort_order) VALUES
   ('HONORS',          'Bachelor''s (Honors)',            'অনার্স (স্নাতক সম্মান)',                 'UNDERGRADUATE', 4, 10),
+  ('BBA',             'Bachelor of Business Administration (B.B.A.)', 'ব্যাচেলর অব বিজনেস অ্যাডমিনিস্ট্রেশন (বিবিএ)', 'UNDERGRADUATE', 4, 15),
+  ('LLB_HONORS',      'Bachelor of Laws — LL.B. (Honors)', 'আইন স্নাতক — এলএলবি (সম্মান)',         'UNDERGRADUATE', 4, 18),
   ('DEGREE_PASS',     'Bachelor''s (Degree / Pass)',     'ডিগ্রি (পাস) কোর্স',                     'UNDERGRADUATE', 3, 20),
   ('ENGINEERING_BSC', 'B.Sc. in Engineering',             'প্রকৌশলে বিএসসি',                        'UNDERGRADUATE', 4, 30),
   ('AGRICULTURE_BSC', 'B.Sc. in Agriculture',             'কৃষিতে বিএসসি',                          'UNDERGRADUATE', 4, 40),
@@ -67,8 +69,11 @@ INSERT INTO public.academic_programs (code, name_en, name_bn, cycle, duration_ye
   ('DENTAL_BDS',      'B.D.S. (Dentistry)',               'বিডিএস (দন্ত)',                           'UNDERGRADUATE', 5, 70),
   ('NURSING_BSC',     'B.Sc. in Nursing',                 'নার্সিংয়ে বিএসসি',                        'UNDERGRADUATE', 4, 80),
   ('PHARMACY',        'Pharmacy (Pharm.D / B.Pharm)',     'ফার্মেসি (ফার্মডি / বিফার্ম)',            'UNDERGRADUATE', 4, 90),
-  ('MASTERS',         'Master''s / MBA / MPA',            'স্নাতকোত্তর / এমবিএ / এমপিএ',            'GRADUATE',     2, 100),
+  ('MASTERS',         'Master''s (M.Sc. / M.A. / M.S.S.)', 'স্নাতকোত্তর (এমএসসি / এমএ / এমএসএস)',   'GRADUATE',     1, 100),
+  ('MBA',             'M.B.A. / E.M.B.A. / M.P.A.',       'এমবিএ / ইএমবিএ / এমপিএ',                 'GRADUATE',     2, 105),
+  ('LLM',             'Master of Laws (LL.M.)',           'আইন স্নাতকোত্তর (এলএলএম)',               'GRADUATE',     1, 108),
   ('MASTERS_FINAL',   'Master''s (Final Year)',           'স্নাতকোত্তর (ফাইনাল ইয়ার)',              'GRADUATE',     1, 110),
+  ('MPHIL',           'Master of Philosophy (M.Phil.)',   'এম.ফিল. (গবেষণা)',                        'GRADUATE',     2, 115),
   ('PG_DIPLOMA',      'Post-Graduate Diploma',            'স্নাতকোত্তর ডিপ্লোমা',                    'DIPLOMA',      1, 120),
   ('DIPLOMA',         'Diploma (Post-SSC)',               'ডিপ্লোমা (এসএসসি-োত্তর)',                 'DIPLOMA',      4, 130),
   ('PHD',             'Ph.D. / Doctorate',                'পিএইচডি (ডক্টরেট)',                      'DOCTORAL',     4, 140)

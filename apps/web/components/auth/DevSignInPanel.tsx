@@ -21,7 +21,7 @@ export function isDevSignInEnabled(): boolean {
 }
 
 function landingFor(role: DemoRole): string {
-  if (role === 'admin') return '/admin/panel';
+  if (role === 'admin') return '/admin/console';
   if (role === 'governance') return '/governance/dashboard';
   return '/feed';
 }
@@ -61,7 +61,10 @@ export function DevSignInPanel({ compact = false }: { compact?: boolean }) {
           fullName: account.fullName,
         });
       }
-      router.push(landingFor((account?.role as DemoRole) ?? 'student'));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
+      }
+      router.push(payload?.redirectTo ?? landingFor((account?.role as DemoRole) ?? 'student'));
       router.refresh();
     } catch {
       setError(t('Verification failed'));

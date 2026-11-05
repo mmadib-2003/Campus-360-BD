@@ -216,53 +216,53 @@ export interface QuickDemoAccount {
 export const QUICK_DEMO_ACCOUNTS: QuickDemoAccount[] = [
   {
     role: 'student',
-    email: 'student@demo.campus360.test',
+    email: 'student@demo.campus360.bd',
     password: DEMO_PASSWORD,
     fullName: 'Demo Student',
     label: 'Log in as Student',
     labelBn: 'শিক্ষার্থী হিসেবে লগইন',
     blurb: 'Marketplace, civic tickets, blood network, events and clubs.',
-    blurbBn: 'মার্কেটপ্লেস, সিটিক টিকিট, ব্লড নেটওয়ার্ক, ইভেন্ট ও ক্লাব।',
+    blurbBn: 'মার্কেটপ্লেস, সিভিক টিকিট, ব্লাড নেটওয়ার্ক, ইভেন্ট ও ক্লাব।',
     landing: '/feed',
     tone: 'emerald',
     icon: '🎓',
   },
   {
     role: 'faculty',
-    email: 'faculty@demo.campus360.test',
+    email: 'faculty@demo.campus360.bd',
     password: DEMO_PASSWORD,
     fullName: 'Demo Faculty',
     label: 'Log in as Faculty',
     labelBn: 'ফ্যাকাল্টি হিসেবে লগইন',
     blurb: 'Mentorship, skill postings, department notices and reviews.',
     blurbBn: 'মেন্টরশিপ, স্কিল পোস্টিং, বিভাগের নোটিফিকেশন ও রিভিউ।',
-    landing: '/faculty',
+    landing: '/feed',
     tone: 'sky',
     icon: '🧑‍🏫',
   },
   {
     role: 'admin',
-    email: 'admin@demo.campus360.test',
+    email: 'admin@demo.campus360.bd',
     password: DEMO_PASSWORD,
     fullName: 'Demo Admin',
     label: 'Log in as Admin',
     labelBn: 'অ্যাডমিন হিসেবে লগইন',
     blurb: 'University admin console, moderation queue and analytics.',
     blurbBn: 'বিশ্ববিদ্যালয় অ্যাডমিন কনসোল, মডারেশন কিউ ও অ্যানালিটিকস।',
-    landing: '/admin/panel',
+    landing: '/admin/console',
     tone: 'amber',
     icon: '🛡️',
   },
   {
     role: 'alumni',
-    email: 'alumni@demo.campus360.test',
+    email: 'alumni@demo.campus360.bd',
     password: DEMO_PASSWORD,
     fullName: 'Demo Alumni',
     label: 'Log in as Alumni',
     labelBn: 'প্রাক্তন শিক্ষার্থী হিসেবে লগইন',
     blurb: 'Careers, donations, alumni network and mentorship.',
     blurbBn: 'ক্যারিয়ার, দান, প্রাক্তন শিক্ষার্থী নেটওয়ার্ক ও মেন্টরশিপ।',
-    landing: '/careers',
+    landing: '/feed',
     tone: 'violet',
     icon: '🎖️',
   },
@@ -270,7 +270,7 @@ export const QUICK_DEMO_ACCOUNTS: QuickDemoAccount[] = [
 
 function buildDemoAccounts(): DemoAccount[] {
   const accounts: DemoAccount[] = [];
-  for (const code of ['DU', 'BUET', 'SUST', 'RU', 'CU']) {
+  for (const code of ['JU', 'DU', 'BUET', 'SUST', 'RU', 'CU']) {
     const university = getDemoUniversity(code);
     if (!university) continue;
     const domain = demoDomainFor(university);
@@ -299,16 +299,26 @@ function buildDemoAccounts(): DemoAccount[] {
     );
   }
 
-  // The four one-click identities from /signin. They live on the reserved
-  // `demo.campus360.test` domain (never a real inbox) and are scoped to DU.
+  // The four one-click identities from /signin (`@demo.campus360.bd`), plus
+  // backward-compatible `@demo.campus360.test` aliases, scoped to JU.
   for (const quick of QUICK_DEMO_ACCOUNTS) {
     accounts.push({
       email: quick.email,
       password: quick.password,
       role: quick.role,
-      universityCode: 'DU',
+      universityCode: 'JU',
       fullName: quick.fullName,
     });
+    const legacyEmail = quick.email.replace(/@demo\.campus360\.bd$/, '@demo.campus360.test');
+    if (legacyEmail !== quick.email) {
+      accounts.push({
+        email: legacyEmail,
+        password: quick.password,
+        role: quick.role,
+        universityCode: 'JU',
+        fullName: quick.fullName,
+      });
+    }
   }
 
   return accounts;
@@ -390,9 +400,94 @@ export interface DemoAcademicProgram {
   sort_order: number;
 }
 
+export interface DemoDepartmentUnit {
+  id: string;
+  university_id: string;
+  universityCode: string;
+  code: string;
+  name_en: string;
+  name_bn: string;
+  faculty_en: string;
+  faculty_bn: string;
+}
+
+const JU_OFFICIAL_UNIT_ROWS: Array<[string, string, string, string, string]> = [
+  // Institutes (4)
+  ['IIT', 'Institute of Information Technology (IIT)', 'তথ্যপ্রযুক্তি ইনস্টিটিউট (আইআইটি)', 'Institutes', 'ইনস্টিটিউটসমূহ'],
+  ['IBA-JU', 'Institute of Business Administration (IBA-JU)', 'ব্যবসায় প্রশাসন ইনস্টিটিউট (আইবিএ-জাবি)', 'Institutes', 'ইনস্টিটিউটসমূহ'],
+  ['ICLC', 'Institute of Comparative Literature and Culture', 'তুলনামূলক সাহিত্য ও সংস্কৃতি ইনস্টিটিউট', 'Institutes', 'ইনস্টিটিউটসমূহ'],
+  ['IRS', 'Institute of Remote Sensing and GIS', 'রিমোট সেন্সিং ও জিআইএস ইনস্টিটিউট', 'Institutes', 'ইনস্টিটিউটসমূহ'],
+
+  // Faculty of Mathematical and Physical Sciences (7)
+  ['CSE', 'Computer Science and Engineering', 'কম্পিউটার বিজ্ঞান ও প্রকৌশল', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+  ['MATH', 'Mathematics', 'গণিত', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+  ['PHY', 'Physics', 'পদার্থবিজ্ঞান', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+  ['CHEM', 'Chemistry', 'রসায়ন', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+  ['STAT', 'Statistics and Data Science', 'পরিসংখ্যান ও উপাত্ত বিজ্ঞান', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+  ['ENV', 'Environmental Sciences', 'পরিবেশ বিজ্ঞান', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+  ['GEOL', 'Geological Sciences', 'ভূতাত্ত্বিক বিজ্ঞান', 'Faculty of Mathematical and Physical Sciences', 'গাণিতিক ও পদার্থবিষয়ক অনুষদ'],
+
+  // Faculty of Biological Sciences (7)
+  ['BOT', 'Botany', 'উদ্ভিদবিজ্ঞান', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+  ['ZOO', 'Zoology', 'প্রাণিবিদ্যা', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+  ['BMB', 'Biochemistry and Molecular Biology', 'প্রাণরসায়ন ও অনুপ্রাণ বিজ্ঞান', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+  ['PHARM', 'Pharmacy', 'ফার্মেসি', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+  ['MIB', 'Microbiology', 'মাইক্রোবায়োলজি', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+  ['BGE', 'Biotechnology and Genetic Engineering', 'বায়োটেকনোলজি অ্যান্ড জেনেটিক ইঞ্জিনিয়ারিং', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+  ['PHI', 'Public Health and Informatics', 'পাবলিক হেলথ অ্যান্ড ইনফরমেটিক্স', 'Faculty of Biological Sciences', 'জীববিজ্ঞান অনুষদ'],
+
+  // Faculty of Social Sciences (6)
+  ['ECON', 'Economics', 'অর্থনীতি', 'Faculty of Social Sciences', 'সমাজবিজ্ঞান অনুষদ'],
+  ['GEOG', 'Geography and Environment', 'ভূগোল ও পরিবেশ', 'Faculty of Social Sciences', 'সমাজবিজ্ঞান অনুষদ'],
+  ['GOVP', 'Government and Politics', 'সরকার ও রাজনীতি', 'Faculty of Social Sciences', 'সমাজবিজ্ঞান অনুষদ'],
+  ['ANTH', 'Anthropology', 'নৃবিজ্ঞান', 'Faculty of Social Sciences', 'সমাজবিজ্ঞান অনুষদ'],
+  ['URP', 'Urban and Regional Planning', 'নগর ও অঞ্চল পরিকল্পনা', 'Faculty of Social Sciences', 'সমাজবিজ্ঞান অনুষদ'],
+  ['PAD', 'Public Administration', 'লোকপ্রশাসন', 'Faculty of Social Sciences', 'সমাজবিজ্ঞান অনুষদ'],
+
+  // Faculty of Arts and Humanities (9)
+  ['BAN', 'Bangla', 'বাংলা', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['ENG', 'English', 'ইংরেজি', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['HIST', 'History', 'ইতিহাস', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['PHIL', 'Philosophy', 'দর্শন', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['DRAMA', 'Drama and Dramatics', 'নাটক ও নাট্যতত্ত্ব', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['ARCH', 'Archaeology', 'প্রত্নতত্ত্ব', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['IR', 'International Relations', 'আন্তর্জাতিক সম্পর্ক', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['JMS', 'Journalism and Media Studies', 'জার্নালিজম অ্যান্ড মিডিয়া স্টাডিজ', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+  ['FA', 'Fine Arts', 'চারুকলা', 'Faculty of Arts and Humanities', 'কলা ও মানবিকী অনুষদ'],
+
+  // Faculty of Business Studies (4)
+  ['FIN', 'Finance and Banking', 'ফিন্যান্স অ্যান্ড ব্যাংকিং', 'Faculty of Business Studies', 'বিজনেস স্টাডিজ অনুষদ'],
+  ['MKT', 'Marketing', 'মার্কেটিং', 'Faculty of Business Studies', 'বিজনেস স্টাডিজ অনুষদ'],
+  ['AIS', 'Accounting and Information Systems', 'অ্যাকাউন্টিং অ্যান্ড ইনফরমেশন সিস্টেমস', 'Faculty of Business Studies', 'বিজনেস স্টাডিজ অনুষদ'],
+  ['MGT', 'Management Studies', 'ম্যানেজমেন্ট স্টাডিজ', 'Faculty of Business Studies', 'বিজনেস স্টাডিজ অনুষদ'],
+
+  // Faculty of Law (1)
+  ['LAW', 'Law and Justice', 'আইন ও বিচার', 'Faculty of Law', 'আইন অনুষদ'],
+];
+
+export const JU_CANONICAL_UNIVERSITY_ID = '08e2b61c-505d-4793-be4d-5ccb6aefc38c';
+export const JU_CANONICAL_IIT_DEPARTMENT_ID = '77fa5de8-4152-4368-81fa-d4771414e3ae';
+
+export function getStaticJuDepartments(universityId = JU_CANONICAL_UNIVERSITY_ID): DemoDepartmentUnit[] {
+  return JU_OFFICIAL_UNIT_ROWS.map(([code, name_en, name_bn, faculty_en, faculty_bn]) => ({
+    id: code === 'IIT' ? JU_CANONICAL_IIT_DEPARTMENT_ID : `dept-ju-${code.toLowerCase()}`,
+    university_id: universityId,
+    universityCode: 'JU',
+    code,
+    name_en,
+    name_bn,
+    faculty_en,
+    faculty_bn,
+  }));
+}
+
+export const JU_OFFICIAL_DEPARTMENTS: DemoDepartmentUnit[] = getStaticJuDepartments();
+
 export const DEMO_ACADEMIC_PROGRAMS: DemoAcademicProgram[] = (
   [
-  ['HONORS', "Bachelor's (Honors)", 'অনার্স (স্নাতক সম্মান)', 'UNDERGRADUATE', 4],
+  ['HONORS', "Bachelor's (Honors — B.Sc. / B.A. / B.S.S.)", 'অনার্স (বিএসসি / বিএ / বিএসএস সম্মান)', 'UNDERGRADUATE', 4],
+  ['BBA', 'Bachelor of Business Administration (B.B.A.)', 'ব্যাচেলর অব বিজনেস অ্যাডমিনিস্ট্রেশন (বিবিএ)', 'UNDERGRADUATE', 4],
+  ['LLB_HONORS', 'Bachelor of Laws — LL.B. (Honors)', 'আইন স্নাতক — এলএলবি (সম্মান)', 'UNDERGRADUATE', 4],
   ['DEGREE_PASS', "Bachelor's (Degree / Pass)", 'ডিগ্রি (পাস) কোর্স', 'UNDERGRADUATE', 3],
   ['ENGINEERING_BSC', 'B.Sc. in Engineering', 'প্রকৌশলে বিএসসি', 'UNDERGRADUATE', 4],
   ['AGRICULTURE_BSC', 'B.Sc. in Agriculture', 'কৃষিতে বিএসসি', 'UNDERGRADUATE', 4],
@@ -400,10 +495,13 @@ export const DEMO_ACADEMIC_PROGRAMS: DemoAcademicProgram[] = (
   ['MEDICAL_MBBS', 'M.B.B.S. (Medicine)', 'এমবিবিএস (চিকিৎসা)', 'UNDERGRADUATE', 6],
   ['DENTAL_BDS', 'B.D.S. (Dentistry)', 'বিডিএস (দন্ত)', 'UNDERGRADUATE', 5],
   ['NURSING_BSC', 'B.Sc. in Nursing', 'নার্সিংয়ে বিএসসি', 'UNDERGRADUATE', 4],
-  ['PHARMACY', 'Pharmacy (Pharm.D / B.Pharm)', 'ফার্মেসি (ফার্মডি / বিফার্ম)', 'UNDERGRADUATE', 4],
-  ['MASTERS', "Master's / MBA / MPA", 'স্নাতকোত্তর / এমবিএ / এমপিএ', 'GRADUATE', 2],
+  ['PHARMACY', 'Bachelor of Pharmacy (B.Pharm Honors)', 'ফার্মেসি স্নাতক (বি.ফার্ম সম্মান)', 'UNDERGRADUATE', 4],
+  ['MASTERS', "Master's (M.Sc. / M.A. / M.S.S.)", 'স্নাতকোত্তর (এমএসসি / এমএ / এমএসএস)', 'GRADUATE', 1],
+  ['MBA', 'M.B.A. / E.M.B.A. / M.P.A.', 'এমবিএ / ইএমবিএ / এমপিএ', 'GRADUATE', 2],
+  ['LLM', 'Master of Laws (LL.M.)', 'আইন স্নাতকোত্তর (এলএলএম)', 'GRADUATE', 1],
   ['MASTERS_FINAL', "Master's (Final Year)", 'স্নাতকোত্তর (ফাইনাল ইয়ার)', 'GRADUATE', 1],
-  ['PG_DIPLOMA', 'Post-Graduate Diploma', 'স্নাতকোত্তর ডিপ্লোমা', 'DIPLOMA', 1],
+  ['MPHIL', 'Master of Philosophy (M.Phil.)', 'এম.ফিল. (গবেষণা)', 'GRADUATE', 2],
+  ['PG_DIPLOMA', 'Post-Graduate Diploma (PGDIT / PGD)', 'স্নাতকোত্তর ডিপ্লোমা (পিজিডিআইটি / পিজিডি)', 'DIPLOMA', 1],
   ['DIPLOMA', 'Diploma (Post-SSC)', 'ডিপ্লোমা (এসএসসি-োত্তর)', 'DIPLOMA', 4],
   ['PHD', 'Ph.D. / Doctorate', 'পিএইচডি (ডক্টরেট)', 'DOCTORAL', 4],
 ] as Array<[string, string, string, DemoAcademicProgram['cycle'], number]>
@@ -562,7 +660,14 @@ export function getDemoProfile(session: DemoSession = getDemoSession()) {
     halls: hall
       ? { name: hall.name, name_en: hall.name, name_bn: hall.name_bn, type: hall.type }
       : { name: `${university.code} Residential Hall`, name_en: `${university.code} Residential Hall`, name_bn: `${university.code} আবাসিক হল` },
-    departments: { code: 'CSE', name_en: 'Computer Science and Engineering', name_bn: 'কম্পিউটার সায়েন্স' },
+    departments:
+      university.code === 'JU'
+        ? {
+            code: 'IIT',
+            name_en: 'Institute of Information Technology (IIT)',
+            name_bn: 'তথ্যপ্রযুক্তি ইনস্টিটিউট (আইআইটি)',
+          }
+        : { code: 'CSE', name_en: 'Computer Science and Engineering', name_bn: 'কম্পিউটার সায়েন্স' },
   };
 }
 

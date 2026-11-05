@@ -1,9 +1,10 @@
 // apps/web/lib/admin/server.ts
-// Server-side guard + row shaping for the /admin/panel and /governance APIs.
+// Server-side guard + row shaping for the /admin/panel, /admin/console, and /governance APIs.
 
 import { NextRequest } from 'next/server';
 import { apiError } from '@/lib/api-response';
 import { isSupabaseServerConfigured, requireAuth, type RequestAuth } from '@/lib/request-context';
+import { readSignedDemoSession } from '@/lib/demo-auth';
 import { isPlatformAdminRole, isGovernanceRole, type AdminSection } from './models';
 
 export interface AdminGate {
@@ -12,15 +13,22 @@ export interface AdminGate {
   response?: Response;
 }
 
-/** Platform-admin gate. In preview mode (no Supabase) the page-level demo
- *  session already gates access, so the API stays open to the local store. */
+/** Platform-admin gate. Honors both Supabase roles and signed `campus360_demo_session` (`role === 'admin'`). */
 export async function requirePlatformAdmin(): Promise<AdminGate> {
+  const demoSession = readSignedDemoSession();
   if (!isSupabaseServerConfigured()) {
+    if (demoSession && demoSession.role !== 'admin') {
+      return {
+        demo: true,
+        response: apiError('FORBIDDEN', 'Platform admin access required.', 'প্ল্যাটফর্ম অ্যাডমিন প্রবেশাধিকার প্রয়োজন।', 403),
+      };
+    }
     return { demo: true };
   }
   const { auth, response } = await requireAuth();
   if (response) return { demo: false, response };
-  if (!isPlatformAdminRole(auth!.roles)) {
+  const isDemoAdmin = demoSession?.role === 'admin' || auth!.user?.app_metadata?.is_platform_admin === true;
+  if (!isPlatformAdminRole(auth!.roles) && !isDemoAdmin) {
     return {
       demo: false,
       response: apiError('FORBIDDEN', 'Platform admin access required.', 'প্ল্যাটফর্ম অ্যাডমিন প্রবেশাধিকার প্রয়োজন।', 403),
@@ -31,12 +39,14 @@ export async function requirePlatformAdmin(): Promise<AdminGate> {
 
 /** Governance gate — university governing body (own campus only, enforced by RLS). */
 export async function requireGovernance(): Promise<AdminGate> {
+  const demoSession = readSignedDemoSession();
   if (!isSupabaseServerConfigured()) {
     return { demo: true };
   }
   const { auth, response } = await requireAuth();
   if (response) return { demo: false, response };
-  if (!isGovernanceRole(auth!.roles) && !isPlatformAdminRole(auth!.roles)) {
+  const isDemoAllowed = demoSession?.role === 'admin' || demoSession?.role === 'governance';
+  if (!isGovernanceRole(auth!.roles) && !isPlatformAdminRole(auth!.roles) && !isDemoAllowed) {
     return {
       demo: false,
       response: apiError('FORBIDDEN', 'University governance access required.', 'বিশ্ববিদ্যালয় গভর্ন্যান্স প্রবেশাধিকার প্রয়োজন।', 403),
@@ -65,7 +75,6 @@ export async function shapeCreateRow(
 
   if (ctx.universityId && !row.university_id) row.university_id = ctx.universityId;
 
-  // A same-campus profile to own rows that require a FK to profiles.
   let fallbackProfileId = ctx.userId;
   if (!fallbackProfileId && ctx.admin && ctx.universityId) {
     const { data } = await ctx.admin.admin

@@ -109,7 +109,7 @@ export default function SignInPage() {
       <DevSignInPanel />
       </div>
       </section>
-      <aside className="lg:sticky lg:top-6">
+      <aside className="lg:sticky lg:top-24">
         <QuickDemoLogin />
       </aside>
       </div>

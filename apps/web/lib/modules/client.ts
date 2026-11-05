@@ -109,12 +109,14 @@ export function useSession(): SessionState {
             setState({
               loading: false,
               authenticated: true,
-              demo: false,
+              demo: Boolean(data.demo),
               userId: String(data.profile.id),
               profile: data.profile,
               roles,
               isAdmin: roles.some((r: string) => ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN'].includes(r)),
-              isGovernance: roles.some((r: string) => ['GOVERNANCE', 'GOVERNING_BODY'].includes(r)),
+              isGovernance: roles.some((r: string) =>
+                ['GOVERNANCE', 'GOVERNING_BODY', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(r)
+              ),
             });
           } else {
             setState({
@@ -137,9 +139,18 @@ export function useSession(): SessionState {
     }
 
     load();
+    const onAuthChanged = () => {
+      void load();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('campus360:auth-changed', onAuthChanged);
+    }
     return () => {
       cancelled = true;
       unsubscribeDemo?.();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('campus360:auth-changed', onAuthChanged);
+      }
     };
   }, []);
 

@@ -1,19 +1,38 @@
 // apps/web/app/api/departments/route.ts
-// Department registry for the signup form (and any later faculty/course filter).
-//
-// Reads `departments`, which is keyed by university with UNIQUE (university_id,
-// code) — see 0002. Note there is deliberately NO `is_active` filter here:
-// unlike university_halls, `departments` has no status column, and asking for
-// one would turn every request into a 500 that the client renders as an empty
-// list. The exhaustive roster lives in supabase/seed/seed_departments_by_faculty.sql.
+// Department & Institute registry for `/signup` ("Join Your Campus") and
+// faculty/course filters. Includes a static 38-unit fallback for
+// Jahangirnagar University (JU) so cold starts, preview builds, or transient
+// PostgREST blips always serve JU's exact 4 Institutes + 34 Departments.
 
 import { NextRequest } from 'next/server';
 import { registryGate } from '@/lib/registry-gate';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
-import { REGISTRY_NO_STORE, registryFailure, registryRead } from '@/lib/registry-cache';
+import {
+  REGISTRY_NO_STORE,
+  registryError,
+  registryFailure,
+  registryRead,
+} from '@/lib/registry-cache';
+import {
+  JU_CANONICAL_UNIVERSITY_ID,
+  getDemoUniversity,
+  getStaticJuDepartments,
+} from '@/lib/modules/demo-data';
 
 export const dynamic = 'force-dynamic';
+
+function isJuIdentifier(universityId: string, universityCode: string): boolean {
+  if (universityCode.toUpperCase() === 'JU') return true;
+  if (
+    universityId === JU_CANONICAL_UNIVERSITY_ID ||
+    universityId.toLowerCase() === 'demo-univ-ju'
+  ) {
+    return true;
+  }
+  const demo = getDemoUniversity(universityId);
+  return demo?.code === 'JU';
+}
 
 export async function GET(req: NextRequest) {
   const universityId = req.nextUrl.searchParams.get('universityId')?.trim() ?? '';
@@ -30,30 +49,38 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const juRequested = isJuIdentifier(universityId, universityCode);
+
   if (!isSupabaseServerConfigured()) {
-    // Preview deployments have no department fixture; the field is optional in
-    // the form, so an empty list is a working state rather than an error.
+    if (juRequested) {
+      return apiSuccess(
+        getStaticJuDepartments(universityId || JU_CANONICAL_UNIVERSITY_ID),
+        200,
+        undefined,
+        REGISTRY_NO_STORE
+      );
+    }
     return apiSuccess([], 200, undefined, REGISTRY_NO_STORE);
   }
 
-  // The gate is what keeps a broken `NEXT_PUBLIC_SUPABASE_URL` from escaping as
-  // an unhandled HTML 500 (which the form can only render as `HTTP 500`): the
-  // config check runs before the client is built, and construction is guarded.
   const gate = registryGate('departments', 'বিভাগের তালিকা লোড করা যায়নি।');
-  if (!gate.ok) return gate.response;
-  const supabase = gate.client;
-  let query = supabase
-    .from('departments')
-    .select('id, university_id, code, name_en, name_bn, faculty_en, faculty_bn')
-    .order('faculty_en', { ascending: true })
-    .order('name_en', { ascending: true });
+  if (!gate.ok) {
+    if (juRequested) {
+      return apiSuccess(
+        getStaticJuDepartments(universityId || JU_CANONICAL_UNIVERSITY_ID),
+        200,
+        undefined,
+        REGISTRY_NO_STORE
+      );
+    }
+    return gate.response;
+  }
 
-  if (universityId) {
-    query = query.eq('university_id', universityId);
-  } else {
-    // The code -> id lookup is a registry read too. It used to ignore `error`,
-    // so an unreachable database answered "here are your halls: none" with a
-    // 200. Fail loudly instead of showing an empty dropdown.
+  const supabase = gate.client;
+  let resolvedUniversityId = universityId;
+  let resolvedIsJu = juRequested;
+
+  if (!resolvedUniversityId) {
     const lookup = await registryRead<{ id: string } | null>(
       'departments.fetch.lookup',
       () =>
@@ -64,13 +91,79 @@ export async function GET(req: NextRequest) {
           .maybeSingle(),
       { universityCode }
     );
-    if (!lookup.ok) return registryFailure(lookup, 'বিভাগের তালিকা লোড করা যায়নি।');
-    if (!lookup.data) return apiSuccess([], 200, undefined, REGISTRY_NO_STORE);
-    query = query.eq('university_id', lookup.data.id);
+    if (!lookup.ok) {
+      if (resolvedIsJu) {
+        registryError('departments.fetch.lookup', lookup.error, { universityCode });
+        return apiSuccess(
+          getStaticJuDepartments(JU_CANONICAL_UNIVERSITY_ID),
+          200,
+          undefined,
+          REGISTRY_NO_STORE
+        );
+      }
+      return registryFailure(lookup, 'বিভাগের তালিকা লোড করা যায়নি।');
+    }
+    if (!lookup.data) {
+      return apiSuccess(
+        resolvedIsJu ? getStaticJuDepartments(JU_CANONICAL_UNIVERSITY_ID) : [],
+        200,
+        undefined,
+        REGISTRY_NO_STORE
+      );
+    }
+    resolvedUniversityId = lookup.data.id;
+  } else if (!resolvedIsJu) {
+    const uniLookup = await registryRead<{ code: string } | null>(
+      'departments.fetch.code',
+      () =>
+        supabase
+          .from('universities')
+          .select('code')
+          .eq('id', resolvedUniversityId)
+          .maybeSingle(),
+      { universityId: resolvedUniversityId }
+    );
+    if (uniLookup.ok && uniLookup.data?.code?.toUpperCase() === 'JU') {
+      resolvedIsJu = true;
+    }
   }
 
-  const read = await registryRead<any[]>('departments.fetch', () => query, { universityId, universityCode });
-  if (!read.ok) return registryFailure(read, 'বিভাগের তালিকা লোড করা যায়নি।');
+  const query = supabase
+    .from('departments')
+    .select('id, university_id, code, name_en, name_bn, faculty_en, faculty_bn')
+    .eq('university_id', resolvedUniversityId)
+    .order('faculty_en', { ascending: true })
+    .order('name_en', { ascending: true });
 
-  return apiSuccess(read.data ?? [], 200, undefined, REGISTRY_NO_STORE);
+  const read = await registryRead<any[]>('departments.fetch', () => query, {
+    universityId: resolvedUniversityId,
+    universityCode,
+  });
+
+  if (!read.ok) {
+    if (resolvedIsJu) {
+      registryError('departments.fetch', read.error, {
+        universityId: resolvedUniversityId,
+      });
+      return apiSuccess(
+        getStaticJuDepartments(resolvedUniversityId),
+        200,
+        undefined,
+        REGISTRY_NO_STORE
+      );
+    }
+    return registryFailure(read, 'বিভাগের তালিকা লোড করা যায়নি।');
+  }
+
+  const rows = read.data ?? [];
+  if (rows.length === 0 && resolvedIsJu) {
+    return apiSuccess(
+      getStaticJuDepartments(resolvedUniversityId),
+      200,
+      undefined,
+      REGISTRY_NO_STORE
+    );
+  }
+
+  return apiSuccess(rows, 200, undefined, REGISTRY_NO_STORE);
 }

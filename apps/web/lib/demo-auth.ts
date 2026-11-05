@@ -1,10 +1,40 @@
+// apps/web/lib/demo-auth.ts
+/**
+ * Server-side helpers for Campus360 demo sessions (`campus360_demo_session`)
+ * and preview OTP flows (`campus360_demo_otp`).
+ *
+ * `campus360_demo_session` is HMAC-SHA256 signed (`<base64url>.<sig>`) and
+ * HTTP-only so `/api/auth/demo-signin` can always establish a verified session
+ * even if Supabase GoTrue or `SUPABASE_SERVICE_ROLE_KEY` is unavailable.
+ */
+
+import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
 import { DEMO_OTP_TTL_MS } from '@/lib/demo-otp';
-import { DEMO_UNIVERSITIES, demoFindUniversity, demoFindUniversityByDomain, type DemoRole } from '@/lib/modules/demo-data';
+import {
+  DEMO_UNIVERSITIES,
+  DEMO_UNIVERSITY_HALLS,
+  JU_CANONICAL_IIT_DEPARTMENT_ID,
+  JU_CANONICAL_UNIVERSITY_ID,
+  demoFindUniversity,
+  demoFindUniversityByDomain,
+  getDemoUniversity,
+  type DemoRole,
+} from '@/lib/modules/demo-data';
+import {
+  DEMO_SESSION_COOKIE,
+  getDemoSessionSecret,
+  isDemoEmail,
+  type SignedDemoSessionPayload,
+} from '@/lib/demo-session-edge';
+
+export { DEMO_SESSION_COOKIE, isDemoEmail };
+export type { SignedDemoSessionPayload };
 
 export const DEMO_OTP_COOKIE = 'campus360_demo_otp';
-export const DEMO_SESSION_COOKIE = 'campus360_demo_session';
 export const DEMO_UNIVERSAL_OTP = '482913';
+
+const DEMO_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 export interface DemoChallenge {
   email: string;
@@ -17,17 +47,269 @@ export interface DemoChallenge {
 }
 
 export interface DemoSessionPayload {
+  id?: string;
   universityId: string;
+  university_id?: string;
+  universityCode?: string;
+  department_id?: string | null;
+  departmentCode?: string | null;
   role: DemoRole;
   email: string;
   fullName: string;
+  name?: string;
   studentId: string;
+  email_verified?: boolean;
+  is_demo?: boolean;
 }
 
-const ROLES: DemoRole[] = ['student', 'faculty', 'alumni', 'admin'];
+const ROLES: DemoRole[] = ['student', 'faculty', 'alumni', 'admin', 'governance'];
 
 export function normalizeDemoRole(value: unknown): DemoRole {
   return ROLES.includes(value as DemoRole) ? (value as DemoRole) : 'student';
+}
+
+export const DEMO_ROLE_DEFAULTS: Record<
+  DemoRole,
+  { id: string; email: string; name: string; studentId: string; appRoles: string[] }
+> = {
+  student: {
+    id: 'd0000000-0000-4000-8000-000000000101',
+    email: 'student@demo.campus360.bd',
+    name: 'Demo Student',
+    studentId: 'JU-2026-0101',
+    appRoles: ['STUDENT'],
+  },
+  faculty: {
+    id: 'd0000000-0000-4000-8000-000000000102',
+    email: 'faculty@demo.campus360.bd',
+    name: 'Demo Faculty',
+    studentId: 'JU-FAC-0102',
+    appRoles: ['FACULTY'],
+  },
+  admin: {
+    id: 'd0000000-0000-4000-8000-000000000103',
+    email: 'admin@demo.campus360.bd',
+    name: 'Demo Admin',
+    studentId: 'JU-ADM-0103',
+    appRoles: ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN'],
+  },
+  alumni: {
+    id: 'd0000000-0000-4000-8000-000000000104',
+    email: 'alumni@demo.campus360.bd',
+    name: 'Demo Alumni',
+    studentId: 'JU-ALM-0104',
+    appRoles: ['ALUMNI'],
+  },
+  governance: {
+    id: 'd0000000-0000-4000-8000-000000000105',
+    email: 'governance.ju@juniv.edu',
+    name: 'University Governance',
+    studentId: 'JU-GOV-0105',
+    appRoles: ['GOVERNANCE'],
+  },
+};
+
+function toBase64Url(input: Buffer | string): string {
+  const buf = typeof input === 'string' ? Buffer.from(input, 'utf8') : input;
+  return buf
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function hmacSign(payloadBase64Url: string): string {
+  const digest = crypto
+    .createHmac('sha256', getDemoSessionSecret())
+    .update(payloadBase64Url)
+    .digest();
+  return toBase64Url(digest);
+}
+
+export function signDemoSessionToken(payload: SignedDemoSessionPayload): string {
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signature = hmacSign(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyDemoSessionToken(
+  rawCookie: string | null | undefined
+): SignedDemoSessionPayload | null {
+  if (!rawCookie) return null;
+
+  const dot = rawCookie.indexOf('.');
+  if (dot > 0) {
+    const payloadPart = rawCookie.slice(0, dot);
+    const sigPart = rawCookie.slice(dot + 1);
+    if (!payloadPart || !sigPart) return null;
+
+    const expectedSig = hmacSign(payloadPart);
+    const sigBuf = Buffer.from(sigPart, 'utf8');
+    const expectedBuf = Buffer.from(expectedSig, 'utf8');
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      return null;
+    }
+
+    try {
+      const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+      const json = Buffer.from(normalized, 'base64').toString('utf8');
+      const parsed = JSON.parse(json) as Partial<SignedDemoSessionPayload>;
+      if (!parsed || typeof parsed !== 'object' || !parsed.id || !parsed.email || !parsed.role) {
+        return null;
+      }
+      if (typeof parsed.exp === 'number' && Date.now() > parsed.exp) {
+        return null;
+      }
+      return parsed as SignedDemoSessionPayload;
+    } catch {
+      return null;
+    }
+  }
+
+  // Backwards-compatible fallback for unsigned JSON cookies set by preview OTP verification.
+  try {
+    const parsed = JSON.parse(rawCookie) as Partial<DemoSessionPayload>;
+    if (!parsed || typeof parsed !== 'object' || !parsed.universityId || !parsed.email) {
+      return null;
+    }
+    const univ = demoFindUniversity(parsed.universityId) ?? getDemoUniversity('JU');
+    if (!univ) return null;
+    const role = normalizeDemoRole(parsed.role);
+    const defaults = DEMO_ROLE_DEFAULTS[role] ?? DEMO_ROLE_DEFAULTS.student;
+    const now = Date.now();
+    return {
+      id: parsed.id || defaults.id,
+      email: parsed.email,
+      role,
+      name: parsed.name || parsed.fullName || defaults.name,
+      fullName: parsed.fullName || parsed.name || defaults.name,
+      studentId: parsed.studentId || defaults.studentId,
+      university_id: parsed.university_id || parsed.universityId,
+      universityId: parsed.universityId,
+      universityCode: parsed.universityCode || univ.code,
+      department_id: parsed.department_id ?? JU_CANONICAL_IIT_DEPARTMENT_ID,
+      departmentCode: parsed.departmentCode ?? 'IIT',
+      email_verified: true,
+      is_demo: true,
+      iat: now,
+      exp: now + DEMO_SESSION_MAX_AGE_SECONDS * 1000,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function issueSignedDemoSession(input: {
+  id?: string;
+  email: string;
+  role: DemoRole;
+  name?: string;
+  studentId?: string;
+  university_id?: string;
+  universityCode?: string;
+  department_id?: string | null;
+  departmentCode?: string | null;
+}): { payload: SignedDemoSessionPayload; token: string } {
+  const defaults = DEMO_ROLE_DEFAULTS[input.role] ?? DEMO_ROLE_DEFAULTS.student;
+  const now = Date.now();
+  const universityCode = (input.universityCode || 'JU').toUpperCase();
+  const universityId = input.university_id || JU_CANONICAL_UNIVERSITY_ID;
+  const departmentId =
+    input.department_id === undefined ? JU_CANONICAL_IIT_DEPARTMENT_ID : input.department_id;
+  const name = input.name?.trim() || defaults.name;
+
+  const payload: SignedDemoSessionPayload = {
+    id: input.id || defaults.id,
+    email: input.email.trim().toLowerCase(),
+    role: input.role,
+    name,
+    fullName: name,
+    studentId: input.studentId || defaults.studentId,
+    university_id: universityId,
+    universityId,
+    universityCode,
+    department_id: departmentId,
+    departmentCode: input.departmentCode === undefined ? 'IIT' : input.departmentCode,
+    email_verified: true,
+    is_demo: true,
+    iat: now,
+    exp: now + DEMO_SESSION_MAX_AGE_SECONDS * 1000,
+  };
+
+  const token = signDemoSessionToken(payload);
+  cookies().set(DEMO_SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: DEMO_SESSION_MAX_AGE_SECONDS,
+  });
+
+  return { payload, token };
+}
+
+export function readSignedDemoSession(): SignedDemoSessionPayload | null {
+  try {
+    const raw = cookies().get(DEMO_SESSION_COOKIE)?.value;
+    return verifyDemoSessionToken(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function buildDemoProfileFromSession(
+  session: SignedDemoSessionPayload,
+  overrides?: { university_id?: string; department_id?: string | null }
+) {
+  const university = getDemoUniversity(session.universityCode || session.university_id) ?? DEMO_UNIVERSITIES[0];
+  const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code);
+  const universityId = overrides?.university_id ?? session.university_id ?? university.id;
+  const departmentId =
+    overrides?.department_id !== undefined ? overrides.department_id : session.department_id;
+  const defaults = DEMO_ROLE_DEFAULTS[session.role] ?? DEMO_ROLE_DEFAULTS.student;
+
+  const profile = {
+    id: session.id,
+    university_id: universityId,
+    department_id: departmentId,
+    email: session.email,
+    full_name: session.fullName || session.name,
+    name: session.name || session.fullName,
+    student_id: session.studentId || defaults.studentId,
+    batch: session.role === 'alumni' ? '45th Batch' : '51st Batch',
+    role: session.role,
+    trust_level: 'ID_VERIFIED',
+    onboarding_completed: true,
+    email_verified: true,
+    is_verified: true,
+    is_demo: true,
+    universities: {
+      code: university.code,
+      name_en: university.name_en,
+      name_bn: university.name_bn,
+    },
+    departments: {
+      code: session.departmentCode || 'IIT',
+      name_en:
+        (session.departmentCode || 'IIT') === 'IIT'
+          ? 'Institute of Information Technology (IIT)'
+          : 'Computer Science and Engineering',
+      name_bn:
+        (session.departmentCode || 'IIT') === 'IIT'
+          ? 'তথ্যপ্রযুক্তি ইনস্টিটিউট (আইআইটি)'
+          : 'কম্পিউটার বিজ্ঞান ও প্রকৌশল',
+    },
+    halls: hall
+      ? { name: hall.name, name_bn: hall.name_bn, type: hall.type }
+      : { name: 'Al-Beruni Hall', name_bn: 'আল বেরুনী হল', type: 'RESIDENTIAL' },
+  };
+
+  const roles = defaults.appRoles.map((role) => ({
+    role,
+    university_id: universityId,
+  }));
+
+  return { profile, roles };
 }
 
 export function issueDemoChallenge(input: {
@@ -58,8 +340,6 @@ export function issueDemoChallenge(input: {
     };
   }
   const role = normalizeDemoRole(input.role);
-  // Track B — unique deterministic code per email (falls back to the legacy
-  // universal demo code when the caller does not supply one).
   const code = input.code?.trim() || DEMO_UNIVERSAL_OTP;
   const challenge: DemoChallenge = {
     email,
@@ -75,7 +355,6 @@ export function issueDemoChallenge(input: {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    // Same 5-minute window as a real email OTP (DEMO_OTP_TTL_MS).
     maxAge: Math.round(DEMO_OTP_TTL_MS / 1000),
   });
   return { ok: true, challenge };
@@ -95,7 +374,10 @@ export function readDemoChallenge(): DemoChallenge | null {
   }
 }
 
-export function verifyDemoChallenge(email: string, otp: string): { ok: true; session: DemoSessionPayload } | { ok: false; error: string; errorBn: string; status: number } {
+export function verifyDemoChallenge(
+  email: string,
+  otp: string
+): { ok: true; session: DemoSessionPayload } | { ok: false; error: string; errorBn: string; status: number } {
   const challenge = readDemoChallenge();
   if (!challenge) {
     return {
@@ -121,65 +403,44 @@ export function verifyDemoChallenge(email: string, otp: string): { ok: true; ses
       status: 401,
     };
   }
-  const session: DemoSessionPayload = {
-    universityId: challenge.universityId,
-    role: challenge.role,
+  const univ = demoFindUniversity(challenge.universityId);
+  const { payload } = issueSignedDemoSession({
     email: challenge.email,
-    fullName: challenge.fullName,
+    role: challenge.role,
+    name: challenge.fullName,
     studentId: challenge.studentId,
-  };
-  const store = cookies();
-  store.set(DEMO_SESSION_COOKIE, JSON.stringify(session), {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
+    university_id: challenge.universityId,
+    universityCode: univ?.code || 'JU',
   });
-  store.delete(DEMO_OTP_COOKIE);
-  return { ok: true, session };
+  cookies().delete(DEMO_OTP_COOKIE);
+  return { ok: true, session: payload };
 }
 
 export function readDemoSessionPayload(): DemoSessionPayload | null {
-  const store = cookies();
-  const raw = store.get(DEMO_SESSION_COOKIE)?.value;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as DemoSessionPayload;
-    if (!parsed?.universityId || !demoFindUniversity(parsed.universityId)) return null;
-    return { ...parsed, role: normalizeDemoRole(parsed.role) };
-  } catch {
-    return null;
-  }
+  return readSignedDemoSession();
 }
 
 export function clearDemoSession() {
-  const store = cookies();
-  store.delete(DEMO_SESSION_COOKIE);
-  store.delete(DEMO_OTP_COOKIE);
+  try {
+    const store = cookies();
+    store.delete(DEMO_SESSION_COOKIE);
+    store.delete(DEMO_OTP_COOKIE);
+  } catch {
+    /* ignore outside request scope */
+  }
 }
 
 export function demoNextStep(role: DemoRole): string {
   switch (role) {
     case 'admin':
-      return '/admin/panel';
+      return '/admin/console';
     case 'governance':
       return '/governance/dashboard';
-    case 'faculty':
-      return '/faculty';
-    case 'alumni':
-      return '/careers';
     default:
       return '/feed';
   }
 }
 
-/**
- * Campus cover photography is only produced for the campuses the demo data is
- * rich enough to fill (see supabase/seed/seed_massive_demo_content.sql); every
- * other university falls back to the shared banner so a card never renders a
- * broken image. The live path reads both columns from the database (0014 added
- * `cover_image_url`), and derives `logo_url` from the code the same way.
- */
 const DEMO_CAMPUS_COVERS: Record<string, string> = {
   DU: '/campuses/du.jpg',
   JU: '/campuses/ju.jpg',
@@ -190,13 +451,6 @@ const DEMO_CAMPUS_COVERS: Record<string, string> = {
   JUST: '/campuses/just.jpg',
 };
 
-/**
- * Authentic Wikimedia Commons photography for the flagship campuses. These
- * are the same URLs the database seed writes (see
- * supabase/seed/seed.sql and migration 0016), so the live registry and the
- * offline preview payload show the same real campus. Attribution:
- * docs/IMAGE_ATTRIBUTION.md.
- */
 const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   DU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Curzon_Hall,_University_of_Dhaka,_Dhaka.jpg?width=1600',
   JU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Shaheed_Minar_of_Jahangirnagar_University.jpg?width=1600',
@@ -212,7 +466,6 @@ const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   BAU: 'https://upload.wikimedia.org/wikipedia/commons/e/ed/Bangladesh_Agricultural_University_%28BAU%29.jpg',
 };
 
-/** Real institutional logo files (Wikipedia/Wikimedia), keyed by code. */
 const DEMO_CAMPUS_LOGOS: Record<string, string> = {
   DU: 'https://upload.wikimedia.org/wikipedia/en/c/cb/Dhaka_University_logo.svg',
   JU: 'https://upload.wikimedia.org/wikipedia/en/a/a9/Jahangirnagar_University_Logo.svg',

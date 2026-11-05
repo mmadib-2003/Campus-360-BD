@@ -3,6 +3,16 @@ import { NextRequest } from 'next/server';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from './supabase-server';
 import { apiError } from './api-response';
+import {
+  DEMO_ROLE_DEFAULTS,
+  isDemoEmail,
+  readSignedDemoSession,
+  type SignedDemoSessionPayload,
+} from './demo-auth';
+import {
+  JU_CANONICAL_IIT_DEPARTMENT_ID,
+  JU_CANONICAL_UNIVERSITY_ID,
+} from './modules/demo-data';
 
 export interface SessionProfile {
   id: string;
@@ -12,7 +22,10 @@ export interface SessionProfile {
   trust_level: 'UNVERIFIED' | 'EMAIL_VERIFIED' | 'ID_VERIFIED' | 'TRUSTED';
   student_id?: string;
   department_id?: string | null;
-  halls?: { name?: string; name_en?: string; name_bn?: string; type?: string } | { name?: string; name_en?: string; name_bn?: string }[] | null;
+  halls?:
+    | { name?: string; name_en?: string; name_bn?: string; type?: string }
+    | { name?: string; name_en?: string; name_bn?: string }[]
+    | null;
   universities?: { code: string; name_en: string; name_bn: string } | null;
 }
 
@@ -33,10 +46,49 @@ export function isSupabaseServerConfigured() {
   );
 }
 
+const ADMIN_ROLE_LIST = [
+  'ADMIN',
+  'UNIVERSITY_ADMIN',
+  'SUPER_ADMIN',
+  'GOVERNING_BODY',
+  'GOVERNANCE',
+];
+
+function buildSyntheticUser(session: SignedDemoSessionPayload): User {
+  const nowIso = new Date().toISOString();
+  return {
+    id: session.id,
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: session.email,
+    email_confirmed_at: nowIso,
+    app_metadata: {
+      provider: 'email',
+      providers: ['email'],
+      role: session.role,
+      is_demo: true,
+      is_platform_admin: session.role === 'admin',
+    },
+    user_metadata: {
+      full_name: session.fullName || session.name,
+      name: session.name,
+      role: session.role,
+      university_code: session.universityCode || 'JU',
+      department_code: session.departmentCode || 'IIT',
+      email_verified: true,
+      is_demo: true,
+    },
+    identities: [],
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+}
+
 /**
- * Resolves the authenticated student for a route handler.
- * Returns an `ApiEnvelope` error response instead of throwing when unauthenticated
- * or when Supabase credentials are missing, so clients always receive JSON.
+ * Resolves the authenticated user for a route handler.
+ * Reads Supabase Auth cookies first and falls back to the HMAC-signed
+ * `campus360_demo_session` cookie so demo accounts work seamlessly even when
+ * GoTrue is unreachable.
  */
 export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Response }> {
   if (!isSupabaseServerConfigured()) {
@@ -50,57 +102,161 @@ export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Re
     };
   }
 
+  const demoSession = readSignedDemoSession();
+
   try {
     const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return {
-        response: apiError('UNAUTHORIZED', 'Sign in required.', 'লগইন করা প্রয়োজন।', 401),
-      };
-    }
-
     const admin = createSupabaseAdminClient();
-    const { data: profile } = await admin
-      .from('profiles')
-      .select(
-        'id, university_id, email, full_name, trust_level, student_id, department_id, universities(code, name_en, name_bn), halls:university_halls(name, name_bn)'
-      )
-      .eq('id', user.id)
-      .maybeSingle();
 
-    if (!profile || !profile.university_id) {
+    let user: User | null = null;
+    try {
+      const { data } = await supabase.auth.getUser();
+      user = data?.user ?? null;
+    } catch {
+      user = null;
+    }
+
+    if (user) {
+      const { data: profile } = await admin
+        .from('profiles')
+        .select(
+          'id, university_id, email, full_name, trust_level, student_id, department_id, universities(code, name_en, name_bn), halls:university_halls(name, name_bn)'
+        )
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const userIsDemo =
+        Boolean(demoSession) ||
+        isDemoEmail(user.email) ||
+        Boolean(user.user_metadata?.is_demo);
+
+      let effectiveProfile = profile as unknown as SessionProfile | null;
+      if ((!effectiveProfile || !effectiveProfile.university_id) && userIsDemo) {
+        effectiveProfile = {
+          id: user.id,
+          university_id: demoSession?.university_id || JU_CANONICAL_UNIVERSITY_ID,
+          email: user.email ?? demoSession?.email ?? 'student@demo.campus360.bd',
+          full_name:
+            String(user.user_metadata?.full_name ?? '') ||
+            demoSession?.name ||
+            'Demo Student',
+          trust_level: 'ID_VERIFIED',
+          student_id: demoSession?.studentId ?? 'JU-2026-0101',
+          department_id: demoSession?.department_id ?? JU_CANONICAL_IIT_DEPARTMENT_ID,
+          universities: {
+            code: 'JU',
+            name_en: 'Jahangirnagar University',
+            name_bn: 'জাহাঙ্গীরনগর বিশ্ববিদ্যালয়',
+          },
+        };
+      }
+
+      if (!effectiveProfile || !effectiveProfile.university_id) {
+        return {
+          response: apiError(
+            'PROFILE_INCOMPLETE',
+            'Complete onboarding before using campus modules.',
+            'ক্যাম্পাস মডিউল ব্যবহারের আগে প্রোফাইল সম্পূর্ণ করুন।',
+            403
+          ),
+        };
+      }
+
+      const { data: roleRows } = await admin
+        .from('user_roles')
+        .select('role, university_id')
+        .eq('user_id', user.id);
+
+      let roles = (roleRows ?? []).map((r) => String(r.role));
+      if (roles.length === 0 && userIsDemo) {
+        const roleSlug = demoSession?.role ?? 'student';
+        roles = [...(DEMO_ROLE_DEFAULTS[roleSlug]?.appRoles ?? ['STUDENT'])];
+      }
+
+      const isAdmin =
+        roles.some((r: string) => ADMIN_ROLE_LIST.includes(r)) ||
+        demoSession?.role === 'admin';
+
       return {
-        response: apiError(
-          'PROFILE_INCOMPLETE',
-          'Complete onboarding before using campus modules.',
-          'ক্যাম্পাস মডিউল ব্যবহারের আগে প্রোফাইল সম্পূর্ণ করুন।',
-          403
-        ),
+        auth: {
+          supabase,
+          admin,
+          user,
+          profile: effectiveProfile,
+          roles,
+          isAdmin,
+        },
       };
     }
 
-    const { data: roleRows } = await admin
-      .from('user_roles')
-      .select('role, university_id')
-      .eq('user_id', user.id);
+    // Fallback: authenticate via HMAC-signed `campus360_demo_session` cookie.
+    if (demoSession) {
+      let effectiveProfile: SessionProfile | null = null;
+      let roles: string[] = [];
 
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    const isAdmin = roles.some((r: string) =>
-      ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN', 'GOVERNING_BODY', 'GOVERNANCE'].includes(r)
-    );
+      try {
+        const [{ data: dbProfile }, { data: dbRoles }] = await Promise.all([
+          admin
+            .from('profiles')
+            .select(
+              'id, university_id, email, full_name, trust_level, student_id, department_id, universities(code, name_en, name_bn), halls:university_halls(name, name_bn)'
+            )
+            .eq('id', demoSession.id)
+            .maybeSingle(),
+          admin
+            .from('user_roles')
+            .select('role, university_id')
+            .eq('user_id', demoSession.id),
+        ]);
+        if (dbProfile?.university_id) {
+          effectiveProfile = dbProfile as unknown as SessionProfile;
+        }
+        if (dbRoles && dbRoles.length > 0) {
+          roles = dbRoles.map((r) => String(r.role));
+        }
+      } catch {
+        /* use signed cookie claims below */
+      }
+
+      if (!effectiveProfile) {
+        effectiveProfile = {
+          id: demoSession.id,
+          university_id: demoSession.university_id || JU_CANONICAL_UNIVERSITY_ID,
+          email: demoSession.email,
+          full_name: demoSession.fullName || demoSession.name,
+          trust_level: 'ID_VERIFIED',
+          student_id: demoSession.studentId,
+          department_id: demoSession.department_id ?? JU_CANONICAL_IIT_DEPARTMENT_ID,
+          universities: {
+            code: demoSession.universityCode || 'JU',
+            name_en: 'Jahangirnagar University',
+            name_bn: 'জাহাঙ্গীরনগর বিশ্ববিদ্যালয়',
+          },
+        };
+      }
+
+      if (roles.length === 0) {
+        roles = [...(DEMO_ROLE_DEFAULTS[demoSession.role]?.appRoles ?? ['STUDENT'])];
+      }
+
+      const isAdmin =
+        demoSession.role === 'admin' ||
+        roles.some((r: string) => ADMIN_ROLE_LIST.includes(r));
+
+      return {
+        auth: {
+          supabase: admin,
+          admin,
+          user: buildSyntheticUser(demoSession),
+          profile: effectiveProfile,
+          roles,
+          isAdmin,
+        },
+      };
+    }
 
     return {
-      auth: {
-        supabase,
-        admin,
-        user,
-        profile: profile as unknown as SessionProfile,
-        roles,
-        isAdmin,
-      },
+      response: apiError('UNAUTHORIZED', 'Sign in required.', 'লগইন করা প্রয়োজন।', 401),
     };
   } catch (error) {
     return {
