@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useUi } from '@/lib/i18n-client';
 import { ModuleHub } from '@/components/modules/ModuleHub';
+import { CampusScopeToggle } from '@/components/CampusScopeToggle';
+import { useSession } from '@/lib/modules/client';
+import { useCampusScope } from '@/lib/use-campus-scope';
 import { EmptyState, SkeletonGrid } from '@/components/modules/ui';
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
 
@@ -31,6 +34,8 @@ function hideOnBrokenImage(event: React.SyntheticEvent<HTMLImageElement>) {
 
 export function HomeView({ compact = false }: { compact?: boolean }) {
   const { locale, t } = useUi();
+  const session = useSession();
+  const { scope } = useCampusScope();
   const [universities, setUniversities] = React.useState<RegistryUniversity[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -88,11 +93,12 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
             </span>
             🇧🇩 {t('13 Bangladesh Public Universities Supported')}
           </span>
+          {session.authenticated && <div className="mt-4 max-w-xl"><CampusScopeToggle universityCode={session.profile?.universities?.code} /></div>}
           <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-4">
             {t('One verified super-app for every public university campus in Bangladesh')}
           </h1>
           <p className="text-sm text-slate-300 mt-2 max-w-2xl">
-            {t('Strict institutional email OTP verification, row-level tenant isolation, a 50 MB virus-scanned Academic Archive, SLA-tracked anonymous grievance resolution, and live campus events.')}
+            {session.authenticated ? t(scope === 'all' ? 'Showing public listings across supported universities.' : 'Showing listings and activity for your university only.') : t('Strict institutional email OTP verification, row-level tenant isolation, a 50 MB virus-scanned Academic Archive, SLA-tracked anonymous grievance resolution, and live campus events.')}
           </p>
           <div className="flex flex-wrap gap-3 mt-6">
             <Link

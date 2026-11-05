@@ -1,5 +1,7 @@
 // apps/web/components/reviews/RealtimeReviewWidget.tsx
 'use client';
+import { useCampusScope } from '@/lib/use-campus-scope';
+import { CampusBadge } from '@/components/CampusBadge';
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
@@ -10,6 +12,7 @@ import { useSession } from '@/lib/modules/client';
 
 interface ReviewItem {
   id: string;
+  university_id?: string;
   rating: number;
   title?: string;
   body: string;
@@ -41,6 +44,7 @@ export function RealtimeReviewWidget({
   targetId: string;
 }) {
   const session = useSession();
+  const { scope } = useCampusScope();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [avgRating, setAvgRating] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -59,7 +63,7 @@ export function RealtimeReviewWidget({
     setError(null);
     try {
       const res = await fetch(
-        `/api/reviews?targetType=${encodeURIComponent(type)}&targetId=${encodeURIComponent(target)}`,
+        `/api/reviews?targetType=${encodeURIComponent(type)}&targetId=${encodeURIComponent(target)}&scope=${scope === 'all' ? 'all_campuses' : 'my_campus'}`,
         { cache: 'no-store' }
       );
       const payload = await res.json();
@@ -74,7 +78,7 @@ export function RealtimeReviewWidget({
     } finally {
       setLoading(false);
     }
-  }, [type, target]);
+  }, [type, target, scope]);
 
   useEffect(() => {
     load();
@@ -91,11 +95,9 @@ export function RealtimeReviewWidget({
       supabase,
       'reviews',
       {
-        onInsert: (row) => {
-          const inserted = row as unknown as ReviewItem;
-          if (!inserted?.id) return;
-          setReviews((prev) => (prev.some((r) => r.id === inserted.id) ? prev : [inserted, ...prev]));
-        },
+        // Re-read through the API so public cross-campus RLS cannot inject a
+        // foreign row into this campus-local widget.
+        onInsert: () => setTick((value) => value + 1),
         onError: (error) => console.warn('[campus360:realtime] review subscription failed', error),
       },
       {
@@ -244,6 +246,7 @@ export function RealtimeReviewWidget({
             <Card key={review.id} className="p-3 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-amber-500">{'★'.repeat(Number(review.rating))}</span>
+                <CampusBadge universityId={review.university_id} />
                 <div className="flex items-center gap-2">
                   {review.verified_participation && (
                     <Badge tone="emerald">✓ Verified participation</Badge>

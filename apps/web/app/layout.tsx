@@ -6,6 +6,7 @@ import bn from '../messages/bn.json';
 import { LOCALE_COOKIE, resolveLocale } from '@/i18n';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/AppShell';
+import { SessionProvider } from '@/lib/modules/session';
 import { MotionProvider } from '@/components/motion/MotionProvider';
 import { sanitizeMessages } from '@/lib/messages';
 import { SafeSection } from '@/components/SafeSection';
@@ -36,9 +37,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 the header, the nav and every other section down with it. Now the
                 module area degrades and the campus stays navigable. */}
             <MotionProvider>
-              <AppShell profile={null}>
-                <SafeSection label="This page">{children}</SafeSection>
-              </AppShell>
+              <SessionProvider>
+                <AppShell profile={null}>
+                  <SafeSection label="This page">{children}</SafeSection>
+                </AppShell>
+              </SessionProvider>
             </MotionProvider>
           </NextIntlClientProvider>
         </ThemeProvider>

@@ -8,12 +8,16 @@ import { useApiList, useModuleList, useSession } from '@/lib/modules/client';
 import { Badge, Card, ModuleHeader, SkeletonList, SkeletonStat, Stat } from '@/components/modules/ui';
 import { getDemoUniversity } from '@/lib/modules/demo-data';
 import { asArray } from '@/lib/render-safe';
+import { useCampusScope } from '@/lib/use-campus-scope';
+import { CampusScopeToggle } from '@/components/CampusScopeToggle';
+import { withCampusScope } from '@/lib/campus-scope';
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
 
 export default function FeedPage() {
   const { locale, t } = useUi();
   const session = useSession();
-  const listings = useModuleList('marketplace', { limit: 3, enabled: session.authenticated });
+  const { scope } = useCampusScope();
+  const listings = useModuleList('marketplace', { limit: 3, enabled: session.authenticated, campusLocal: true });
   const tickets = useApiList('/api/complaints', { table: 'complaints_public', enabled: session.authenticated });
 
   if (!session.loading && !session.authenticated) {
@@ -47,12 +51,12 @@ export default function FeedPage() {
       <ModuleHeader
         icon={dashboard.icon}
         title={t(dashboard.title)}
-        blurb={t('Your campus at a glance')}
+        blurb={t(scope === 'all' ? 'Showing public listings across supported universities.' : 'Showing listings and activity for your university only.')}
         live
         demo={session.demo}
       >
         <Badge tone="emerald">{universityName}</Badge>
-        <Badge tone="teal">{t('Your campus only')}</Badge>
+        <CampusScopeToggle universityCode={profile?.universities?.code} />
       </ModuleHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -71,15 +75,15 @@ export default function FeedPage() {
       <Card className="p-5 space-y-2">
         <h2 className="text-sm font-bold">{t('Welcome back')}, {profile?.full_name}</h2>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('You are signed in with the')} <strong>{t(session.roles[0] === 'UNIVERSITY_ADMIN' ? 'University Admin' : session.roles[0] === 'FACULTY' ? 'Faculty / Staff' : session.roles[0] === 'ALUMNI' ? 'Alumni' : 'Student')}</strong> {t('role. Your modules and data are scoped to your university.')}
+          {t('You are signed in with the')} <strong>{t(session.roles[0] === 'UNIVERSITY_ADMIN' ? 'University Admin' : session.roles[0] === 'FACULTY' ? 'Faculty / Staff' : session.roles[0] === 'ALUMNI' ? 'Alumni' : 'Student')}</strong> {t('role. Private records remain protected.')}
         </p>
-        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t("No other university's rows are visible.")}</p>
+        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">{t('Public listings follow the selected university scope.')}</p>
       </Card>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold">{t('Open modules')}</h2>
-          <Link href="/" className="text-[11px] text-emerald-500 hover:underline">
+          <Link href={withCampusScope("/", scope)} className="text-[11px] text-emerald-500 hover:underline">
             {t('Campus Feed')} →
           </Link>
         </div>
@@ -97,7 +101,7 @@ export default function FeedPage() {
             <StaggerItem key={module.href} className="h-full">
               <motion.div {...cardHover} className="h-full">
                 <Link
-                  href={module.href}
+                  href={withCampusScope(module.href, scope)}
                   className="group card-glow flex h-full flex-col rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-3 text-xs font-medium"
                 >
                   <span className="text-base transition-transform duration-200 group-hover:scale-110" aria-hidden>

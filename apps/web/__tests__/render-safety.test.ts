@@ -341,7 +341,7 @@ describe('authentic campus imagery and one-click demo identities', () => {
     ] as const;
     for (const [code, file] of expected) {
       expect(seed, `${code} cover`).toContain(file);
-      expect(demoAuth, `${code} preview cover`).toContain(file);
+      expect(demoAuth, `${code} preview cover`).toContain(code === 'JU' ? '/campuses/ju.jpg?v=ju-shaheed-minar' : file);
     }
     expect(seed).toContain('commons.wikimedia.org/wiki/Special:FilePath');
     expect(demoAuth).toContain('commons.wikimedia.org/wiki/Special:FilePath');

@@ -458,7 +458,7 @@ export function demoNextStep(role: DemoRole): string {
 
 const DEMO_CAMPUS_COVERS: Record<string, string> = {
   DU: '/campuses/du.jpg',
-  JU: '/campuses/ju.jpg',
+  JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
   BUET: '/campuses/buet.jpg',
   RU: '/campuses/ru.jpg',
   CU: '/campuses/cu.jpg',
@@ -474,7 +474,7 @@ const DEMO_CAMPUS_COVERS: Record<string, string> = {
 
 const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   DU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Curzon_Hall,_University_of_Dhaka,_Dhaka.jpg?width=1600',
-  JU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Shaheed_Minar_of_Jahangirnagar_University.jpg?width=1600',
+  JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
   BUET: 'https://commons.wikimedia.org/wiki/Special:FilePath/BUET_Campus_(01).jpg?width=1600',
   SUST: 'https://commons.wikimedia.org/wiki/Special:FilePath/Sust_campus_5.JPG?width=1600',
   CU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Campus,_University_of_Chittagong_1.jpg?width=1600',

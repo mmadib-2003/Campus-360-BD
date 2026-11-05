@@ -1620,13 +1620,17 @@ export function demoList(
     searchColumns?: string[];
     orderBy?: { column: string; ascending: boolean };
     limit?: number;
+    allCampuses?: boolean;
+    rowFilter?: (row: Row) => boolean;
   } = {}
 ): Row[] {
   let rows = demoTable(table);
-  if (!GLOBAL_TABLES.has(table)) {
+  if (!GLOBAL_TABLES.has(table) && !options.allCampuses) {
     const active = getActiveDemoUniversity();
     rows = rows.filter((row) => row.university_id === active.id);
   }
+
+  if (options.rowFilter) rows = rows.filter(options.rowFilter);
 
   if (options.filters) {
     for (const [key, value] of Object.entries(options.filters)) {

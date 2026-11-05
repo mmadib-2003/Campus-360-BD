@@ -3,11 +3,14 @@
 
 import Link from 'next/link';
 import { useRealtimeModuleList } from '@/lib/modules/client';
+import { useCampusScope } from '@/lib/use-campus-scope';
+import { withCampusScope } from '@/lib/campus-scope';
 import { Badge, EmptyState, SkeletonList, statusTone } from '../ui';
 import { formatDateTime } from '@/lib/utils';
 import { asArray } from '@/lib/render-safe';
 
 export default function HealthPreview() {
+  const { scope } = useCampusScope();
   const requests = useRealtimeModuleList('blood-requests', { limit: 3 });
 
   if (requests.loading) return <SkeletonList rows={1} />;
@@ -20,7 +23,7 @@ export default function HealthPreview() {
       {asArray(requests.data).map((request) => (
         <Link
           key={String(request.id)}
-          href="/health"
+          href={withCampusScope("/health", scope)}
           className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs hover:border-emerald-500/40 border border-transparent transition"
         >
           <span className="px-2 py-0.5 rounded-lg bg-rose-600 text-white font-extrabold text-[11px]">

@@ -20,6 +20,7 @@ import {
 import { useSession } from '@/lib/modules/client';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { useCampusScope } from '@/lib/use-campus-scope';
 import { isSupabaseConfigured, trySupabaseBrowser } from '@/lib/supabase-browser';
 
 const CATEGORIES = [
@@ -36,6 +37,7 @@ const CATEGORIES = [
 
 export default function ArchivePage() {
   const session = useSession();
+  const { scope } = useCampusScope();
   const { t } = useUi();
   const [files, setFiles] = useState<Array<Record<string, any>>>([]);
   const [courseCode, setCourseCode] = useState('');
@@ -52,7 +54,7 @@ export default function ArchivePage() {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams();
+        const params = new URLSearchParams({ scope: scope === 'all' ? 'all_campuses' : 'my_campus' });
         if (courseCode) params.set('courseCode', courseCode);
         if (category !== 'ALL') params.set('category', category);
         const res = await fetch(`/api/archive?${params.toString()}`, { cache: 'no-store' });
@@ -74,7 +76,7 @@ export default function ArchivePage() {
     return () => {
       cancelled = true;
     };
-  }, [courseCode, category, session.loading]);
+  }, [courseCode, category, session.loading, session.userId, scope]);
 
   async function download(file: Record<string, any>) {
     setDownloading(String(file.id));

@@ -2,7 +2,8 @@
 import { NextRequest } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { isSupabaseServerConfigured } from '@/lib/request-context';
+import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
+import { parseCampusScope } from '@/lib/campus-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,16 +17,22 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const supabase = createSupabaseRouteClient();
-  const univId = req.nextUrl.searchParams.get('universityId');
+  const { auth, response } = await requireAuth();
+  const allCampuses = parseCampusScope(req.nextUrl.searchParams.get('scope')) === 'all';
+  // A missing/incomplete profile must never silently become an unfiltered
+  // campus-local read. Guests may explicitly opt into the public feed only.
+  if (!auth && (!allCampuses || response?.status !== 401)) return response!;
+  const supabase = auth?.supabase ?? createSupabaseRouteClient();
 
   let query = supabase
     .from('events')
-    .select('*, universities(code, name_en, name_bn)')
+    .select('id, university_id, organizer_id, host_organization, title_en, title_bn, description_en, description_bn, category, is_public, starts_at, ends_at, venue_name, formatted_address, text_directions_en, text_directions_bn, lat, lng, place_id, geofence_radius_m, cover_image_url, capacity, rsvp_required, rsvp_count, checkin_count, live_override, created_at, updated_at, universities(code, name_en, name_bn)')
     .is('deleted_at', null)
     .order('starts_at', { ascending: true });
 
-  if (univId) query = query.eq('university_id', univId);
+  if (auth && !allCampuses) query = query.eq('university_id', auth.profile.university_id);
+  else if (auth && allCampuses) query = query.or(`is_public.eq.true,university_id.eq.${auth.profile.university_id}`);
+  else if (!auth) query = query.eq('is_public', true);
 
   const { data, error } = await query;
   if (error) return apiError('EVENTS_FETCH_FAILED', error.message, 'ইভেন্ট লোড করা যায়নি।', 400);

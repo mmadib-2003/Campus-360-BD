@@ -222,7 +222,7 @@ describe('module route', () => {
   });
 
   it('scopes the tenant filter and `mine` to members only', () => {
-    expect(route).toContain('if (auth) query = query.eq(');
+    expect(route).toContain('if (auth && !allCampuses) query = query.eq(');
     expect(route).toContain("if (auth && spec.ownerColumn && sp.get('mine')");
   });
 

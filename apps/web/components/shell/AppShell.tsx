@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { notifyAuthChanged } from '@/lib/auth-events';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
@@ -16,6 +17,9 @@ import {
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { asArray, asRow, asText } from '@/lib/render-safe';
+import { CampusScopeToggle } from '@/components/CampusScopeToggle';
+import { useCampusScope } from '@/lib/use-campus-scope';
+import { withCampusScope } from '@/lib/campus-scope';
 
 const MODULES = [
   { href: '/', key: 'moduleFeed', icon: '🏠' },
@@ -48,6 +52,7 @@ const ROLE_OPTIONS: Array<{ value: DemoRole; key: string }> = [
 export function AppShell({ children }: { profile?: unknown; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { scope } = useCampusScope();
   const { t, toggleLocale, locale } = useUi();
   const session = useSession();
   const profile = session.profile as
@@ -103,9 +108,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
       /* ignore */
     }
     setDemoSignedOut(true);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
-    }
+    notifyAuthChanged();
     router.push('/signin');
     router.refresh();
   }
@@ -123,6 +126,16 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   const hall = asRow(profile?.halls);
   const roles = asArray(session.roles);
   const dashboardHref = session.isAdmin ? '/admin/console' : '/feed';
+  const roleLabel = session.isAdmin ? t('Admin')
+    : roles.includes('FACULTY') ? t('Faculty / Staff')
+    : roles.includes('ALUMNI') ? t('Alumni')
+    : session.isGovernance ? t('University Governance')
+    : roles.includes('STUDENT') ? t('Student') : t('Account');
+  const displayName = profile?.full_name?.trim() || session.email || t('Your account');
+  const scopePaths = ['/marketplace', '/skills', '/civic', '/complaints', '/events', '/health', '/archive', '/mentorship', '/housing', '/careers', '/dining', '/lost-found', '/sports', '/reviews'];
+  // The map renders its own toggle inside the page.
+  const showScope = session.authenticated && pathname !== '/events/map' && scopePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  const scopedHref = (href: string) => withCampusScope(href, scope);
 
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
@@ -173,13 +186,17 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               {locale === 'en' ? 'বাংলা' : 'EN'}
             </button>
             <NotificationBell />
-            {profile ? (
+            {session.loading ? (
+              <div role="status" aria-label={t('Loading account')} className="h-9 w-28 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+            ) : session.authenticated ? (
               <>
                 <Link
                   href={dashboardHref}
-                  className="hidden sm:inline-block max-w-[160px] truncate px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                  aria-label={`${displayName} — ${roleLabel}`}
+                  className="max-w-[130px] sm:max-w-[180px] min-w-0 rounded-xl px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
                 >
-                  {profile.full_name}
+                  <span className="block truncate font-semibold">{displayName}</span>
+                  <span className="block truncate text-[10px] text-emerald-100">{roleLabel}</span>
                 </Link>
                 <button
                   type="button"
@@ -189,6 +206,10 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                   {t('Sign Out')}
                 </button>
               </>
+            ) : session.error ? (
+              <button type="button" onClick={session.refresh} className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700">
+                {t('Retry account')}
+              </button>
             ) : (
               <>
                 <Link
@@ -208,7 +229,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
           </div>
         </div>
 
-        {profile && (
+        {session.authenticated && profile && (
           <div className="bg-slate-900 dark:bg-emerald-950/95 border-t border-slate-800 dark:border-emerald-800/40 px-4 py-1.5 text-slate-100">
             <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2 text-xs">
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
@@ -273,7 +294,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               return (
                 <Link
                   key={module.href}
-                  href={module.href}
+                  href={scopedHref(module.href)}
                   onClick={() => setMobileNavOpen(false)}
                   className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
                     active
@@ -301,7 +322,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               return (
                 <Link
                   key={module.href}
-                  href={module.href}
+                  href={scopedHref(module.href)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
                     active
                       ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
@@ -316,7 +337,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
           </nav>
         </aside>
 
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
       </div>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around py-2">
@@ -329,7 +350,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         ].map((tab) => (
           <Link
             key={tab.href}
-            href={tab.href}
+            href={scopedHref(tab.href)}
             className={`flex flex-col items-center text-[10px] ${
               pathname === tab.href ? 'text-emerald-500 font-semibold' : 'text-slate-500'
             }`}
