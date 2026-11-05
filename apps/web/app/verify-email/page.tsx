@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { notifyAuthChanged } from '@/lib/auth-events';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import { IdVerificationCard, type IdVerificationOutcome } from '@/components/auth/IdVerificationCard';
@@ -116,6 +117,7 @@ function VerifyEmailForm() {
           hallName: context.hallName,
         });
       }
+      notifyAuthChanged();
       router.refresh();
     } catch {
       setErrorMsg(t('Verification failed'));

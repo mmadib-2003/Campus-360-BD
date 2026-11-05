@@ -7,6 +7,8 @@ import { motion } from 'framer-motion';
 import { MODULE_META } from '@/lib/modules/labels';
 import dynamic from 'next/dynamic';
 import { useSession } from '@/lib/modules/client';
+import { useCampusScope } from '@/lib/use-campus-scope';
+import { withCampusScope } from '@/lib/campus-scope';
 import { Badge, Card, SkeletonList } from './ui';
 import { useUi } from '@/lib/i18n-client';
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
@@ -42,6 +44,7 @@ const ORDER = [
  */
 export function ModuleHub() {
   const session = useSession();
+  const { scope } = useCampusScope();
   const { locale, t } = useUi();
 
   return (
@@ -70,7 +73,7 @@ export function ModuleHub() {
             <StaggerItem key={key} className="h-full">
               <motion.div {...cardHover} className="h-full">
                 <Link
-                  href={meta.href}
+                  href={withCampusScope(meta.href, scope)}
                   className="group card-glow flex h-full flex-col justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                 >
                   <div className="flex items-start gap-3">
@@ -104,7 +107,7 @@ export function ModuleHub() {
             <h3 className="font-bold text-sm">🛍️ {t('Marketplace')}</h3>
             <p className="text-[11px] text-slate-400">{t('Buy, sell and rent verified student items with monitored campus handover points.')}</p>
           </div>
-          <Link href="/marketplace" className="text-[11px] font-semibold text-emerald-500">
+          <Link href={withCampusScope("/marketplace", scope)} className="text-[11px] font-semibold text-emerald-500">
             {t('Marketplace')} →
           </Link>
         </div>
@@ -117,7 +120,7 @@ export function ModuleHub() {
             <h3 className="font-bold text-sm">🩸 {t('Blood & Health Network')}</h3>
             <p className="text-[11px] text-slate-400">{t('Blood requests, donor matching and confidential counselling.')}</p>
           </div>
-          <Link href="/health?tab=donors" className="text-[11px] font-semibold text-emerald-500">
+          <Link href={withCampusScope("/health?tab=donors", scope)} className="text-[11px] font-semibold text-emerald-500">
             {t('Blood & Health Network')} →
           </Link>
         </div>

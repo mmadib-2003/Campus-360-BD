@@ -12,7 +12,12 @@ export async function GET(req: NextRequest) {
   if (!isSupabaseServerConfigured()) {
     // Preview deployments still get the full public registry so the signup
     // combobox, filters and domain hints work without any secrets.
-    return apiSuccess(demoUniversitiesPayload(), 200, undefined, REGISTRY_NO_STORE);
+    const universities = demoUniversitiesPayload().map((university) =>
+      university.code === 'JU'
+        ? { ...university, cover_image_url: '/campuses/ju.jpg?v=ju-shaheed-minar' }
+        : university
+    );
+    return apiSuccess(universities, 200, undefined, REGISTRY_NO_STORE);
   }
 
   // The gate is what keeps a broken `NEXT_PUBLIC_SUPABASE_URL` from escaping as

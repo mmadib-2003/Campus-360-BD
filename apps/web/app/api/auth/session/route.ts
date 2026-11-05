@@ -1,5 +1,6 @@
 // apps/web/app/api/auth/session/route.ts
-import { apiSuccess } from '@/lib/api-response';
+import { apiError, apiSuccess } from '@/lib/api-response';
+import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import {
@@ -45,9 +46,12 @@ export async function GET() {
   if (hasPublicSupabaseEnv()) {
     try {
       const supabase = createSupabaseRouteClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      // No session or a rejected token is a real sign-out. A network or
+      // upstream outage is not: the header must retain its last known user.
+      if (authError && !isAuthSessionMissingError(authError) && authError.status !== 401 && authError.status !== 403) {
+        throw authError;
+      }
 
       if (user) {
         const dbClient = serverConfigured ? createSupabaseAdminClient() : supabase;
@@ -138,7 +142,10 @@ export async function GET() {
         });
       }
     } catch {
-      /* Fall through to signed `campus360_demo_session` cookie */
+      if (!demoCookieSession) {
+        return apiError('SESSION_UNAVAILABLE', 'Unable to verify your session. Please retry.', 'সেশন যাচাই করা যায়নি। আবার চেষ্টা করুন।', 503);
+      }
+      // An independently verified signed quick-demo cookie is still usable.
     }
   }
 

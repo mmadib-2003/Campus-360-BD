@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getModule } from './registry';
 import { demoTickets } from '@/lib/demo-tickets';
+import { SHARED_MODULES, isSharedDemoRowVisible, LOCAL_ACTION_PARENTS } from '@/lib/campus-scope';
+import { useCampusScope } from '@/lib/use-campus-scope';
 import {
   demoDelete,
   demoInsert,
@@ -12,10 +14,7 @@ import {
   demoUpdate,
   getActiveDemoUniversity,
   getDemoProfile,
-  getDemoSession,
-  isDemoSignedOut,
   subscribeDemoRealtime,
-  subscribeDemoSession,
 } from './demo-data';
 import { trySupabaseBrowser, isSupabaseConfigured } from '@/lib/supabase-browser';
 import { subscribeToTable } from '@/lib/realtime';
@@ -27,136 +26,14 @@ export interface ListOptions {
   search?: string;
   limit?: number;
   mine?: boolean;
+  /** Keep supporting pickers campus-local even when the main listing is global. */
+  campusLocal?: boolean;
   enabled?: boolean;
 }
 
-export interface SessionState {
-  loading: boolean;
-  authenticated: boolean;
-  demo: boolean;
-  userId: string | null;
-  profile: {
-    id: string;
-    full_name: string;
-    email?: string;
-    trust_level: string;
-    university_id?: string;
-    universities?: { code: string; name_en: string; name_bn: string } | null;
-  } | null;
-  roles: string[];
-  isAdmin: boolean;
-  isGovernance: boolean;
-}
-
-/** Reads the current session once and shares it with every module component. */
-export function useSession(): SessionState {
-  const [state, setState] = useState<SessionState>({
-    loading: true,
-    authenticated: false,
-    demo: false,
-    userId: null,
-    profile: null,
-    roles: [],
-    isAdmin: false,
-    isGovernance: false,
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-    let unsubscribeDemo: (() => void) | null = null;
-
-    async function load() {
-      if (!isSupabaseConfigured()) {
-        const applyDemoSession = () => {
-          if (cancelled) return;
-          if (isDemoSignedOut()) {
-            setState({
-              loading: false,
-              authenticated: false,
-              demo: true,
-              userId: null,
-              profile: null,
-              roles: [],
-              isAdmin: false,
-              isGovernance: false,
-            });
-            return;
-          }
-          const session = getDemoSession();
-          const profile = getDemoProfile(session);
-          setState({
-            loading: false,
-            authenticated: true,
-            demo: true,
-            userId: profile.id,
-            profile: profile as any,
-            roles: profile.roles,
-            isAdmin: session.role === 'admin',
-            isGovernance: session.role === 'governance',
-          });
-        };
-        applyDemoSession();
-        unsubscribeDemo = subscribeDemoSession(applyDemoSession);
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/auth/session', { cache: 'no-store', signal: AbortSignal.timeout(3000) });
-        const payload = await res.json();
-        const data = payload?.data;
-        if (!cancelled) {
-          if (payload?.success && data?.authenticated && data.profile) {
-            const roles = (data.roles ?? []).map((r: Row) => String(r.role));
-            setState({
-              loading: false,
-              authenticated: true,
-              demo: Boolean(data.demo),
-              userId: String(data.profile.id),
-              profile: data.profile,
-              roles,
-              isAdmin: roles.some((r: string) => ['ADMIN', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN'].includes(r)),
-              isGovernance: roles.some((r: string) =>
-                ['GOVERNANCE', 'GOVERNING_BODY', 'UNIVERSITY_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(r)
-              ),
-            });
-          } else {
-            setState({
-              loading: false,
-              authenticated: false,
-              demo: false,
-              userId: null,
-              profile: null,
-              roles: [],
-              isAdmin: false,
-              isGovernance: false,
-            });
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setState((prev) => ({ ...prev, loading: false, authenticated: false }));
-        }
-      }
-    }
-
-    load();
-    const onAuthChanged = () => {
-      void load();
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('campus360:auth-changed', onAuthChanged);
-    }
-    return () => {
-      cancelled = true;
-      unsubscribeDemo?.();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('campus360:auth-changed', onAuthChanged);
-      }
-    };
-  }, []);
-
-  return state;
-}
+export { useSession } from './session';
+export type { SessionState } from './session';
+import { useSession } from './session';
 
 /**
  * Every list assignment in this file goes through here.
@@ -191,6 +68,8 @@ interface FetchState<T> {
 export function useModuleList<T extends Row = Row>(moduleKey: string, options: ListOptions = {}): FetchState<T[]> {
   const spec = useMemo(() => getModule(moduleKey), [moduleKey]);
   const session = useSession();
+  const { scope } = useCampusScope();
+  const allCampuses = session.authenticated && scope === 'all' && SHARED_MODULES.has(moduleKey) && !options.mine && !options.campusLocal;
   const [data, setDataState] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,6 +96,8 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
       // `enabled: false` means "this list belongs to a session", not "still loading".
       // Without this the guest view of a mixed page (careers, dining, sports) would
       // sit on a skeleton in every member-only section forever.
+      setDataState([]);
+      setTotal(0);
       setLoading(false);
       return;
     }
@@ -225,11 +106,15 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
 
     async function load() {
       setLoading(true);
+      setDataState([]);
+      setTotal(0);
       setError(null);
 
       if (session.demo || !isSupabaseConfigured()) {
         const rows = toList<T>(
           demoList(activeSpec.table, {
+            allCampuses,
+            rowFilter: allCampuses ? (row) => isSharedDemoRowVisible(moduleKey, row) : undefined,
             filters: options.filters as Record<string, string>,
             search: options.search,
             searchColumns: activeSpec.searchColumns,
@@ -254,6 +139,7 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
         if (options.search) params.set('q', options.search);
         if (options.limit) params.set('limit', String(options.limit));
         if (options.mine) params.set('mine', 'true');
+        if (allCampuses) params.set('scope', 'all_campuses');
 
         const res = await fetch(`/api/modules/${moduleKey}?${params.toString()}`, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
         const payload = await res.json();
@@ -280,7 +166,7 @@ export function useModuleList<T extends Row = Row>(moduleKey: string, options: L
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moduleKey, filtersKey, options.search, options.limit, options.mine, enabled, tick, session.loading, session.demo]);
+  }, [moduleKey, filtersKey, options.search, options.limit, options.mine, enabled, tick, session.loading, session.demo, session.userId, session.profile?.university_id, allCampuses]);
 
   // Preview mode: any write in another tab refreshes this list within ~1s.
   useEffect(() => {
@@ -348,6 +234,17 @@ export interface MutateResult {
   demo?: boolean;
 }
 
+function demoParentIsLocal(moduleKey: string, values: Row) {
+  const parent = LOCAL_ACTION_PARENTS[moduleKey];
+  if (!parent || !(parent[0] in values)) return true;
+  // The preview store calls the public civic projection complaints_public.
+  const table = parent[1] === 'complaints' ? 'complaints_public' : parent[1];
+  return demoTable(table).some((row) => row.id === values[parent[0]] && row.university_id === getActiveDemoUniversity().id);
+}
+function demoRowIsLocal(table: string, id: string) {
+  return demoTable(table).some((row) => row.id === id && row.university_id === getActiveDemoUniversity().id);
+}
+
 /** Create/update a module row through the tenant-isolated API (demo fallback aware). */
 export function useModuleMutation(moduleKey: string) {
   const session = useSession();
@@ -360,6 +257,7 @@ export function useModuleMutation(moduleKey: string) {
       setPending(true);
       try {
         if (session.demo || !isSupabaseConfigured()) {
+          if (!demoParentIsLocal(moduleKey, values)) return { ok: false, error: 'Actions are limited to items from your campus.' };
           const systemDefaults: Record<string, Row> = {
             'marketplace-orders': {
               buyer_id: getDemoProfile().id,
@@ -388,11 +286,11 @@ export function useModuleMutation(moduleKey: string) {
             'skill-applications': { applicant_id: getDemoProfile().id },
           };
           const created = demoInsert(spec.table, {
-            university_id: getActiveDemoUniversity().id,
             ...(systemDefaults[moduleKey] ?? {}),
             ...(spec.ownerColumn ? { [spec.ownerColumn]: getDemoProfile().id } : {}),
             profiles: { full_name: getDemoProfile().full_name, trust_level: getDemoProfile().trust_level },
             ...values,
+            university_id: getActiveDemoUniversity().id,
           });
           return { ok: true, data: created, demo: true };
         }
@@ -427,7 +325,9 @@ export function useModuleMutation(moduleKey: string) {
       setPending(true);
       try {
         if (session.demo || !isSupabaseConfigured()) {
-          const updated = demoUpdate(spec.table, id, values);
+          if (!demoRowIsLocal(spec.table, id) || !demoParentIsLocal(moduleKey, values)) return { ok: false, error: 'Actions are limited to items from your campus.' };
+          const { university_id: _ignoredUniversity, ...safeValues } = values;
+          const updated = demoUpdate(spec.table, id, safeValues);
           return updated ? { ok: true, data: updated, demo: true } : { ok: false, error: 'Not found in demo store' };
         }
         const res = await fetch(`/api/modules/${moduleKey}`, {
@@ -456,6 +356,7 @@ export function useModuleMutation(moduleKey: string) {
       setPending(true);
       try {
         if (session.demo || !isSupabaseConfigured()) {
+          if (!demoRowIsLocal(spec.table, id)) return { ok: false, error: 'Actions are limited to items from your campus.' };
           demoDelete(spec.table, id);
           return { ok: true, demo: true };
         }
@@ -477,7 +378,8 @@ export function useModuleMutation(moduleKey: string) {
 
 /** Local demo rows for a table (used by bespoke widgets that need joins). */
 export function readDemoRows(table: string): Row[] {
-  return demoTable(table);
+  // Private demo data follows the active campus, even when public scope is global.
+  return demoList(table);
 }
 
 export function demoInsertRow(table: string, row: Row) {
@@ -499,27 +401,11 @@ export function useIsDemo() {
 export function useRealtimeModuleList<T extends Row = Row>(moduleKey: string, options: ListOptions = {}) {
   const spec = useMemo(() => getModule(moduleKey), [moduleKey]);
   const list = useModuleList<T>(moduleKey, options);
-  const { setData } = list;
-
-  useRealtimeTable(
-    spec?.realtimeTable ?? null,
-    {
-      onInsert: (row) => {
-        setData((prev) => {
-          if (prev.some((item) => String(item.id) === String(row.id))) return prev;
-          return [row as T, ...prev];
-        });
-      },
-      onUpdate: (row) => {
-        setData((prev) => prev.map((item) => (String(item.id) === String(row.id) ? ({ ...item, ...row } as T) : item)));
-      },
-      onDelete: (row) => {
-        setData((prev) => prev.filter((item) => String(item.id) !== String(row.id)));
-      },
-    },
-    { enabled: options.enabled !== false }
-  );
-
+  // Never insert raw realtime payloads into a scoped/filtered result: re-query
+  // through the API so campus, visibility, search, and owner rules all apply.
+  useRealtimeTable(spec?.realtimeTable ?? null, {
+    onInsert: list.refresh, onUpdate: list.refresh, onDelete: list.refresh,
+  }, { enabled: options.enabled !== false });
   return list;
 }
 
@@ -533,6 +419,9 @@ export function useApiList<T extends Row = Row>(
   options: { query?: Record<string, string | number | undefined>; table?: string; enabled?: boolean } = {}
 ): FetchState<T[]> {
   const session = useSession();
+  const { scope } = useCampusScope();
+  const allCampuses = scope === 'all' && options.query?.scope !== 'admin' &&
+    (endpoint === '/api/events' || (session.authenticated && endpoint === '/api/civic/tickets'));
   const [data, setDataState] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -543,18 +432,31 @@ export function useApiList<T extends Row = Row>(
   const enabled = options.enabled !== false;
 
   useEffect(() => {
-    if (!enabled) { setLoading(false); return; }
+    if (!enabled) { setDataState([]); setTotal(0); setLoading(false); return; }
     if (session.loading) return;
     let cancelled = false;
 
     async function load() {
       setLoading(true);
+      setDataState([]);
+      setTotal(0);
       setError(null);
       if (!isSupabaseConfigured() || session.demo) {
         const campus = getActiveDemoUniversity();
-        const rows = toList<T>(endpoint === '/api/complaints'
+        let rows = toList<T>(endpoint === '/api/complaints'
           ? demoTickets(campus.id, campus.code)
-          : options.table ? demoList(options.table, {}) : []);
+          : options.table ? demoList(options.table, {
+              allCampuses,
+              rowFilter: endpoint === '/api/civic/tickets'
+                ? (row) => row.is_public_issue === true && !['HARASSMENT', 'RAGGING_BULLYING', 'SEXUAL_HARASSMENT', 'DISCRIMINATION', 'FINANCIAL'].includes(String(row.category))
+                : allCampuses && endpoint === '/api/events'
+                  ? (row) => row.is_public === true || (session.authenticated && row.university_id === campus.id)
+                  : undefined,
+            }) : []);
+        if (endpoint === '/api/civic/tickets') {
+          const publicColumns = ['id', 'university_id', 'tracking_code', 'title', 'category', 'severity', 'status', 'upvotes_count', 'is_public_issue', 'location_hint', 'evidence_urls', 'sla_due_at', 'sla_breached', 'created_at', 'last_activity_at', 'resolved_at', 'resolution_summary'];
+          rows = rows.map((row) => Object.fromEntries(publicColumns.filter((key) => key in row).map((key) => [key, row[key]])) as T);
+        }
         if (!cancelled) {
           setDataState(rows);
           setTotal(rows.length);
@@ -568,6 +470,7 @@ export function useApiList<T extends Row = Row>(
         for (const [key, value] of Object.entries(options.query ?? {})) {
           if (value !== undefined && value !== '') params.set(key, String(value));
         }
+        if (allCampuses) params.set('scope', 'all_campuses');
         const res = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
         const payload = await res.json();
         if (cancelled) return;
@@ -592,7 +495,7 @@ export function useApiList<T extends Row = Row>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, queryKey, enabled, tick, session.loading, session.demo]);
+  }, [endpoint, queryKey, enabled, tick, session.loading, session.demo, session.userId, session.profile?.university_id, allCampuses]);
 
   useEffect(() => {
     if (isSupabaseConfigured()) return;

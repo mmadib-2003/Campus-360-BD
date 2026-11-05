@@ -55,7 +55,7 @@ export default function MarketplacePage() {
     search,
     limit: 60,
   });
-  const pickupPoints = useRealtimeModuleList('marketplace-pickup-points', {});
+  const pickupPoints = useRealtimeModuleList('marketplace-pickup-points', { campusLocal: true });
   const orders = useRealtimeModuleList('marketplace-orders', { limit: 10, enabled: !!session.authenticated });
   const { create } = useModuleMutation('marketplace');
   const orderMutation = useModuleMutation('marketplace-orders');

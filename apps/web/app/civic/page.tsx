@@ -26,6 +26,7 @@ import { trySupabaseBrowser } from '@/lib/supabase-browser';
 import { timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { demoUpdate } from '@/lib/modules/demo-data';
+import { CampusBadge } from '@/components/CampusBadge';
 import { asArray } from '@/lib/render-safe';
 
 const CATEGORIES = [
@@ -135,6 +136,10 @@ export default function CivicPage() {
       return;
     }
     if (session.demo) {
+      if (ticket.university_id !== session.profile?.university_id) {
+        toast.show('Actions are limited to items from your campus.', 'rose');
+        return;
+      }
       const updated = demoUpdate('complaints_public', id, {
         upvotes_count: Number(ticket.upvotes_count ?? 0) + 1,
       });
@@ -373,6 +378,7 @@ export default function CivicPage() {
                       </Link>
                     </div>
                     <h3 className="font-bold text-sm">{ticket.title}</h3>
+                    <CampusBadge universityId={ticket.university_id} />
                     {ticket.location_hint && (
                       <p className="text-[11px] text-slate-400">📍 {ticket.location_hint}</p>
                     )}

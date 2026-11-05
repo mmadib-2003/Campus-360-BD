@@ -1,16 +1,29 @@
 // apps/web/app/api/modules/[module]/route.ts
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
-import { createSupabaseRouteClient } from '@/lib/supabase-server';
+import { isSupabaseServerConfigured, requireAuth, type RequestAuth } from '@/lib/request-context';
+import { createSupabaseRouteClient, createSupabasePublicClient } from '@/lib/supabase-server';
 import { getModule, ModuleSpec, resolveListingAccess } from '@/lib/modules/registry';
 import { coerceField, randomCode } from '@/lib/modules/coerce';
 import { clampNumber } from '@/lib/utils';
 import { runModuleSideEffects } from '@/lib/modules/side-effects';
+import { SHARED_MODULES, applySharedListingVisibility, LOCAL_ACTION_PARENTS, parseCampusScope } from '@/lib/campus-scope';
 
 const MAX_LIMIT = 100;
 
 export const dynamic = 'force-dynamic';
+
+// Validate parent ownership even for demo sessions backed by a service role.
+async function validateLocalParent(auth: RequestAuth, moduleKey: string, payload: Record<string, unknown>): Promise<Response | null> {
+  const parent = LOCAL_ACTION_PARENTS[moduleKey];
+  if (!parent || !(parent[0] in payload)) return null;
+  if (!payload[parent[0]]) return apiError('CAMPUS_MISMATCH', 'A valid campus item is required.', 'ক্যাম্পাসের একটি বৈধ আইটেম প্রয়োজন।', 403);
+  const { data, error } = await auth.supabase.from(parent[1]).select('id')
+    .eq('id', payload[parent[0]] as string).eq('university_id', auth.profile.university_id).maybeSingle();
+  return error || !data
+    ? apiError('CAMPUS_MISMATCH', 'Actions are limited to items from your campus.', 'কার্যক্রম আপনার ক্যাম্পাসের আইটেমে সীমাবদ্ধ।', 403)
+    : null;
+}
 
 export async function GET(req: NextRequest, { params }: { params: { module: string } }) {
   const spec = getModule(params.module);
@@ -38,11 +51,15 @@ export async function GET(req: NextRequest, { params }: { params: { module: stri
   // listing instead of filtering it. RLS is what bounds this request -- the policy in
   // 0013 limits it to currently-listed rows, and the column grants drop contact
   // details, which is why `publicSelect` exists.
-  const supabase = auth ? auth.supabase : createSupabaseRouteClient();
+  const allCampuses = Boolean(auth && parseCampusScope(sp.get('scope')) === 'all' && SHARED_MODULES.has(spec.key) && sp.get('mine') !== 'true');
+  // Use anonymous column grants as well as anonymous row policies: authenticated
+  // base-table SELECT would expose other campuses' private contact columns.
+  const supabase = allCampuses ? createSupabasePublicClient() : auth ? auth.supabase : createSupabaseRouteClient();
   const selection =
-    access === 'public' ? (spec.publicSelect ?? spec.select) : (spec.select ?? '*');
+    access === 'public' || allCampuses ? (spec.publicSelect ?? spec.select) : (spec.select ?? '*');
   let query = supabase.from(spec.table).select(selection ?? '*', { count: 'exact' });
-  if (auth) query = query.eq('university_id', auth.profile.university_id);
+  if (auth && !allCampuses) query = query.eq('university_id', auth.profile.university_id);
+  if (allCampuses) query = applySharedListingVisibility(query, spec.key);
 
   if (spec.softDelete) query = query.is('deleted_at', null);
 
@@ -113,6 +130,9 @@ export async function POST(req: NextRequest, { params }: { params: { module: str
   if (errors.length) {
     return apiError('VALIDATION_FAILED', errors.join('; '), 'তথ্য সঠিকভাবে পূরণ করুন।', 422, errors);
   }
+
+  const parentError = await validateLocalParent(auth, spec.key, payload);
+  if (parentError) return parentError;
 
   // Owner + system columns injected server-side (never trusted from client).
   if (spec.ownerColumn) payload[spec.ownerColumn] = auth.user.id;
@@ -292,6 +312,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { module: st
   if (!Object.keys(payload).length) {
     return apiError('NOTHING_TO_UPDATE', 'No updatable fields were provided.', 'কোনো পরিবর্তন দেওয়া হয়নি।', 400);
   }
+
+  const parentError = await validateLocalParent(auth, spec.key, payload);
+  if (parentError) return parentError;
 
   let update = auth.supabase
     .from(spec.table)

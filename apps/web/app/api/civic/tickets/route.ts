@@ -4,6 +4,7 @@ import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured, requireAuth } from '@/lib/request-context';
 import { isDemoEmail, readSignedDemoSession } from '@/lib/demo-auth';
 import { demoTickets } from '@/lib/demo-tickets';
+import { parseCampusScope } from '@/lib/campus-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export const dynamic = 'force-dynamic';
 const PRIVATE_CATEGORIES = ['HARASSMENT', 'RAGGING_BULLYING', 'SEXUAL_HARASSMENT', 'DISCRIMINATION', 'FINANCIAL'];
 
 const PUBLIC_COLUMNS =
-  'id, tracking_code, title, category, severity, status, upvotes_count, is_public_issue, location_hint, evidence_urls, sla_due_at, sla_breached, created_at, last_activity_at, resolved_at, resolution_summary';
+  'id, university_id, tracking_code, title, category, severity, status, upvotes_count, is_public_issue, location_hint, evidence_urls, sla_due_at, sla_breached, created_at, last_activity_at, resolved_at, resolution_summary';
 
 /**
  * Public civic ticket board.
@@ -42,14 +43,14 @@ export async function GET(req: NextRequest) {
   let query = auth.admin
     .from('complaints')
     .select(isAdminScope ? `${PUBLIC_COLUMNS}, is_anonymous, assigned_unit_id, student_rating` : PUBLIC_COLUMNS)
-    .eq('university_id', auth.profile.university_id)
     .neq('category', 'SEXUAL_HARASSMENT')
     .neq('category', 'RAGGING_BULLYING')
     .neq('category', 'HARASSMENT')
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (!isAdminScope) query = query.eq('is_public_issue', true);
+  if (parseCampusScope(scope) !== 'all' || isAdminScope) query = query.eq('university_id', auth.profile.university_id);
+  if (!isAdminScope) query = query.eq('is_public_issue', true).neq('category', 'DISCRIMINATION').neq('category', 'FINANCIAL');
 
   const { data, error } = await query;
   if (error) {

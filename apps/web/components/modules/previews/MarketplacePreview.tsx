@@ -3,11 +3,14 @@
 
 import Link from 'next/link';
 import { useRealtimeModuleList } from '@/lib/modules/client';
+import { useCampusScope } from '@/lib/use-campus-scope';
+import { withCampusScope } from '@/lib/campus-scope';
 import { Badge, EmptyState, SkeletonList, statusTone } from '../ui';
 import { formatBdt, timeAgo } from '@/lib/utils';
 import { asArray } from '@/lib/render-safe';
 
 export default function MarketplacePreview() {
+  const { scope } = useCampusScope();
   const listings = useRealtimeModuleList('marketplace', { limit: 3 });
 
   if (listings.loading) return <SkeletonList rows={1} />;
@@ -26,7 +29,7 @@ export default function MarketplacePreview() {
       {asArray(listings.data).map((listing) => (
         <Link
           key={String(listing.id)}
-          href="/marketplace"
+          href={withCampusScope("/marketplace", scope)}
           className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:border-emerald-500/40 border border-transparent transition text-xs space-y-1"
         >
           <div className="flex items-center justify-between gap-1">

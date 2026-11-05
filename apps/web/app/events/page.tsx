@@ -25,10 +25,12 @@ import { useApiList, useModuleMutation, useRealtimeModuleList, useRealtimeTable,
 import { formatDateTime, timeAgo } from '@/lib/utils';
 import { useUi } from '@/lib/i18n-client';
 import { CampusBadge } from '@/components/CampusBadge';
+import { useCampusScope } from '@/lib/use-campus-scope';
 import { asArray } from '@/lib/render-safe';
 
 export default function EventsPage() {
   const session = useSession();
+  const { scope } = useCampusScope();
   const { t } = useUi();
   const events = useApiList('/api/events', { table: 'events', enabled: !!session.authenticated });
   const rows = events.data;
@@ -158,7 +160,7 @@ export default function EventsPage() {
         demo={demo}
       >
         <Link
-          href="/events/map"
+          href={`/events/map?scope=${scope === 'all' ? 'all_campuses' : 'my_campus'}`}
           className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-100 border border-slate-700"
         >
           📍 Live map
@@ -237,7 +239,7 @@ export default function EventsPage() {
                           Interested
                         </Button>
                         <Link
-                          href={`/events/map?event=${event.id}`}
+                          href={`/events/map?event=${event.id}&scope=${scope === 'all' ? 'all_campuses' : 'my_campus'}`}
                           className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700"
                         >
                           📍 Directions & check-in

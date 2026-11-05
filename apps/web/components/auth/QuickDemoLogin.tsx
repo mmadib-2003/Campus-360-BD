@@ -14,6 +14,7 @@
 // ============================================================================
 
 import React from 'react';
+import { notifyAuthChanged } from '@/lib/auth-events';
 import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import {
@@ -73,9 +74,7 @@ export function QuickDemoLogin() {
         fullName: demoAccount?.fullName || account.fullName,
       });
 
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('campus360:auth-changed'));
-      }
+      notifyAuthChanged();
 
       const destination: string =
         payload?.redirectTo ||
