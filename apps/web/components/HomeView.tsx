@@ -131,7 +131,7 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
             <div>
               <h2 className="text-lg font-bold">{t('Supported Public Universities Registry')}</h2>
               <p className="text-[11px] text-slate-400">
-                {t('Authentic campus photography and institutional logos via Wikimedia Commons.')}
+                {t('Authentic campus photography supplied by campus contributors; remaining photos and institutional logos via Wikimedia Commons.')}
               </p>
             </div>
             <Link href="/signup" className="text-xs text-emerald-400 hover:underline">
