@@ -3,11 +3,14 @@ import { apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { createSupabaseRouteClient } from '@/lib/supabase-server';
 import { clearDemoSession } from '@/lib/demo-auth';
+import { clearVerifiedSession } from '@/lib/verified-session';
 
 export async function POST() {
   // Always clear the signed `campus360_demo_session` cookie so demo users can
   // cleanly switch roles or sign out regardless of how their session started.
   clearDemoSession();
+  // The OTP-verified identity must die with the session as well.
+  clearVerifiedSession();
 
   const hasPublicSupabase = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&

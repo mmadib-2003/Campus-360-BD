@@ -84,6 +84,14 @@ export const VerifyOtpSchema = z.object({
   // Retries may omit context and use the signed, issued challenge instead.
   hallId: NullableIdSchema,
   programSession: ProgramSessionSchema.optional(),
+  // The browser echoes the selection it stored at request-otp time so the
+  // account can be provisioned even when the challenge row is unreadable.
+  // The issued challenge stays authoritative: these only fill gaps.
+  universityId: z.string().trim().min(1).max(100).optional(),
+  departmentId: NullableIdSchema,
+  programId: NullableIdSchema,
+  fullName: z.string().trim().max(160).optional(),
+  studentId: z.string().trim().max(80).optional(),
 }).superRefine((context, zod) => {
   if (context.role && context.role !== 'student' && context.hallId != null) {
     zod.addIssue({ code: z.ZodIssueCode.custom, path: ['hallId'], message: 'Only students may submit a hall' });

@@ -2,7 +2,7 @@
 // Real-time email OTP unit coverage: code strength, TTL policy, digest
 // comparison, the message shape and SMTP error classification. No network, no
 // database, no credentials.
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   OTP_CODE_OFFSET,
   OTP_CODE_SPACE,
@@ -295,5 +295,355 @@ describe('otp verification receipt (idempotent duplicate calls)', () => {
     const [payloadPart, sigPart] = token.split('.');
     const tamperedSig = (sigPart[0] === 'A' ? 'B' : 'A') + sigPart.slice(1);
     expect(otpVerifiedReceiptMatches(`${payloadPart}.${tamperedSig}`, EMAIL, code)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Account loading after a valid code (the "account could not be loaded" fix).
+//
+// These are route-level tests: POST /api/auth/verify-otp against an in-memory
+// Supabase double. vi.mock factories are hoisted above the imports by Vitest,
+// so they only affect the module graph the route pulls in — the pure-function
+// suites above keep exercising the real implementations.
+// ---------------------------------------------------------------------------
+const db = vi.hoisted(() => ({
+  configured: true,
+  profiles: new Map<string, Record<string, unknown>>(),
+  authUsers: new Map<string, string>(),
+  profileLookupError: null as null | { message: string },
+  profileUpsertError: null as null | { message: string },
+  createUserError: null as null | { message: string; code?: string },
+  generateLinkFails: false,
+  sessionExchangeFails: false,
+  challenge: null as null | Record<string, unknown>,
+  cookieChallenge: null as null | Record<string, unknown>,
+  profileWrites: [] as Array<Record<string, unknown>>,
+  roleWrites: [] as Array<Record<string, unknown>>,
+  sessions: [] as Array<Record<string, unknown>>,
+  createdUsers: [] as Array<Record<string, unknown>>,
+  roleRows: [] as Array<{ role: string }>,
+  reset() {
+    this.configured = true;
+    this.profiles.clear();
+    this.authUsers.clear();
+    this.profileLookupError = null;
+    this.profileUpsertError = null;
+    this.createUserError = null;
+    this.generateLinkFails = false;
+    this.sessionExchangeFails = false;
+    this.challenge = null;
+    this.cookieChallenge = null;
+    this.profileWrites = [];
+    this.roleWrites = [];
+    this.sessions = [];
+    this.createdUsers = [];
+    this.roleRows = [];
+  },
+}));
+
+vi.mock('@/lib/request-context', () => ({ isSupabaseServerConfigured: () => db.configured }));
+vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: () => ({ allowed: true }) }));
+vi.mock('next/headers', () => ({
+  cookies: () => ({ get: vi.fn(() => undefined), set: vi.fn(), delete: vi.fn() }),
+}));
+vi.mock('@/lib/supabase-server', () => ({
+  createSupabaseRouteClient: () => ({
+    auth: {
+      getUser: async () => ({ data: { user: null }, error: null }),
+      verifyOtp: async () =>
+        db.sessionExchangeFails
+          ? { data: { user: null }, error: { message: 'GoTrue unavailable' } }
+          : { data: { user: { id: 'auth-id', email: 'verified@example.com' } }, error: null },
+    },
+  }),
+  createSupabaseAdminClient: () => ({
+    from(table: string) {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: (_column: string, value: string) => ({
+              maybeSingle: async () =>
+                db.profileLookupError
+                  ? { data: null, error: db.profileLookupError }
+                  : { data: db.profiles.get(String(value).toLowerCase()) ?? null, error: null },
+            }),
+          }),
+          update: (payload: Record<string, unknown>) => ({
+            eq: async () => {
+              db.profileWrites.push(payload);
+              return { error: null };
+            },
+          }),
+          upsert: async (row: Record<string, unknown>) => {
+            if (db.profileUpsertError) return { error: db.profileUpsertError };
+            db.profileWrites.push(row);
+            db.profiles.set(String(row.email).toLowerCase(), row);
+            return { error: null };
+          },
+        };
+      }
+      if (table === 'user_roles') {
+        return {
+          select: () => ({ eq: async () => ({ data: db.roleRows, error: null }) }),
+          upsert: async (row: Record<string, unknown>) => {
+            db.roleWrites.push(row);
+            return { error: null };
+          },
+        };
+      }
+      if (table === 'universities') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { code: 'JU', name_en: 'Jahangirnagar University' }, error: null }),
+            }),
+          }),
+        };
+      }
+      return { insert: async () => ({ error: null }), update: () => ({ eq: async () => ({ error: null }) }) };
+    },
+    auth: {
+      admin: {
+        createUser: async (attributes: Record<string, unknown>) => {
+          db.createdUsers.push(attributes);
+          if (db.createUserError) return { data: { user: null }, error: db.createUserError };
+          const email = String(attributes.email).toLowerCase();
+          if (db.authUsers.has(email)) {
+            return { data: { user: null }, error: { code: 'email_exists', message: 'User already registered' } };
+          }
+          const id = `auth-${db.authUsers.size + 1}`;
+          db.authUsers.set(email, id);
+          return { data: { user: { id, email } }, error: null };
+        },
+        generateLink: async ({ email }: { email: string }) => {
+          if (db.generateLinkFails) return { data: { properties: null, user: null }, error: { message: 'link generation blocked' } };
+          const id = db.authUsers.get(String(email).toLowerCase());
+          return {
+            data: { properties: { hashed_token: 'token' }, user: id ? { id, email } : null },
+            error: null,
+          };
+        },
+        listUsers: async () => ({
+          data: { users: [...db.authUsers.entries()].map(([email, id]) => ({ id, email })) },
+          error: null,
+        }),
+      },
+    },
+  }),
+}));
+vi.mock('@/lib/demo-auth', () => ({
+  DEMO_OTP_COOKIE: 'campus360_demo_otp',
+  demoNextStep: (role: string) => (role === 'admin' ? '/admin/console' : '/feed'),
+  normalizeDemoRole: (role: unknown) => role ?? 'student',
+  readSignedDemoSession: () => null,
+  verifyDemoChallenge: () => ({ ok: false, error: 'no demo challenge', errorBn: '', status: 404 }),
+  issueSignedDemoSession: vi.fn(),
+}));
+vi.mock('@/lib/otp-store', () => ({
+  readActiveOtpChallenge: async () => db.challenge,
+  readRecentVerifiedOtpChallenge: async () => null,
+  consumeOtpChallenge: vi.fn(async () => undefined),
+  clearProfileDemoOtp: vi.fn(async () => undefined),
+  hasAttemptsLeft: () => true,
+  isChallengeExpired: () => false,
+  recordOtpFailure: vi.fn(async () => undefined),
+}));
+vi.mock('@/lib/otp-challenge-cookie', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/otp-challenge-cookie')>();
+  return {
+    ...actual,
+    readOtpChallengeCookie: () => db.cookieChallenge,
+    readOtpVerifiedReceiptRaw: () => null,
+    setOtpVerifiedReceipt: vi.fn(),
+    clearOtpChallengeCookie: vi.fn(),
+  };
+});
+vi.mock('@/lib/verified-session', () => ({
+  readVerifiedSession: () => null,
+  issueVerifiedSession: (payload: Record<string, unknown>) => {
+    db.sessions.push(payload);
+    return payload;
+  },
+}));
+
+const { POST: verifyOtpPost } = await import('@/app/api/auth/verify-otp/route');
+const { NextRequest: RouteRequest } = await import('next/server');
+
+const JU = '08e2b61c-505d-4793-be4d-5ccb6aefc38c';
+const JU_HALL = '11111111-2222-4333-8444-555555555555';
+const JU_DEPT = '7c5d40c4-2742-4d27-b169-465ae259a7ab';
+const OTP = '482913';
+
+function issuedChallenge(email: string, payload: Record<string, unknown>) {
+  return {
+    id: 'challenge-1',
+    email,
+    university_id: JU,
+    otp_hash: hashOtp(email, OTP),
+    attempt_count: 0,
+    max_attempts: 5,
+    expires_at: new Date(Date.now() + 240_000).toISOString(),
+    verified_at: null,
+    created_at: new Date().toISOString(),
+    signup_payload: { email, universityId: JU, ...payload },
+  };
+}
+
+function verifyRequest(email: string, code: string, context: Record<string, unknown> = {}) {
+  return new RouteRequest('http://localhost:3000/api/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp: code, ...context }),
+  });
+}
+
+describe('verify-otp loads the account after a valid code', () => {
+  beforeEach(() => db.reset());
+
+  it('provisions a first-time /signin faculty account on @gmail.com with no hall', async () => {
+    db.reset();
+    const email = 'mmadib2001@gmail.com';
+    db.challenge = issuedChallenge(email, { role: 'faculty', hallId: null, purpose: 'signin' });
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, { role: 'faculty', universityId: JU }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data.ok).toBe(true);
+    expect(body.data.verified).toBe(true);
+    expect(body.data.profilePersisted).toBe(true);
+    expect(body.data.user.email).toBe(email);
+    expect(body.data.role).toBe('faculty');
+    // The selected tenant is used verbatim — no @gmail.com domain lookup.
+    expect(db.profileWrites[0]).toMatchObject({
+      email,
+      university_id: JU,
+      role: 'faculty',
+      hall_id: null,
+      email_verified: true,
+      full_name: 'mmadib2001',
+    });
+    expect(db.roleWrites[0]).toMatchObject({ role: 'FACULTY', university_id: JU });
+    expect(db.createdUsers[0]).toMatchObject({
+      email,
+      email_confirm: true,
+      user_metadata: expect.objectContaining({ university_id: JU, role: 'faculty', email_verified: true }),
+    });
+    expect(db.sessions[0]).toMatchObject({ email, role: 'faculty', persistence: 'supabase', hallId: null });
+  });
+
+  it('provisions a first-time alumni account with a personal email and a program session', async () => {
+    db.reset();
+    const email = 'mmadib2001@yahoo.com';
+    db.challenge = issuedChallenge(email, {
+      role: 'alumni', hallId: null, programSession: '2010-11', purpose: 'signin', departmentId: JU_DEPT,
+    });
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, { role: 'alumni', programSession: '2010-11' }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.profilePersisted).toBe(true);
+    // A brand-new account still walks through onboarding once; it is no longer
+    // an error page, and the profile it lands on is already complete.
+    expect(body.data.redirectTo).toBe('/onboarding');
+    expect(db.profileWrites[0]).toMatchObject({
+      role: 'alumni', hall_id: null, program_session: '2010-11', department_id: JU_DEPT, onboarding_completed: true,
+    });
+    expect(db.roleWrites[0]).toMatchObject({ role: 'ALUMNI' });
+  });
+
+  it('provisions a first-time student account with its residential hall', async () => {
+    db.reset();
+    const email = 'student.ju@juniv.edu';
+    db.challenge = issuedChallenge(email, {
+      role: 'student', hallId: JU_HALL, programSession: '2023-24', purpose: 'signup',
+      fullName: 'Ayesha Rahman', studentId: 'JU-2023-01',
+    });
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, {
+      role: 'student', hallId: JU_HALL, programSession: '2023-24',
+    }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.ok).toBe(true);
+    expect(body.data.profilePersisted).toBe(true);
+    expect(db.profileWrites[0]).toMatchObject({
+      role: 'student', hall_id: JU_HALL, program_session: '2023-24',
+      full_name: 'Ayesha Rahman', student_id: 'JU-2023-01', university_id: JU,
+    });
+    expect(db.roleWrites[0]).toMatchObject({ role: 'STUDENT' });
+    expect(db.sessions[0]).toMatchObject({ hallId: JU_HALL, persistence: 'supabase' });
+  });
+
+  it('adopts an existing auth.users row that has no profile instead of failing', async () => {
+    db.reset();
+    const email = 'mmadib2001@gmail.com';
+    db.authUsers.set(email, 'existing-auth-id');
+    db.challenge = issuedChallenge(email, { role: 'faculty', hallId: null, purpose: 'signin' });
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, { role: 'faculty' }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.userId).toBe('existing-auth-id');
+    expect(body.data.profilePersisted).toBe(true);
+    expect(db.profileWrites[0]).toMatchObject({ id: 'existing-auth-id', email, hall_id: null });
+  });
+
+  it('returns 200 with a signed session when every Supabase write fails', async () => {
+    db.reset();
+    const email = 'mmadib2001@gmail.com';
+    db.challenge = issuedChallenge(email, { role: 'alumni', hallId: null, purpose: 'signin' });
+    db.profileLookupError = { message: 'permission denied for table profiles' };
+    db.profileUpsertError = { message: 'row-level security policy violated' };
+    db.createUserError = { message: 'service role key is missing' };
+    db.generateLinkFails = true;
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, { role: 'alumni' }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.ok).toBe(true);
+    expect(body.data.verified).toBe(true);
+    expect(body.data.profilePersisted).toBe(false);
+    expect(body.data.sessionMode).toBe('signed-cookie');
+    expect(body.data.degraded).toEqual(expect.arrayContaining(['profile-lookup', 'auth-create', 'auth-lookup']));
+    expect(db.sessions[0]).toMatchObject({ email, role: 'alumni', persistence: 'pending', universityId: JU });
+    // The message the bug report quoted is gone for good.
+    expect(JSON.stringify(body)).not.toContain('could not be loaded');
+  });
+
+  it('stays signed in when the GoTrue session exchange fails', async () => {
+    db.reset();
+    const email = 'mmadib2001@gmail.com';
+    db.challenge = issuedChallenge(email, { role: 'faculty', hallId: null, purpose: 'signin' });
+    db.sessionExchangeFails = true;
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, { role: 'faculty' }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.sessionMode).toBe('signed-cookie');
+    expect(body.data.profilePersisted).toBe(true);
+    expect(db.sessions[0]).toMatchObject({ email, persistence: 'supabase' });
+  });
+
+  it('defaults the tenant to Jahangirnagar University when the challenge lost it', async () => {
+    db.reset();
+    const email = 'mmadib2001@gmail.com';
+    db.challenge = { ...issuedChallenge(email, { role: 'faculty', hallId: null }), university_id: '' };
+
+    const response = await verifyOtpPost(verifyRequest(email, OTP, { role: 'faculty' }));
+    expect(response.status).toBe(200);
+    expect(db.profileWrites[0]).toMatchObject({ university_id: JU, email });
+  });
+
+  it('still refuses a wrong code and never provisions an account', async () => {
+    db.reset();
+    const email = 'mmadib2001@gmail.com';
+    db.challenge = issuedChallenge(email, { role: 'faculty', hallId: null });
+
+    const response = await verifyOtpPost(verifyRequest(email, '000000', { role: 'faculty' }));
+    expect(response.status).toBe(401);
+    expect(db.createdUsers).toHaveLength(0);
+    expect(db.profileWrites).toHaveLength(0);
+    expect(db.sessions).toHaveLength(0);
   });
 });

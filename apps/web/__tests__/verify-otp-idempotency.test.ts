@@ -25,10 +25,16 @@ const mock = vi.hoisted(() => ({
   receiptRaw: null as string | null,
   setReceipt: vi.fn(),
   clearChallenge: vi.fn(),
-  profile: null as null | { id: string; university_id: string; program_session?: string | null; role?: string; user_roles?: Array<{ role: string }> },
+  profile: null as null | { id: string; university_id: string; program_session?: string | null; role?: string; hall_id?: string | null },
+  profileLookupError: null as null | { message: string },
+  userRoles: [] as Array<{ role: string }>,
+  verifiedSession: null as null | { email: string; emailVerified?: boolean },
+  issueVerifiedSession: vi.fn(),
   profileInsert: vi.fn(),
+  profileUpsert: vi.fn(),
   profileUpdate: vi.fn(),
   roleInsert: vi.fn(),
+  roleUpsert: vi.fn(),
 }));
 
 vi.mock('@/lib/request-context', () => ({ isSupabaseServerConfigured: () => mock.supabaseConfigured }));
@@ -43,16 +49,35 @@ vi.mock('@/lib/supabase-server', () => ({
     from(table: string) {
       if (table === 'profiles') {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: mock.profile, error: null }) }) }),
-          update: (payload: Record<string, unknown>) => { mock.profileUpdate(payload); return { eq: () => ({ eq: async () => ({ error: null }) }) }; },
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: mock.profile, error: mock.profileLookupError }) }) }),
+          update: (payload: Record<string, unknown>) => {
+            mock.profileUpdate(payload);
+            return { eq: async () => ({ error: null }) };
+          },
           insert: mock.profileInsert,
+          upsert: mock.profileUpsert,
         };
       }
-      if (table === 'user_roles') return { insert: mock.roleInsert };
+      if (table === 'user_roles') {
+        return {
+          // Roles are read through the explicit user_id relationship: embedding
+          // them from profiles is ambiguous (user_id AND granted_by).
+          select: () => ({ eq: async () => ({ data: mock.userRoles, error: null }) }),
+          insert: mock.roleInsert,
+          upsert: mock.roleUpsert,
+        };
+      }
+      if (table === 'universities') {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { code: 'DU', name_en: 'University of Dhaka' }, error: null }) }) }) };
+      }
       return { insert: async () => ({ error: null }) };
     },
-    auth: { admin: { generateLink: mock.generateLink, createUser: mock.createUser } },
+    auth: { admin: { generateLink: mock.generateLink, createUser: mock.createUser, listUsers: vi.fn(async () => ({ data: { users: [] }, error: null })) } },
   }),
+}));
+vi.mock('@/lib/verified-session', () => ({
+  readVerifiedSession: () => mock.verifiedSession,
+  issueVerifiedSession: mock.issueVerifiedSession,
 }));
 vi.mock('@/lib/demo-auth', () => ({
   DEMO_OTP_COOKIE: 'campus360_demo_otp',
@@ -87,6 +112,10 @@ import { signOtpVerifiedReceipt } from '@/lib/otp-challenge-cookie';
 
 const EMAIL = 'student.du@du.ac.bd';
 const UNIV = '9b0f2a6e-0000-4000-8000-000000000001';
+// Registry ids are UUIDs in production; the provisioning layer validates them
+// so a malformed hall/department can never poison the whole profile write.
+const HALL = '9b0f2a6e-0000-4000-8000-0000000000a1';
+const DEPT = '9b0f2a6e-0000-4000-8000-0000000000b2';
 const CODE = '482913';
 
 function post(email: string, otp: string, context: Record<string, unknown> = {}): NextRequest {
@@ -112,9 +141,15 @@ beforeEach(() => {
   mock.setReceipt.mockReset();
   mock.clearChallenge.mockReset();
   mock.profile = { id: 'user-1', university_id: UNIV, program_session: '2023-24' };
+  mock.profileLookupError = null;
+  mock.userRoles = [];
+  mock.verifiedSession = null;
+  mock.issueVerifiedSession.mockReset().mockImplementation((input) => input);
   mock.profileInsert.mockReset().mockResolvedValue({ error: null });
+  mock.profileUpsert.mockReset().mockResolvedValue({ error: null });
   mock.profileUpdate.mockReset();
   mock.roleInsert.mockReset().mockResolvedValue({ error: null });
+  mock.roleUpsert.mockReset().mockResolvedValue({ error: null });
 });
 
 describe('verify-otp idempotency — duplicate calls never 404', () => {
@@ -181,8 +216,8 @@ describe('verify-otp serverless cookie fallback', () => {
     salt: 'nonce',
     expiresAt: new Date(Date.now() + 240_000).toISOString(),
     universityId: UNIV,
-    hallId: 'hall-1',
-    departmentId: 'dept-1',
+    hallId: HALL,
+    departmentId: DEPT,
     role: 'student',
     challengeId: 'cha-9',
     iat: Date.now(),
@@ -237,7 +272,7 @@ describe('verify-otp normal database path', () => {
     expires_at: new Date(Date.now() + 240_000).toISOString(),
     verified_at: null,
     created_at: new Date().toISOString(),
-    signup_payload: { role: 'student', hallId: 'hall-1' },
+    signup_payload: { role: 'student', hallId: HALL },
   };
 
   it('consumes the challenge, seals the receipt and returns redirectTo', async () => {
@@ -265,7 +300,7 @@ describe('verify-otp authoritative role/session metadata', () => {
   const cookie = {
     email: 'faculty@gmail.com', otpHash: hashOtp('faculty@gmail.com', CODE), salt: 'nonce',
     expiresAt: new Date(Date.now() + 240_000).toISOString(), universityId: UNIV,
-    role: 'faculty', hallId: 'hall-1', programSession: '2023-24', purpose: 'signup',
+    role: 'faculty', hallId: HALL, programSession: '2023-24', purpose: 'signup',
     fullName: 'Faculty Person', studentId: 'DU-FAC-001', challengeId: 'cha-role', iat: Date.now(),
   };
 
@@ -276,32 +311,33 @@ describe('verify-otp authoritative role/session metadata', () => {
     // The issued challenge has no hall for faculty; a forged hall in the body
     // must not replace it. The request is rejected before provisioning.
     expect(response.status).toBe(409);
-    expect(mock.profileInsert).not.toHaveBeenCalled();
+    expect(mock.profileUpsert).not.toHaveBeenCalled();
 
     mock.cookieChallenge = { ...cookie, hallId: null };
     const valid = await POST(post(cookie.email, CODE, { role: 'faculty', programSession: '2023-24', hallId: null }));
     expect(valid.status).toBe(200);
-    expect(mock.profileInsert).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mock.profileUpsert).toHaveBeenCalledWith(expect.objectContaining({
       role: 'faculty', hall_id: null, program_session: '2023-24', onboarding_completed: true,
-    }));
-    expect(mock.roleInsert).toHaveBeenCalledWith(expect.objectContaining({ role: 'FACULTY' }));
+    }), { onConflict: 'id' });
+    expect(mock.roleUpsert).toHaveBeenCalledWith(expect.objectContaining({ role: 'FACULTY' }),
+      { onConflict: 'user_id,university_id,role', ignoreDuplicates: true });
   });
 
   it('persists student hall and session on the cookie fallback path', async () => {
     mock.profile = null;
-    mock.cookieChallenge = { ...cookie, email: EMAIL, otpHash: hashOtp(EMAIL, CODE), role: 'student', hallId: 'hall-1' };
-    const response = await POST(post(EMAIL, CODE, { role: 'student', programSession: '2023-24', hallId: 'hall-1' }));
+    mock.cookieChallenge = { ...cookie, email: EMAIL, otpHash: hashOtp(EMAIL, CODE), role: 'student', hallId: HALL };
+    const response = await POST(post(EMAIL, CODE, { role: 'student', programSession: '2023-24', hallId: HALL }));
     expect(response.status).toBe(200);
-    expect(mock.profileInsert).toHaveBeenCalledWith(expect.objectContaining({
-      role: 'student', hall_id: 'hall-1', program_session: '2023-24',
-    }));
+    expect(mock.profileUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'student', hall_id: HALL, program_session: '2023-24',
+    }), { onConflict: 'id' });
   });
 
   it('rejects role/session changes against an active issued challenge before consuming it', async () => {
     mock.readActive.mockResolvedValue({ id: 'cha-1', email: EMAIL, university_id: UNIV,
       otp_hash: hashOtp(EMAIL, CODE), attempt_count: 0, max_attempts: 5,
       expires_at: new Date(Date.now() + 240_000).toISOString(), verified_at: null,
-      created_at: new Date().toISOString(), signup_payload: { role: 'student', hallId: 'hall-1', programSession: '2023-24' } });
+      created_at: new Date().toISOString(), signup_payload: { role: 'student', hallId: HALL, programSession: '2023-24' } });
     const response = await POST(post(EMAIL, CODE, { role: 'alumni' }));
     expect(response.status).toBe(409);
     expect((await response.json()).error.code).toBe('OTP_CONTEXT_MISMATCH');
@@ -320,7 +356,8 @@ describe('verify-otp authoritative role/session metadata', () => {
   });
 
   it('never replaces an existing administrative role from a public login selector', async () => {
-    mock.profile = { id: 'admin-1', university_id: UNIV, role: 'admin', user_roles: [{ role: 'ADMIN' }], program_session: '2020-21' };
+    mock.profile = { id: 'admin-1', university_id: UNIV, role: 'admin', program_session: '2020-21' };
+    mock.userRoles = [{ role: 'ADMIN' }];
     mock.readActive.mockResolvedValue({ id: 'cha-admin', email: EMAIL, university_id: UNIV,
       otp_hash: hashOtp(EMAIL, CODE), attempt_count: 0, max_attempts: 5,
       expires_at: new Date(Date.now() + 240_000).toISOString(), verified_at: null,
@@ -330,18 +367,37 @@ describe('verify-otp authoritative role/session metadata', () => {
     const body = await response.json();
     expect(body.data.role).toBe('admin');
     expect(body.data.redirectTo).toBe('/admin/console');
-    expect(mock.roleInsert).not.toHaveBeenCalled();
+    expect(mock.roleUpsert).not.toHaveBeenCalled();
     expect(mock.profileUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ role: expect.anything() }));
     expect(mock.profileUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ hall_id: expect.anything() }));
   });
 
-  it('surfaces profile persistence failures instead of reporting a created account', async () => {
+  it('still signs the user in when the profile write fails, and reports the degraded step', async () => {
     mock.profile = null;
     mock.cookieChallenge = { ...cookie, hallId: null };
-    mock.profileInsert.mockResolvedValue({ error: { message: 'database unavailable' } });
+    mock.profileUpsert.mockResolvedValue({ error: { message: 'database unavailable' } });
     const response = await POST(post(cookie.email, CODE));
-    expect(response.status).toBe(503);
-    expect((await response.json()).error.code).toBe('PROFILE_CREATE_FAILED');
-    expect(mock.roleInsert).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.ok).toBe(true);
+    expect(body.data.verified).toBe(true);
+    expect(body.data.profilePersisted).toBe(false);
+    expect(body.data.degraded).toContain('profile-upsert');
+    // The verified identity is sealed into the signed session cookie instead.
+    expect(mock.issueVerifiedSession).toHaveBeenCalledWith(expect.objectContaining({
+      email: cookie.email, role: 'faculty', persistence: 'pending',
+    }));
+  });
+
+  it('never fails when the profile lookup itself errors (the production dead end)', async () => {
+    mock.profileLookupError = { message: 'Could not embed because more than one relationship was found' };
+    mock.profile = null;
+    mock.cookieChallenge = { ...cookie, hallId: null };
+    const response = await POST(post(cookie.email, CODE));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.verified).toBe(true);
+    expect(body.data.degraded).toContain('profile-lookup');
+    expect(mock.issueVerifiedSession).toHaveBeenCalled();
   });
 });

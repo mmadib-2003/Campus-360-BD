@@ -21,6 +21,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { issueDemoChallenge } from '@/lib/demo-auth';
 import { DEMO_UNIVERSITIES, DEMO_UNIVERSITY_HALLS } from '@/lib/modules/demo-data';
 import { matchesUniversityDomain } from '@/lib/auth-rules';
+import { displayNameFromEmail } from '@/lib/otp-account';
 import { ProgramSessionSchema, RequestOtpSchema } from '@campus360/shared';
 import {
   OTP_RESEND_COOLDOWN_SECONDS,
@@ -89,7 +90,25 @@ async function handleOtpRequest(req: NextRequest) {
     return apiError('INVALID_EMAIL', 'Please enter a valid institutional email address.',
       'অনুগ্রহ করে একটি সঠিক বিশ্ববিদ্যালয়ের ইমেইল প্রদান করুন।', 400);
   }
-  const signupPayload = { ...input.signupPayload, role, hallId, programSession, purpose: input.purpose ?? 'signin' };
+  // Canonical challenge metadata. `verify-otp` provisions the account from
+  // this object (mirrored into the signed cookie), so every field the profile
+  // needs must be present here — including a clean display-name default for
+  // /signin, which never collects a name.
+  const signupPayload = {
+    ...input.signupPayload,
+    email: rawEmail,
+    universityId,
+    role,
+    hallId,
+    programSession,
+    fullName: typeof input.signupPayload?.fullName === 'string' && input.signupPayload.fullName.trim()
+      ? input.signupPayload.fullName.trim()
+      : displayNameFromEmail(rawEmail),
+    studentId: typeof input.signupPayload?.studentId === 'string' ? input.signupPayload.studentId.trim() || null : null,
+    departmentId: input.signupPayload?.departmentId || null,
+    programId: input.signupPayload?.programId || null,
+    purpose: input.purpose ?? 'signin',
+  };
 
   const rlIp = checkRateLimit(req, 'otp-ip', 10, 600);
   const rlEmail = checkRateLimit(req, 'otp-email', 5, 600, rawEmail);
@@ -133,7 +152,7 @@ async function handleOtpRequest(req: NextRequest) {
     const expiresAt = otpExpiresAt();
     setOtpChallengeCookie({ email: rawEmail, otpHash: hashOtp(rawEmail, demoCode), expiresAt,
       universityId: university.id, role, hallId, programSession,
-      fullName: signupPayload.fullName ?? null, studentId: signupPayload.studentId ?? null,
+      fullName: signupPayload.fullName ?? displayNameFromEmail(rawEmail), studentId: signupPayload.studentId ?? null,
       departmentId: signupPayload.departmentId || null, programId: signupPayload.programId || null,
       purpose: signupPayload.purpose });
     return apiSuccess({ email: rawEmail, universityId: university.id, role, expiresAt,
@@ -271,7 +290,7 @@ async function handleOtpRequest(req: NextRequest) {
     hallId: typeof signupPayload.hallId === 'string' ? signupPayload.hallId : null,
     departmentId: typeof signupPayload.departmentId === 'string' ? signupPayload.departmentId : null,
     programId: typeof signupPayload.programId === 'string' ? signupPayload.programId : null,
-    fullName: typeof signupPayload.fullName === 'string' ? signupPayload.fullName : null,
+    fullName: typeof signupPayload.fullName === 'string' ? signupPayload.fullName : displayNameFromEmail(rawEmail),
     studentId: typeof signupPayload.studentId === 'string' ? signupPayload.studentId : null,
     role,
     programSession,

@@ -134,12 +134,20 @@ function VerifyEmailForm() {
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp: code,
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: code,
           // Admin uses the separate legacy challenge; public role metadata is
           // checked against the issued challenge, never used to replace a role.
           ...(context?.role && context.role !== 'admin' ? { role: context.role } : {}),
           ...(context?.role === 'student' && context.hallId ? { hallId: context.hallId } : {}),
           ...(context?.programSession ? { programSession: context.programSession } : {}),
+          // The rest of the stored selection travels with the code so the
+          // account can be provisioned even if the challenge row is unreadable.
+          // The server still treats the issued challenge as authoritative.
+          ...(context?.universityId ? { universityId: context.universityId } : {}),
+          ...(context?.departmentId ? { departmentId: context.departmentId } : {}),
+          ...(context?.programId ? { programId: context.programId } : {}),
+          ...(context?.fullName ? { fullName: context.fullName } : {}),
+          ...(context?.studentId ? { studentId: context.studentId } : {}),
         }),
       });
       const payload = await response.json();

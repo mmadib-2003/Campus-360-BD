@@ -102,7 +102,10 @@ describe('registry schema assumptions the routes and seeds rely on', () => {
   });
 
   it('signup persists program_id through verify-otp and profile updates allow it', () => {
-    expect(read('app/api/auth/verify-otp/route.ts')).toContain('program_id: payload.programId || null');
+    // Provisioning moved into lib/otp-account.ts so /api/auth/session can reuse
+    // it to repair an account whose first write failed.
+    expect(read('app/api/auth/verify-otp/route.ts')).toContain('ensureVerifiedAccount');
+    expect(read('lib/otp-account.ts')).toContain('program_id: context.programId');
     expect(read('app/api/profile/route.ts')).toContain('allowedUpdates.program_id = body.program_id');
   });
 });

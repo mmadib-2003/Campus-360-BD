@@ -30,3 +30,19 @@ export function matchesUniversityDomain(email: string, domains: string[]): boole
 export function hallForRole(role: string, hallId: string): string | null {
   return requiresHall(role) && hallId ? hallId : null;
 }
+
+/** Normalized mailbox key used by every auth surface. */
+export function normalizeAccountEmail(email?: string | null): string {
+  return String(email ?? '').trim().toLowerCase();
+}
+
+/**
+ * Clean display-name default when no name was collected (first-time /signin):
+ * `mmadib2001@gmail.com` → `mmadib2001`, `ayesha.rahman@…` → `ayesha rahman`.
+ */
+export function displayNameFromEmail(email: string): string {
+  // Trim only: the local part's casing is the user's own spelling.
+  const local = String(email ?? '').trim().split('@')[0] ?? '';
+  const cleaned = local.split('+')[0].replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || 'Campus Member';
+}
