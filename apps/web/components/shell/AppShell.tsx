@@ -58,6 +58,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   const profile = session.profile as
     | {
         full_name?: string;
+        program_session?: string | null;
         universities?: { code: string; name_en: string; name_bn: string };
         departments?: { code: string };
         halls?: { name?: string; name_en?: string };
@@ -274,6 +275,11 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-medium">✓ {trustLabel}</span>
               {asText(dept.code) && (
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200">🎓 {asText(dept.code)}</span>
+              )}
+              {asText(profile.program_session) && (
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 font-medium">
+                  📅 {asText(profile.program_session)}
+                </span>
               )}
               {(asText(hall.name) || asText(hall.name_en)) && (
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200">

@@ -23,6 +23,7 @@ export function HallCombobox({
   hint,
   invalid,
   disabled,
+  id = 'residential-hall',
 }: {
   halls: HallOption[];
   value: string;
@@ -32,6 +33,7 @@ export function HallCombobox({
   hint?: string;
   invalid?: boolean;
   disabled?: boolean;
+  id?: string;
 }) {
   const { locale, t } = useUi();
   const [open, setOpen] = React.useState(false);
@@ -98,15 +100,19 @@ export function HallCombobox({
 
   return (
     <div ref={containerRef} className="relative w-full max-w-full">
-      <label className="block font-medium mb-1 text-sm">
+      <label htmlFor={id} className="block font-medium mb-1 text-sm">
         {label} <span className="text-rose-500">*</span>
       </label>
       <div className="relative w-full max-w-full">
         <input
+          id={id}
+          required
+          aria-required="true"
+          aria-invalid={Boolean(invalid)}
           type="text"
           role="combobox"
           aria-expanded={open}
-          aria-controls="hall-combobox-list"
+          aria-controls={`${id}-list`}
           aria-autocomplete="list"
           autoComplete="off"
           disabled={disabled}
@@ -131,7 +137,7 @@ export function HallCombobox({
 
       {open && (
         <ul
-          id="hall-combobox-list"
+          id={`${id}-list`}
           role="listbox"
           className="absolute z-30 mt-1 w-full max-w-full max-h-60 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
         >

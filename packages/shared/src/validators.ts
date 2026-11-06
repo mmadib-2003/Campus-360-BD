@@ -1,14 +1,93 @@
 // packages/shared/src/validators.ts
 import { z } from 'zod';
 
-export const RequestOtpSchema = z.object({
-  email: z.string().email().transform((v) => v.toLowerCase().trim()),
-  universityId: z.string().uuid().optional(),
+/** Public account choices. Administrative access has its own sign-in flow. */
+export const AuthRoleSchema = z.enum(['student', 'faculty', 'alumni']);
+export type AuthRole = z.infer<typeof AuthRoleSchema>;
+
+/** Consecutive academic years, including century rollover (1999-00). */
+export const ProgramSessionSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}$/, 'Program session must use YYYY-YY')
+  .refine((value) => {
+    const [start, end] = value.split('-').map(Number);
+    return end === (start + 1) % 100;
+  }, 'The second year must immediately follow the first year');
+
+/** Recent choices are suggestions, not a restriction on custom valid sessions. */
+export const PROGRAM_SESSION_OPTIONS = Array.from({ length: 31 }, (_, index) => {
+  const start = 2025 - index;
+  return `${start}-${String((start + 1) % 100).padStart(2, '0')}`;
 });
 
+const OtpEmailSchema = z.string().trim().toLowerCase().pipe(z.string().email().max(254));
+// Registry identifiers are opaque to the browser (the offline registry uses slugs).
+const NullableIdSchema = z.string().trim().min(1).max(100).nullable().optional();
+const SignupPayloadSchema = z.object({
+  role: AuthRoleSchema.optional(),
+  hallId: NullableIdSchema,
+  programSession: ProgramSessionSchema.optional(),
+  fullName: z.string().trim().max(160).optional(),
+  studentId: z.string().trim().max(80).optional(),
+  departmentId: NullableIdSchema,
+  programId: NullableIdSchema,
+}).passthrough();
+
+const OtpContextSchema = z.object({
+  email: OtpEmailSchema,
+  universityId: z.string().trim().min(1).max(100).optional(),
+  // Optional only for challenges issued before explicit role selection existed.
+  role: AuthRoleSchema.optional(),
+  hallId: NullableIdSchema,
+  programSession: ProgramSessionSchema.optional(),
+  purpose: z.enum(['signin', 'signup']).optional(),
+  signupPayload: SignupPayloadSchema.optional(),
+});
+
+type OtpContext = z.infer<typeof OtpContextSchema>;
+function checkRoleRules(context: OtpContext, zod: z.RefinementCtx, requireHall: boolean) {
+  const payload = context.signupPayload;
+  const role = context.role ?? payload?.role ?? 'student';
+  if (context.role && payload?.role && context.role !== payload.role) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['role'], message: 'Role fields must agree' });
+  }
+  const hallId = context.hallId !== undefined ? context.hallId : payload?.hallId;
+  if (context.hallId !== undefined && payload?.hallId !== undefined && context.hallId !== payload.hallId) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['hallId'], message: 'Hall fields must agree' });
+  }
+  if (role === 'student') {
+    if (requireHall && !hallId) {
+      zod.addIssue({ code: z.ZodIssueCode.custom, path: ['hallId'], message: 'Students must select a residential hall' });
+    }
+  } else if (hallId != null) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['hallId'], message: 'Only students may submit a hall' });
+  }
+  if (context.programSession && payload?.programSession && context.programSession !== payload.programSession) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['programSession'], message: 'Program session fields must agree' });
+  }
+  if (context.purpose === 'signup' && !(context.programSession ?? payload?.programSession)) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['programSession'], message: 'Program session is required to create an account' });
+  }
+  // Personal emails cannot infer a tenant; the selected university supplies it.
+  // Approved-domain membership for students is checked against the registry.
+  if (role !== 'student' && !context.universityId) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['universityId'], message: 'Select your university' });
+  }
+}
+
+export const RequestOtpSchema = OtpContextSchema.superRefine((context, zod) => checkRoleRules(context, zod, true));
 export const VerifyOtpSchema = z.object({
-  email: z.string().email().transform((v) => v.toLowerCase().trim()),
+  email: OtpEmailSchema,
   otp: z.string().regex(/^\d{6}$/, 'OTP must be exactly 6 digits'),
+  role: AuthRoleSchema.optional(),
+  // Retries may omit context and use the signed, issued challenge instead.
+  hallId: NullableIdSchema,
+  programSession: ProgramSessionSchema.optional(),
+}).superRefine((context, zod) => {
+  if (context.role && context.role !== 'student' && context.hallId != null) {
+    zod.addIssue({ code: z.ZodIssueCode.custom, path: ['hallId'], message: 'Only students may submit a hall' });
+  }
 });
 
 export const CreateComplaintSchema = z.object({

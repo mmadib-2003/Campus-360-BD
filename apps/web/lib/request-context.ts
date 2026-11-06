@@ -22,6 +22,8 @@ export interface SessionProfile {
   trust_level: 'UNVERIFIED' | 'EMAIL_VERIFIED' | 'ID_VERIFIED' | 'TRUSTED';
   student_id?: string;
   department_id?: string | null;
+  program_session?: string | null;
+  hall_id?: string | null;
   halls?:
     | { name?: string; name_en?: string; name_bn?: string; type?: string }
     | { name?: string; name_en?: string; name_bn?: string }[]

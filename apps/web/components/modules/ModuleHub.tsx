@@ -82,7 +82,7 @@ export function ModuleHub() {
                     </span>
                     <div className="min-w-0">
                       <div className="font-semibold text-sm group-hover:text-emerald-500 transition truncate">
-                        {locale === 'bn' ? meta.titleBn : meta.title}
+                        {locale === 'bn' ? meta.titleBn : t(meta.title)}
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{locale === 'bn' ? meta.blurbBn : meta.blurb}</p>
                     </div>

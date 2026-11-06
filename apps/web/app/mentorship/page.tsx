@@ -104,8 +104,8 @@ export default function MentorshipPage() {
     <div className="space-y-6">
       <ModuleHeader
         icon="📖"
-        title="Academic Archive & Mentorship"
-        titleBn="একাডেমিক আর্কাইভ ও মেন্টরশিপ"
+        title="Mentorship"
+        titleBn="মেন্টরশিপ"
         blurb="Juniors schedule sessions with seniors using real-time calendar availability. Files stay in the virus-scanned archive; guidance happens here."
         live
         demo={mentors.demo}

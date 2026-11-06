@@ -213,6 +213,7 @@ export function issueSignedDemoSession(input: {
   departmentCode?: string | null;
   hall_id?: string | null;
   hall_name?: string | null;
+  program_session?: string | null;
 }): { payload: SignedDemoSessionPayload; token: string } {
   const defaults = DEMO_ROLE_DEFAULTS[input.role] ?? DEMO_ROLE_DEFAULTS.student;
   const now = Date.now();
@@ -236,6 +237,7 @@ export function issueSignedDemoSession(input: {
     departmentCode: input.departmentCode === undefined ? 'IIT' : input.departmentCode,
     hall_id: input.hall_id ?? null,
     hall_name: input.hall_name ?? null,
+    program_session: input.program_session ?? null,
     email_verified: true,
     is_demo: true,
     iat: now,
@@ -268,8 +270,10 @@ export function buildDemoProfileFromSession(
   overrides?: { university_id?: string; department_id?: string | null }
 ) {
   const university = getDemoUniversity(session.universityCode || session.university_id) ?? DEMO_UNIVERSITIES[0];
-  const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.id === session.hall_id && h.universityCode === university.code)
-    ?? DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code);
+  const hall = session.role === 'student'
+    ? DEMO_UNIVERSITY_HALLS.find((h) => h.id === session.hall_id && h.universityCode === university.code)
+      ?? DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code)
+    : undefined;
   const universityId = overrides?.university_id ?? session.university_id ?? university.id;
   const departmentId =
     overrides?.department_id !== undefined ? overrides.department_id : session.department_id;
@@ -284,6 +288,7 @@ export function buildDemoProfileFromSession(
     name: session.name || session.fullName,
     student_id: session.studentId || defaults.studentId,
     batch: session.role === 'alumni' ? '45th Batch' : '51st Batch',
+    program_session: session.program_session ?? null,
     role: session.role,
     trust_level: 'ID_VERIFIED',
     onboarding_completed: true,
@@ -307,9 +312,9 @@ export function buildDemoProfileFromSession(
           : 'কম্পিউটার বিজ্ঞান ও প্রকৌশল',
     },
     hall_id: session.hall_id ?? hall?.id ?? null,
-    halls: session.hall_name ? { name: session.hall_name } : hall
+    halls: session.role !== 'student' ? null : session.hall_name ? { name: session.hall_name } : hall
       ? { name: hall.name, name_bn: hall.name_bn, type: hall.type }
-      : { name: 'Al-Beruni Hall', name_bn: 'আল বেরুনী হল', type: 'RESIDENTIAL' },
+      : null,
   };
 
   const roles = defaults.appRoles.map((role) => ({

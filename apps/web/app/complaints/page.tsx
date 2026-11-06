@@ -271,7 +271,7 @@ export default function ComplaintsPage() {
 
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 space-y-1">
         <p className="font-semibold text-slate-700 dark:text-slate-200">{t('Your data stays inside your university tenant.')}</p>
-        <p>{t('University email OTP is required for every account.')}</p>
+        <p>{t('Email OTP is required for every account.')}</p>
         <Link href="/track/JU-CASE-2026-482913" className="inline-block text-emerald-600 dark:text-emerald-400 hover:underline">
           {t('Track a case')}: JU-CASE-2026-482913
         </Link>

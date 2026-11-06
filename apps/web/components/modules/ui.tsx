@@ -83,7 +83,7 @@ export function ModuleHeader({
   children?: React.ReactNode;
 }) {
   const { locale, t } = useUi();
-  const heading = locale === 'bn' && titleBn ? titleBn : title;
+  const heading = locale === 'bn' && titleBn ? t(titleBn) : t(title);
   const body = blurb ? (locale === 'bn' ? t(blurb) : blurb) : undefined;
   return (
     <Card className="p-4 sm:p-5 md:p-6 bg-gradient-to-br from-emerald-900/50 via-slate-900 to-teal-950 border-emerald-500/30 !text-slate-100">
@@ -571,10 +571,10 @@ export function SignInPrompt({ moduleName }: { moduleName: string }) {
       </h3>
       <p className="text-xs text-slate-500 dark:text-slate-400">
         Anyone can read the listings. Posting, booking, messaging and the contact details students share with each
-        other need a verified campus account — sign in with your institutional email for those.
+        other need a verified campus account — sign in with your verified email for those.
       </p>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        তালিকা দেখা সবার জন্য উন্মুক্ত। পোস্ট করতে, বুক করতে ও যোগাযোগের বিবরণ দেখতে বিশ্ববিদ্যালয়ের ইমেইলে সাইন-ইন করুন।
+        তালিকা দেখা সবার জন্য উন্মুক্ত। পোস্ট করতে, বুক করতে ও যোগাযোগের বিবরণ দেখতে যাচাইকৃত ইমেইলে সাইন-ইন করুন।
       </p>
       <div className="flex flex-col sm:flex-row gap-2">
         <a

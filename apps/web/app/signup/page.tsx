@@ -7,8 +7,11 @@ import { useUi } from '@/lib/i18n-client';
 import { UniversityCombobox, type UniversityOption } from '@/components/auth/UniversityCombobox';
 import { HallCombobox, type HallOption } from '@/components/auth/HallCombobox';
 import { DEMO_ACADEMIC_PROGRAMS, getStaticJuDepartments } from '@/lib/modules/demo-data';
-
-type DemoRole = 'student' | 'faculty' | 'alumni' | 'admin';
+import { RoleSelector } from '@/components/auth/RoleSelector';
+import { RoleEmailField } from '@/components/auth/RoleEmailField';
+import { ProgramSessionCombobox } from '@/components/auth/ProgramSessionCombobox';
+import { approvedDomains, hallForRole, matchesUniversityDomain, requiresHall } from '@/lib/auth-rules';
+import { ProgramSessionSchema, RequestOtpSchema } from '@campus360/shared';
 
 interface DepartmentOption {
   id: string;
@@ -184,13 +187,6 @@ function RegistrySelect({
   );
 }
 
-const ROLES: Array<{ value: DemoRole; icon: string; key: string }> = [
-  { value: 'student', icon: '🎓', key: 'Student' },
-  { value: 'faculty', icon: '🏫', key: 'Faculty / Staff' },
-  { value: 'alumni', icon: '🤝', key: 'Alumni' },
-  { value: 'admin', icon: '🏛️', key: 'University Admin' },
-];
-
 export default function SignUpPage() {
   const router = useRouter();
   const { locale, t } = useUi();
@@ -199,7 +195,8 @@ export default function SignUpPage() {
   const [universitiesError, setUniversitiesError] = React.useState<string | null>(null);
   // Bumped by every "Try again" link: one control that re-runs all four reads.
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [role, setRole] = React.useState<DemoRole | ''>('');
+  const [role, setRole] = React.useState('');
+  const [programSession, setProgramSession] = React.useState('');
   const [universityId, setUniversityId] = React.useState('');
 
   const [halls, setHalls] = React.useState<HallOption[]>([]);
@@ -261,7 +258,7 @@ export default function SignUpPage() {
   React.useEffect(() => {
     setHallId('');
     setHallsError(null);
-    if (!universityId) {
+    if (!universityId || !requiresHall(role)) {
       setHalls([]);
       return;
     }
@@ -278,7 +275,7 @@ export default function SignUpPage() {
     return () => {
       cancelled = true;
     };
-  }, [universityId, locale, reloadKey]);
+  }, [universityId, role, locale, reloadKey]);
 
   // Departments & Institutes of the selected university.
   React.useEffect(() => {
@@ -333,10 +330,8 @@ export default function SignUpPage() {
   const programRequired = role === 'student' && programs.length > 0;
 
   const selectedUniversity = universities.find((university) => university.id === universityId);
-  const emailDomain = email.includes('@') ? email.split('@')[1]?.toLowerCase() ?? '' : '';
-  const domainApproved = Boolean(
-    selectedUniversity?.university_email_domains?.some((domain) => domain.domain.toLowerCase() === emailDomain)
-  );
+  const domains = approvedDomains(selectedUniversity);
+  const domainApproved = !requiresHall(role) || matchesUniversityDomain(email, domains);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -344,8 +339,11 @@ export default function SignUpPage() {
 
     if (!role) return setErrorMsg(t('Select your role to continue'));
     if (!universityId) return setErrorMsg(t('Select your university to continue'));
-    if (!hallId) {
+    if (requiresHall(role) && (loadingHalls || !hallId || !halls.some((hall) => hall.id === hallId))) {
       return setErrorMsg(t('Select your residential hall to continue'));
+    }
+    if (!ProgramSessionSchema.safeParse(programSession).success) {
+      return setErrorMsg(t('Enter consecutive years in YYYY-YY format, for example 2023-24.'));
     }
     if (departmentRequired && !departmentId) {
       return setErrorMsg(t('Select your department to continue'));
@@ -356,29 +354,26 @@ export default function SignUpPage() {
     if (!fullName.trim()) return setErrorMsg(t('Enter your full name'));
     if (!studentId.trim()) return setErrorMsg(t('Enter your student ID'));
     if (!email.trim()) return setErrorMsg(t('Enter your university email'));
-    if (!domainApproved) return setErrorMsg(t('This email domain is not approved for the selected university.'));
+    if (requiresHall(role) && !domainApproved) return setErrorMsg(t('This email domain is not approved for the selected university.'));
     if (!consentTerms || !consentPrivacy || !consentGuidelines) {
       return setErrorMsg(t('Please accept Terms, Privacy Policy, and Community Guidelines.'));
     }
 
+    const signupPayload = {
+      fullName: fullName.trim(), studentId: studentId.trim(), role,
+      hallId: hallForRole(role, hallId), programSession: programSession.trim(),
+      departmentId: departmentId || null,
+      programId: role === 'student' ? programId || null : null,
+    };
+    const request = { email, universityId, role, purpose: 'signup',
+      hallId: signupPayload.hallId, programSession: signupPayload.programSession, signupPayload };
+    if (!RequestOtpSchema.safeParse(request).success) return setErrorMsg(t('Check your email, role and university details'));
     setSubmitting(true);
     try {
       const response = await fetch('/api/auth/request-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          universityId,
-          role,
-          signupPayload: {
-            fullName,
-            studentId,
-            role,
-            hallId,
-            departmentId: role === 'admin' ? '' : departmentId,
-            programId: role === 'student' ? programId : '',
-          },
-        }),
+        body: JSON.stringify(request),
       });
       const payload = await response.json();
       if (!payload.success) {
@@ -394,8 +389,10 @@ export default function SignUpPage() {
             role,
             fullName,
             studentId,
-            hallId,
-            hallName: halls.find((hall) => hall.id === hallId)?.name ?? '',
+            hallId: signupPayload.hallId,
+            hallName: signupPayload.hallId ? halls.find((hall) => hall.id === hallId)?.name ?? '' : null,
+            programSession: signupPayload.programSession,
+            purpose: 'signup',
             departmentId,
             programId,
             demoCode: payload.data?.demoCode ?? null,
@@ -433,43 +430,8 @@ export default function SignUpPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-5 text-sm">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium">{t('I am a')}</span>
-              <span className="text-[11px] text-slate-400">1 / 3</span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {ROLES.map((option) => {
-                const active = role === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setRole(option.value)}
-                    aria-pressed={active}
-                    className={`rounded-xl border p-3 min-h-[44px] text-left transition ${
-                      active
-                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                        : 'border-slate-200 dark:border-slate-700 hover:border-emerald-500/40'
-                    }`}
-                  >
-                    <span className="text-base" aria-hidden>
-                      {option.icon}
-                    </span>
-                    <span className="block text-xs font-semibold mt-1">{t(option.key)}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {role === 'admin' && (
-              <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-300">
-                {t('Admin accounts are verified through the institution')}{' '}
-                <Link href="/admin/login" className="font-semibold underline">
-                  {t('Go to admin login')}
-                </Link>
-              </p>
-            )}
-          </div>
+          <RoleSelector id="signup-role" value={role} disabled={submitting}
+            onChange={(next) => { setRole(next); setHallId(''); setErrorMsg(null); }} />
 
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -503,7 +465,7 @@ export default function SignUpPage() {
             )}
           </div>
 
-          {universityId && (
+          {requiresHall(role) && universityId && (
             <div>
               {loadingHalls ? (
                 <div className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
@@ -521,7 +483,9 @@ export default function SignUpPage() {
             </div>
           )}
 
-          {universityId && role !== 'admin' ? (
+          <ProgramSessionCombobox value={programSession} onChange={setProgramSession} disabled={submitting} />
+
+          {universityId && role ? (
             <div className="space-y-4">
               {facultyOptions.length > 1 ? (
                 <div>
@@ -619,7 +583,7 @@ export default function SignUpPage() {
             </div>
             <div>
               <label className="block font-medium mb-1" htmlFor="signup-student-id">
-                {t('Student ID')}
+                {t(role === 'student' || !role ? 'Student ID' : 'Campus ID')}
               </label>
               <input
                 id="signup-student-id"
@@ -632,35 +596,7 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block font-medium mb-1" htmlFor="signup-email">
-              {t('University Email')}
-            </label>
-            <input
-              id="signup-email"
-              required
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder={
-                selectedUniversity?.university_email_domains?.[0]
-                  ? `name@${selectedUniversity.university_email_domains[0].domain}`
-                  : 'name@du.ac.bd'
-              }
-              className={`w-full max-w-full min-h-[44px] rounded-xl p-2.5 text-base sm:text-sm bg-slate-100 dark:bg-slate-800 border ${
-                email && !domainApproved ? 'border-rose-500' : 'border-slate-300 dark:border-slate-700'
-              }`}
-            />
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              {t('Use your institutional email — for example')}{' '}
-              {selectedUniversity?.university_email_domains?.[0]
-                ? `name@${selectedUniversity.university_email_domains[0].domain}`
-                : 'name@du.ac.bd'}
-            </p>
-            {email && !domainApproved && (
-              <p className="text-[11px] text-rose-500 mt-1">{t('This email domain is not approved for the selected university.')}</p>
-            )}
-          </div>
+          <RoleEmailField id="signup-email" value={email} onChange={setEmail} role={role} domains={domains} disabled={submitting} />
 
           <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
             <label className="flex items-center gap-2 min-h-[44px]">
@@ -690,7 +626,7 @@ export default function SignUpPage() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || (requiresHall(role) && loadingHalls)}
             className="w-full min-h-[44px] py-3 rounded-xl font-semibold bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow disabled:opacity-60"
           >
             {submitting ? t('Sending OTP…') : t('Send 6-Digit Verification OTP')}
@@ -708,7 +644,7 @@ export default function SignUpPage() {
       </div>
 
       <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-slate-600 dark:text-slate-300">
-        <p className="font-semibold text-emerald-700 dark:text-emerald-300">{t('University email OTP is required for every account.')}</p>
+        <p className="font-semibold text-emerald-700 dark:text-emerald-300">{t('Email OTP is required for every account.')}</p>
         <p className="mt-1">{t('Your data stays inside your university tenant.')}</p>
       </div>
     </div>
