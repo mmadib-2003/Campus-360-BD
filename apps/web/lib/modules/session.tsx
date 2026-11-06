@@ -17,6 +17,12 @@ export interface SessionState {
     email?: string;
     trust_level: string;
     university_id?: string;
+    program_session?: string | null;
+    hall_id?: string | null;
+    batch?: string | null;
+    bio?: string | null;
+    crisis_callback_phone?: string | null;
+    crisis_callback_consent?: boolean | null;
     universities?: { code: string; name_en: string; name_bn: string } | null;
   } | null;
   roles: string[];

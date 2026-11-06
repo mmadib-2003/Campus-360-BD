@@ -13,8 +13,10 @@ interface SignupContext {
   role: DemoRole;
   fullName: string;
   studentId: string;
-  hallId?: string;
-  hallName?: string;
+  hallId?: string | null;
+  hallName?: string | null;
+  programSession?: string | null;
+  purpose?: string;
   departmentId?: string;
   programId?: string;
   demoCode?: string | null;
@@ -132,7 +134,13 @@ function VerifyEmailForm() {
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp: code }),
+        body: JSON.stringify({ email, otp: code,
+          // Admin uses the separate legacy challenge; public role metadata is
+          // checked against the issued challenge, never used to replace a role.
+          ...(context?.role && context.role !== 'admin' ? { role: context.role } : {}),
+          ...(context?.role === 'student' && context.hallId ? { hallId: context.hallId } : {}),
+          ...(context?.programSession ? { programSession: context.programSession } : {}),
+        }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.success) {
@@ -146,8 +154,9 @@ function VerifyEmailForm() {
           role: context.role,
           email: context.email,
           fullName: context.fullName,
-          hallId: context.hallId,
-          hallName: context.hallName,
+          hallId: context.hallId ?? null,
+          hallName: context.hallName ?? null,
+          programSession: context.programSession ?? null,
         });
       }
       notifyAuthChanged();
@@ -185,13 +194,16 @@ function VerifyEmailForm() {
           email: targetEmail,
           universityId: context?.universityId,
           role: context?.role,
+          programSession: context?.programSession ?? undefined,
+          purpose: context?.purpose,
           signupPayload: {
             fullName: context?.fullName,
             studentId: context?.studentId,
             role: context?.role ?? 'student',
             // The profile row is created from the *latest* challenge payload,
             // so a resend that drops these silently loses them for good.
-            hallId: context?.hallId,
+            hallId: context?.role === 'student' ? context?.hallId : null,
+            programSession: context?.programSession ?? undefined,
             departmentId: context?.departmentId,
             programId: context?.programId,
           },
@@ -245,7 +257,7 @@ function VerifyEmailForm() {
   return (
     <div className="max-w-md mx-auto my-16 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
       <h1 className="text-xl font-bold">{t('Verify 6-Digit OTP')}</h1>
-      <p className="text-xs text-slate-500 mt-1">{t('Enter the 6-digit code sent to your university email.')}</p>
+      <p className="text-xs text-slate-500 mt-1">{t('Enter the 6-digit code sent to your email address.')}</p>
       {email && (
         <p className="text-xs text-slate-500 mt-1">
           {t('Email')}: <strong>{email}</strong>
@@ -256,7 +268,7 @@ function VerifyEmailForm() {
 
       {!demoCode && (
         <p className="mt-3 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-          {t('A 6-digit code has been emailed to your university address. It expires 5 minutes after it is sent.')}
+          {t('A 6-digit code has been emailed to your address. It expires 5 minutes after it is sent.')}
         </p>
       )}
       {expiresIn !== null && (

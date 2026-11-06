@@ -153,8 +153,8 @@ export default function EventsPage() {
     <div className="space-y-6">
       <ModuleHeader
         icon="📅"
-        title="Events & Club Connect"
-        titleBn="ইভেন্ট ও ক্লাব কানেক্ট"
+        title="Events"
+        titleBn="ইভেন্টসমূহ"
         blurb="Every departmental and club event in one real-time calendar. RSVP counts update live as classmates respond, and each club runs its own recruitment dashboard."
         live
         demo={demo}
@@ -172,7 +172,7 @@ export default function EventsPage() {
       </ModuleHeader>
       {/* Browsing is public now, so the sign-in path sits *below* the listings
           instead of replacing them: guests read, members post, book and chat. */}
-      {!session.authenticated && <SignInPrompt moduleName="events and clubs" />}
+      {!session.authenticated && <SignInPrompt moduleName="Events" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Upcoming events" value={grouped.upcoming.length} />

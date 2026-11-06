@@ -21,6 +21,7 @@ export interface SignedDemoSessionPayload {
   departmentCode: string | null;
   hall_id?: string | null;
   hall_name?: string | null;
+  program_session?: string | null;
   email_verified: true;
   is_demo: true;
   iat: number;

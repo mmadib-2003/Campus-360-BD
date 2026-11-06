@@ -5,7 +5,7 @@
 // 5-attempt budget, retire the challenge, provision the Supabase user and
 // establish the session cookie.
 //
-//   POST /api/auth/verify-otp   { email, otp }
+//   POST /api/auth/verify-otp   { email, otp, role?, programSession?, hallId? }
 //
 // On success the challenge is consumed atomically-ish (verified_at +
 // consumed_at set, otp_hash nulled) so a captured code cannot be replayed even
@@ -37,7 +37,10 @@ import {
   normalizeDemoRole,
   readSignedDemoSession,
   verifyDemoChallenge,
+  issueSignedDemoSession,
 } from '@/lib/demo-auth';
+import { DEMO_UNIVERSITIES, DEMO_UNIVERSITY_HALLS } from '@/lib/modules/demo-data';
+import { ProgramSessionSchema, VerifyOtpSchema } from '@campus360/shared';
 import {
   OTP_MAX_ATTEMPTS,
   OTP_TTL_SECONDS,
@@ -96,6 +99,11 @@ async function handleVerifyOtp(req: NextRequest) {
   if (!email || !otp) {
     return apiError('INVALID_INPUT', 'A valid email and 6-digit OTP are required.', 'সঠিক ইমেইল এবং ৬-সংখ্যার ওটিপি প্রয়োজন।', 400);
   }
+  const submitted = VerifyOtpSchema.safeParse(body);
+  if (!submitted.success) {
+    return apiError('INVALID_OTP_CONTEXT', submitted.error.issues[0]?.message ?? 'Invalid verification details.',
+      'যাচাইকরণের তথ্য সঠিক নয়।', 400);
+  }
 
   // Local preview (no Supabase): the cookie-issued demo challenge.
   if (!isSupabaseServerConfigured()) {
@@ -103,6 +111,26 @@ async function handleVerifyOtp(req: NextRequest) {
     const demoSession = readSignedDemoSession();
     if (demoSession && demoSession.email.trim().toLowerCase() === email && demoSession.email_verified) {
       return alreadyVerifiedSuccess();
+    }
+    // Role-based preview OTP is sealed by request-otp; legacy quick-demo
+    // challenges still use their original, untouched verification path.
+    const preview = readOtpChallengeCookie();
+    if (preview && preview.email === email) {
+      if (!otpHashMatches(preview.otpHash, email, otp) || !contextMatches(preview, submitted.data)) {
+        return apiError('INVALID_OTP', 'Invalid OTP or verification details.', 'ভুল ওটিপি বা যাচাইকরণের তথ্য।', 401);
+      }
+      const university = DEMO_UNIVERSITIES.find((entry) => entry.id === preview.universityId);
+      const role = normalizeDemoRole(preview.role);
+      const hall = role === 'student' ? DEMO_UNIVERSITY_HALLS.find((entry) => entry.id === preview.hallId) : null;
+      const { payload } = issueSignedDemoSession({ email, role,
+        name: preview.fullName ?? email.split('@')[0], studentId: preview.studentId ?? 'PENDING',
+        university_id: preview.universityId, universityCode: university?.code ?? 'JU',
+        hall_id: role === 'student' ? preview.hallId ?? null : null, hall_name: hall?.name ?? null,
+        department_id: preview.departmentId || null, program_session: preview.programSession ?? null });
+      finalizeVerificationCookies(email, otp);
+      const nextStep = payload.program_session ? demoNextStep(role) : '/onboarding';
+      return apiSuccess({ ok: true, verified: true, demo: true, role, universityId: preview.universityId,
+        nextStep, redirectTo: nextStep, trustLevel: 'EMAIL_VERIFIED' });
     }
     const demo = verifyDemoChallenge(email, otp);
     if (!demo.ok) {
@@ -145,6 +173,12 @@ async function handleVerifyOtp(req: NextRequest) {
   // (verified_at within the window) corroborates it when readable.
   if (otpVerifiedReceiptMatches(readOtpVerifiedReceiptRaw(), email, otp)) {
     const recent = await readRecentVerifiedOtpChallenge(admin, email, OTP_IDEMPOTENCY_WINDOW_SECONDS);
+    if (recent && !contextMatches({ role: String(recent.signup_payload?.role ?? 'student'),
+      hallId: typeof recent.signup_payload?.hallId === 'string' ? recent.signup_payload.hallId : null,
+      programSession: typeof recent.signup_payload?.programSession === 'string' ? recent.signup_payload.programSession : null }, submitted.data)) {
+      return apiError('OTP_CONTEXT_MISMATCH', 'Verification details do not match the issued code. Request a new code.',
+        'যাচাইকরণের তথ্য প্রদত্ত কোডের সাথে মেলে না। নতুন কোড নিন।', 409);
+    }
     authLog('verify-otp.idempotent-receipt', {
       email: redactEmail(email),
       dbCorroborated: Boolean(recent),
@@ -162,6 +196,7 @@ async function handleVerifyOtp(req: NextRequest) {
     // HTTP-only cookie. Validate against it rather than failing the sign-in.
     const cookieChallenge = readOtpChallengeCookie();
     if (cookieChallenge && cookieChallenge.email === email) {
+      if (!contextMatches(cookieChallenge, submitted.data)) return contextMismatch();
       if (!otpHashMatches(cookieChallenge.otpHash, email, otp)) {
         return apiError(
           'INVALID_OTP',
@@ -182,6 +217,12 @@ async function handleVerifyOtp(req: NextRequest) {
       'সক্রিয় ওটিপি পাওয়া যায়নি। নতুন কোড অনুরোধ করুন।',
       404
     );
+  }
+
+  if (!contextMatches({ role: String(challenge.signup_payload?.role ?? 'student'),
+    hallId: typeof challenge.signup_payload?.hallId === 'string' ? challenge.signup_payload.hallId : null,
+    programSession: typeof challenge.signup_payload?.programSession === 'string' ? challenge.signup_payload.programSession : null }, submitted.data)) {
+    return contextMismatch();
   }
 
   if (isChallengeExpired(challenge)) {
@@ -224,6 +265,11 @@ async function handleVerifyOtp(req: NextRequest) {
     );
   }
 
+  const issuedPayload = challenge.signup_payload ?? {};
+  if (issuedPayload.purpose === 'signup' && !ProgramSessionSchema.safeParse(issuedPayload.programSession).success) {
+    return apiError('PROGRAM_SESSION_REQUIRED', 'Select a valid program session before creating your account.',
+      'অ্যাকাউন্ট তৈরির আগে সঠিক প্রোগ্রাম সেশন নির্বাচন করুন।', 400);
+  }
   // Valid: consume the challenge and clear the digest from the database.
   await consumeOtpChallenge(admin, challenge.id, { verified: true, clearHash: true });
   // Track B housekeeping — a demo code never outlives its verification.
@@ -232,10 +278,10 @@ async function handleVerifyOtp(req: NextRequest) {
   const secondsLeft = remainingOtpSeconds(challenge.expires_at);
 
   // Provision or locate the Supabase user + profile.
-  const payload = (challenge.signup_payload ?? {}) as Record<string, string>;
+  const payload = issuedPayload as Record<string, string | null>;
   const provisioned = await provisionVerifiedUser(admin, email, challenge.university_id, payload);
   if (!provisioned.ok) return provisioned.response;
-  const { userId, isNewUser } = provisioned;
+  const { userId, isNewUser, needsOnboarding, role: accountRole } = provisioned;
 
   await authLogged('verify-otp.audit-insert-failed', () =>
     admin.from('audit_log').insert({
@@ -261,19 +307,31 @@ async function handleVerifyOtp(req: NextRequest) {
   // short-lived verification receipt so duplicate submissions succeed.
   finalizeVerificationCookies(email, otp);
 
-  const requestedRole = String(payload.role ?? 'student').toLowerCase();
-  const nextStep = isNewUser ? '/onboarding' : demoNextStep(normalizeDemoRole(requestedRole));
+  const nextStep = isNewUser || (needsOnboarding && accountRole !== 'admin') ? '/onboarding' : demoNextStep(normalizeDemoRole(accountRole));
   return apiSuccess({
     ok: true,
     verified: true,
     userId,
     universityId: challenge.university_id,
-    role: requestedRole,
+    role: accountRole,
     trustLevel: 'EMAIL_VERIFIED',
     challengeConsumed: true,
     nextStep,
     redirectTo: nextStep,
   });
+}
+
+function contextMismatch() {
+  return apiError('OTP_CONTEXT_MISMATCH', 'Verification details do not match the issued code. Request a new code.',
+    'যাচাইকরণের তথ্য প্রদত্ত কোডের সাথে মেলে না। নতুন কোড নিন।', 409);
+}
+
+/** Optional only for old clients; supplied values must match the challenge. */
+function contextMatches(issued: { role?: string | null; hallId?: string | null; programSession?: string | null },
+  submitted: { role?: string; hallId?: string | null; programSession?: string }): boolean {
+  return (submitted.role === undefined || submitted.role === (issued.role ?? 'student'))
+    && (submitted.hallId === undefined || submitted.hallId === (issued.hallId ?? null))
+    && (submitted.programSession === undefined || submitted.programSession === (issued.programSession ?? null));
 }
 
 // ---------------------------------------------------------------------------
@@ -367,18 +425,24 @@ async function verifyViaCookieFallback(
 ): Promise<NextResponse> {
   authLog('verify-otp.cookie-fallback', { email: redactEmail(email) });
 
-  const payload: Record<string, string> = {
+  if (cookieChallenge.purpose === 'signup' && !ProgramSessionSchema.safeParse(cookieChallenge.programSession).success) {
+    return apiError('PROGRAM_SESSION_REQUIRED', 'Select a valid program session before creating your account.',
+      'অ্যাকাউন্ট তৈরির আগে সঠিক প্রোগ্রাম সেশন নির্বাচন করুন।', 400);
+  }
+  const payload: Record<string, string | null> = {
     fullName: cookieChallenge.fullName ?? '',
     studentId: cookieChallenge.studentId ?? '',
     role: cookieChallenge.role ?? 'student',
-    hallId: cookieChallenge.hallId ?? '',
+    hallId: cookieChallenge.role === 'student' || !cookieChallenge.role ? cookieChallenge.hallId ?? '' : null,
+    programSession: cookieChallenge.programSession ?? null,
+    purpose: cookieChallenge.purpose ?? 'signin',
     departmentId: cookieChallenge.departmentId ?? '',
     programId: cookieChallenge.programId ?? '',
   };
 
   const provisioned = await provisionVerifiedUser(admin, email, cookieChallenge.universityId, payload);
   if (!provisioned.ok) return provisioned.response;
-  const { userId, isNewUser } = provisioned;
+  const { userId, isNewUser, needsOnboarding, role: accountRole } = provisioned;
 
   // Best-effort: retire the database row too, when this instance can see it.
   if (cookieChallenge.challengeId) {
@@ -407,14 +471,13 @@ async function verifyViaCookieFallback(
 
   finalizeVerificationCookies(email, otp);
 
-  const requestedRole = String(payload.role ?? 'student').toLowerCase();
-  const nextStep = isNewUser ? '/onboarding' : demoNextStep(normalizeDemoRole(requestedRole));
+  const nextStep = isNewUser || (needsOnboarding && accountRole !== 'admin') ? '/onboarding' : demoNextStep(normalizeDemoRole(accountRole));
   return apiSuccess({
     ok: true,
     verified: true,
     userId,
     universityId: cookieChallenge.universityId,
-    role: requestedRole,
+    role: accountRole,
     trustLevel: 'EMAIL_VERIFIED',
     challengeConsumed: true,
     viaCookieFallback: true,
@@ -428,103 +491,99 @@ async function verifyViaCookieFallback(
 // ---------------------------------------------------------------------------
 
 type ProvisionResult =
-  | { ok: true; userId: string; isNewUser: boolean }
+  | { ok: true; userId: string; isNewUser: boolean; needsOnboarding: boolean; role: string }
   | { ok: false; response: NextResponse };
 
 async function provisionVerifiedUser(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   email: string,
   universityId: string,
-  payload: Record<string, string>
+  payload: Record<string, string | null>
 ): Promise<ProvisionResult> {
-  let userId: string | undefined;
-
-  const { data: existingProfile, error: profileErr } = await admin
-    .from('profiles')
-    .select('id, university_id')
-    .eq('email', email)
-    .maybeSingle();
-
+  const requestedRole = String(payload.role ?? 'student').toLowerCase();
+  const programSession = ProgramSessionSchema.safeParse(payload.programSession).success
+    ? String(payload.programSession) : null;
+  const { data: existingProfile, error: profileErr } = await admin.from('profiles')
+    .select('id, university_id, role, program_session, user_roles(role)')
+    .eq('email', email).maybeSingle();
   if (profileErr) {
-    // The challenge is consumed by this point, so this branch has to be explicit:
-    // falling through to createUser would hit "User already registered" for an
-    // account that does exist, and the real cause (a read failure) would vanish.
     authError('verify-otp.profile-lookup-failed', profileErr, { email: redactEmail(email) });
-    return {
-      ok: false,
-      response: apiError(
-        'PROFILE_LOOKUP_FAILED',
-        'Your email is verified, but the account could not be loaded. Please request a new code and sign in again.',
-        'আপনার ইমেইল যাচাই হয়েছে, তবে অ্যাকাউন্টটি লোড করা যায়নি। নতুন কোড অনুরোধ করে আবার সাইন ইন করুন।',
-        503
-      ),
-    };
+    return { ok: false, response: apiError('PROFILE_LOOKUP_FAILED',
+      'Your email is verified, but the account could not be loaded. Please request a new code and sign in again.',
+      'ইমেইল যাচাই হয়েছে, তবে অ্যাকাউন্ট লোড করা যায়নি। নতুন কোড দিয়ে আবার সাইন ইন করুন।', 503) };
   }
 
   if (existingProfile) {
-    userId = String(existingProfile.id);
-    if (payload.hallId && existingProfile.university_id === universityId) {
-      await admin.from('profiles').update({ hall_id: payload.hallId }).eq('id', userId).eq('university_id', universityId);
+    const userId = String(existingProfile.id);
+    // An existing account's authoritative role is never replaced by a login
+    // selector. In particular, a public form cannot remove administrative roles.
+    const assignedRoles = Array.isArray(existingProfile.user_roles)
+      ? existingProfile.user_roles.map((row: { role?: unknown }) => String(row.role ?? '').toLowerCase()) : [];
+    const privileged = assignedRoles.some((role: string) => ['admin', 'super_admin', 'university_admin', 'governance', 'governing_body'].includes(role));
+    const actualRole = privileged ? 'admin' : assignedRoles[0] ?? String(existingProfile.role ?? requestedRole).toLowerCase();
+    const updates: Record<string, unknown> = {};
+    if (programSession) updates.program_session = programSession;
+    if (existingProfile.university_id === universityId && actualRole === requestedRole) {
+      if (requestedRole === 'student' && payload.hallId) updates.hall_id = payload.hallId;
+      if (requestedRole === 'faculty' || requestedRole === 'alumni') updates.hall_id = null;
     }
-    await admin
-      .from('profiles')
-      .update({ trust_level: 'EMAIL_VERIFIED' })
-      .eq('id', userId)
-      .eq('trust_level', 'UNVERIFIED');
-    return { ok: true, userId, isNewUser: false };
+    if (Object.keys(updates).length > 0) {
+      const { error } = await admin.from('profiles').update(updates).eq('id', userId).eq('university_id', universityId);
+      if (error) {
+        authError('verify-otp.profile-update-failed', error, { email: redactEmail(email) });
+        return { ok: false, response: apiError('PROFILE_UPDATE_FAILED',
+          'Your verified account details could not be saved. Please try a new code.',
+          'যাচাইকৃত অ্যাকাউন্টের তথ্য সংরক্ষণ করা যায়নি। নতুন কোড দিয়ে চেষ্টা করুন।', 503) };
+      }
+    }
+    await admin.from('profiles').update({ trust_level: 'EMAIL_VERIFIED' }).eq('id', userId).eq('trust_level', 'UNVERIFIED');
+    return { ok: true, userId, isNewUser: false, needsOnboarding: !(programSession ?? existingProfile.program_session), role: actualRole };
   }
 
   const tempPassword = crypto.randomBytes(24).toString('hex');
   const { data: createdAuth, error: authErr } = await admin.auth.admin.createUser({
-    email,
-    password: tempPassword,
-    email_confirm: true,
-    user_metadata: {
-      university_id: universityId,
-      full_name: payload.fullName ?? email.split('@')[0],
-    },
+    email, password: tempPassword, email_confirm: true,
+    user_metadata: { university_id: universityId, full_name: payload.fullName ?? email.split('@')[0], role: requestedRole },
   });
-
   if (authErr || !createdAuth.user) {
-    authError('verify-otp.user-create-failed', authErr ?? new Error('createUser returned no user'), {
-      email: redactEmail(email),
-    });
-    return {
-      ok: false,
-      response: apiError('AUTH_CREATE_FAILED', 'Failed to provision verified user account.', 'অ্যাকাউন্ট তৈরি করা যায়নি।', 500),
-    };
+    authError('verify-otp.user-create-failed', authErr ?? new Error('createUser returned no user'), { email: redactEmail(email) });
+    return { ok: false, response: apiError('AUTH_CREATE_FAILED', 'Failed to provision verified user account.', 'অ্যাকাউন্ট তৈরি করা যায়নি।', 500) };
   }
-
-  userId = createdAuth.user.id;
-  await admin.from('profiles').insert({
+  const userId = createdAuth.user.id;
+  const { error: insertError } = await admin.from('profiles').insert({
     id: userId,
     university_id: universityId,
     department_id: payload.departmentId || null,
-    hall_id: payload.hallId || null,
-    // Migration 0012. Nullable by design: a signup started before the program
-    // select existed — or one whose registry read failed — must still verify.
+    hall_id: requestedRole === 'student' ? payload.hallId || null : null,
+    // Migration 0012. The academic program remains optional and independent.
     program_id: payload.programId || null,
+    program_session: programSession,
+    role: requestedRole,
     email,
     full_name: payload.fullName || email.split('@')[0],
     student_id: payload.studentId || 'PENDING',
     trust_level: 'EMAIL_VERIFIED',
+    onboarding_completed: Boolean(programSession),
   });
-
-  const requestedRole = String(payload.role ?? 'student').toLowerCase();
+  if (insertError) {
+    authError('verify-otp.profile-create-failed', insertError, { email: redactEmail(email) });
+    return { ok: false, response: apiError('PROFILE_CREATE_FAILED',
+      'Your email is verified, but the profile could not be saved. Please sign in again to finish setup.',
+      'ইমেইল যাচাই হয়েছে, তবে প্রোফাইল সংরক্ষণ করা যায়নি। আবার সাইন ইন করে সেটআপ সম্পূর্ণ করুন।', 503) };
+  }
   const roleMap: Record<string, string> = {
-    student: 'STUDENT',
-    faculty: 'FACULTY',
-    alumni: 'ALUMNI',
-    admin: 'ADMIN',
-    governance: 'GOVERNANCE',
+    student: 'STUDENT', faculty: 'FACULTY', alumni: 'ALUMNI', admin: 'ADMIN', governance: 'GOVERNANCE',
   };
-  await admin.from('user_roles').insert({
-    user_id: userId,
-    university_id: universityId,
-    role: roleMap[requestedRole] ?? 'STUDENT',
+  const { error: roleError } = await admin.from('user_roles').insert({
+    user_id: userId, university_id: universityId, role: roleMap[requestedRole] ?? 'STUDENT',
   });
-
-  return { ok: true, userId, isNewUser: true };
+  if (roleError) {
+    authError('verify-otp.role-create-failed', roleError, { email: redactEmail(email) });
+    return { ok: false, response: apiError('ROLE_ASSIGNMENT_FAILED',
+      'Your profile was saved, but its role could not be assigned. Please contact support.',
+      'প্রোফাইল সংরক্ষিত হয়েছে, কিন্তু ভূমিকা নির্ধারণ করা যায়নি। সহায়তার সাথে যোগাযোগ করুন।', 503) };
+  }
+  return { ok: true, userId, isNewUser: true, needsOnboarding: !programSession, role: requestedRole };
 }
 
 type SessionResult = { ok: true } | { ok: false; response: NextResponse };

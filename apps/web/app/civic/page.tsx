@@ -256,11 +256,11 @@ export default function CivicPage() {
       <div className="space-y-6">
         <ModuleHeader
           icon="🛡️"
-          title="Civic Ticketing & Complaint Box"
-          titleBn="সিভিক টিকিটিং ও অভিযোগ বক্স"
+          title="Complaint Box"
+          titleBn="অভিযোগ বক্স"
           blurb="Report broken infrastructure or unsafe areas with photo evidence, upvote to prioritise, and track admin resolution live."
         />
-        <SignInPrompt moduleName="civic ticketing" />
+        <SignInPrompt moduleName="Complaint Box" />
       </div>
     );
   }
@@ -269,8 +269,8 @@ export default function CivicPage() {
     <div className="space-y-6">
       <ModuleHeader
         icon="🛡️"
-        title={t('Civic Ticketing & Complaint Box')}
-        titleBn={t('Civic Ticketing & Complaint Box')}
+        title={t('Complaint Box')}
+        titleBn={t('Complaint Box')}
         blurb={t('Report campus infrastructure or security issues with photo evidence. Upvotes decide the priority queue, and the moment an administrator resolves a ticket the status updates here — no refresh needed.')}
         live
         demo={tickets.demo}
@@ -398,8 +398,8 @@ export default function CivicPage() {
       <Card className="p-4">
         <SectionHeader
           icon="ℹ️"
-          title={t('How Civic Ticketing differs from a formal grievance')}
-          subtitle={t('Civic tickets are public, upvote-driven maintenance/security reports.')}
+          title={t('How the Complaint Box differs from a formal grievance')}
+          subtitle={t('Complaint Box reports are public, upvote-driven maintenance/security reports.')}
         />
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
           {t('Anything involving harassment, ragging or discrimination belongs in the SLA-tracked formal grievance system, where anonymity and escalation are enforced by the database.')}

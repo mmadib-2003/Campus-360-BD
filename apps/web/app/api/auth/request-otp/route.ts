@@ -1,11 +1,11 @@
 // apps/web/app/api/auth/request-otp/route.ts
 // ============================================================================
-// Step 1 of the email OTP flow: whitelist the institutional domain, mint a
+// Step 1 of the email OTP flow: apply role/email/hall rules, mint a
 // 6-digit CSPRNG code, persist its HMAC digest + 5-minute expiry in Supabase,
 // and deliver the code to the inbox in real time over Gmail SMTP (Nodemailer).
 //
 //   POST /api/auth/request-otp
-//   { email, universityId?, role?, signupPayload?: { fullName, studentId, ... } }
+//   { email, universityId, role, hallId?, programSession?, purpose?, signupPayload? }
 //
 // The plaintext code is returned to the client ONLY on the Track B demo path
 // (no SMTP credentials + NEXT_PUBLIC_AUTH_MODE=demo). On the real path the
@@ -19,6 +19,9 @@ import { apiError, apiSuccess } from '@/lib/api-response';
 import { isSupabaseServerConfigured } from '@/lib/request-context';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { issueDemoChallenge } from '@/lib/demo-auth';
+import { DEMO_UNIVERSITIES, DEMO_UNIVERSITY_HALLS } from '@/lib/modules/demo-data';
+import { matchesUniversityDomain } from '@/lib/auth-rules';
+import { ProgramSessionSchema, RequestOtpSchema } from '@campus360/shared';
 import {
   OTP_RESEND_COOLDOWN_SECONDS,
   OTP_TTL_SECONDS,
@@ -61,17 +64,32 @@ export async function POST(req: NextRequest) {
 
 async function handleOtpRequest(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  const rawEmail = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const universityId = typeof body?.universityId === 'string' ? body.universityId : undefined;
-
-  if (!rawEmail || !rawEmail.includes('@')) {
-    return apiError(
-      'INVALID_EMAIL',
-      'Please enter a valid institutional email address.',
-      'অনুগ্রহ করে একটি সঠিক বিশ্ববিদ্যালয়ের ইমেইল প্রদান করুন।',
-      400
-    );
+  // Keep the separate institutional administrator login compatible. Public
+  // forms cannot request admin/governance: the shared schema allows only the
+  // three public roles, and verification never accepts a replacement role.
+  const legacyAdmin = body?.role === 'admin' || body?.signupPayload?.role === 'admin';
+  const validation = RequestOtpSchema.safeParse(body);
+  if (!legacyAdmin && !validation.success) {
+    return apiError('INVALID_OTP_CONTEXT',
+      validation.error?.issues[0]?.message ?? 'Check your email, role, hall and program session.',
+      'ইমেইল, ভূমিকা, হল ও প্রোগ্রাম সেশন যাচাই করুন।', 400);
   }
+  const input = validation.success ? validation.data : {
+    email: typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '',
+    universityId: typeof body?.universityId === 'string' ? body.universityId : undefined,
+    role: 'admin', hallId: null, programSession: undefined, purpose: undefined,
+    signupPayload: body?.signupPayload ?? {},
+  };
+  const rawEmail = input.email;
+  const universityId = input.universityId;
+  const role = input.role ?? input.signupPayload?.role ?? 'student';
+  const hallId = role === 'student' ? (input.hallId ?? input.signupPayload?.hallId ?? null) : null;
+  const programSession = input.programSession ?? input.signupPayload?.programSession ?? null;
+  if (legacyAdmin && (!rawEmail.includes('@') || (programSession && !ProgramSessionSchema.safeParse(programSession).success))) {
+    return apiError('INVALID_EMAIL', 'Please enter a valid institutional email address.',
+      'অনুগ্রহ করে একটি সঠিক বিশ্ববিদ্যালয়ের ইমেইল প্রদান করুন।', 400);
+  }
+  const signupPayload = { ...input.signupPayload, role, hallId, programSession, purpose: input.purpose ?? 'signin' };
 
   const rlIp = checkRateLimit(req, 'otp-ip', 10, 600);
   const rlEmail = checkRateLimit(req, 'otp-email', 5, 600, rawEmail);
@@ -90,37 +108,37 @@ async function handleOtpRequest(req: NextRequest) {
   const ipAddress = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
   const userAgent = req.headers.get('user-agent') ?? 'unknown';
 
-  // Local preview with no Supabase credentials: cookie-backed demo challenge.
+  // Local preview with no Supabase credentials. The quick-demo endpoint is
+  // untouched; ordinary role-based OTP uses the same signed backup as production.
   if (!isSupabaseServerConfigured()) {
-    const demoCode = await computeDemoOtp(rawEmail);
-    const demoExpiresAt = otpExpiresAt();
-    const demo = issueDemoChallenge({
-      email: rawEmail,
-      universityId,
-      role: body?.role ?? body?.signupPayload?.role,
-      fullName: body?.signupPayload?.fullName,
-      studentId: body?.signupPayload?.studentId,
-      hallId: body?.signupPayload?.hallId,
-      code: demoCode,
-    });
-    if (!demo.ok) {
-      return apiError('DOMAIN_NOT_WHITELISTED', demo.error, demo.errorBn, demo.status);
+    if (legacyAdmin) {
+      const demoCode = await computeDemoOtp(rawEmail);
+      const demo = issueDemoChallenge({ email: rawEmail, universityId, role: 'admin',
+        fullName: signupPayload.fullName, studentId: signupPayload.studentId, code: demoCode });
+      if (!demo.ok) return apiError('DOMAIN_NOT_WHITELISTED', demo.error, demo.errorBn, demo.status);
+      return apiSuccess({ email: rawEmail, universityId: demo.challenge.universityId, role,
+        expiresAt: otpExpiresAt(), secondsRemaining: OTP_TTL_SECONDS, cooldownSeconds: 0,
+        demoCode, demo: true }, 200, { delivery: 'demo' }, rlEmail.headers);
     }
-    return apiSuccess(
-      {
-        email: rawEmail,
-        universityId: demo.challenge.universityId,
-        role: demo.challenge.role,
-        expiresAt: demoExpiresAt,
-        secondsRemaining: remainingOtpSeconds(demoExpiresAt),
-        cooldownSeconds: 0,
-        demoCode: demo.challenge.code,
-        demo: true,
-      },
-      200,
-      { delivery: 'demo' },
-      rlEmail.headers
-    );
+    const university = DEMO_UNIVERSITIES.find((entry) => entry.id === universityId || entry.code === universityId);
+    if (!university) return apiError('INVALID_UNIVERSITY', 'Select your university.', 'আপনার বিশ্ববিদ্যালয় নির্বাচন করুন।', 400);
+    if (role === 'student' && !matchesUniversityDomain(rawEmail, university.domains)) {
+      return apiError('DOMAIN_NOT_WHITELISTED', 'Students must use an approved email domain for the selected university.',
+        'শিক্ষার্থীদের নির্বাচিত বিশ্ববিদ্যালয়ের অনুমোদিত ইমেইল ডোমেইন ব্যবহার করতে হবে।', 403);
+    }
+    const hall = role === 'student' ? DEMO_UNIVERSITY_HALLS.find((entry) => entry.id === hallId && entry.universityCode === university.code) : null;
+    if (role === 'student' && !hall) return apiError('INVALID_HALL', 'Select a residential hall at your university.', 'আপনার বিশ্ববিদ্যালয়ের আবাসিক হল নির্বাচন করুন।', 400);
+    if (otpSecurityConfigError()) return apiError('AUTH_CONFIG_UNAVAILABLE', 'OTP signing is not configured.', 'ওটিপি স্বাক্ষর কনফিগার করা নেই।', 503);
+    const demoCode = await computeDemoOtp(rawEmail);
+    const expiresAt = otpExpiresAt();
+    setOtpChallengeCookie({ email: rawEmail, otpHash: hashOtp(rawEmail, demoCode), expiresAt,
+      universityId: university.id, role, hallId, programSession,
+      fullName: signupPayload.fullName ?? null, studentId: signupPayload.studentId ?? null,
+      departmentId: signupPayload.departmentId || null, programId: signupPayload.programId || null,
+      purpose: signupPayload.purpose });
+    return apiSuccess({ email: rawEmail, universityId: university.id, role, expiresAt,
+      secondsRemaining: remainingOtpSeconds(expiresAt), cooldownSeconds: 0, demoCode, demo: true },
+      200, { delivery: 'demo' }, rlEmail.headers);
   }
 
   if (otpSecurityConfigError()) {
@@ -134,65 +152,55 @@ async function handleOtpRequest(req: NextRequest) {
 
   const admin = createSupabaseAdminClient();
 
-  // Enforce University Email Domain Whitelist Server-Side.
-  //
-  let domainQuery = admin
-    .from('university_email_domains')
-    .select('id, university_id, domain, universities!inner(id, code, name_en, name_bn, is_active)')
-    .eq('domain', emailDomain)
-    .eq('is_active', true)
-    .eq('universities.is_active', true);
-
-  if (universityId) {
-    domainQuery = domainQuery.eq('university_id', universityId);
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if ((universityId && !uuidPattern.test(universityId)) || (hallId && !uuidPattern.test(hallId))) {
+    return apiError('INVALID_SELECTION', 'Select a valid university and hall.', 'সঠিক বিশ্ববিদ্যালয় ও হল নির্বাচন করুন।', 400);
   }
-
-  const { data: domainMatch, error: domainError } = await domainQuery.maybeSingle();
-
-  if (domainError) {
-    // This is NOT "your domain is not approved". Reading the registry can fail
-    // for its own reasons (missing relation, JWT/role issue, transient PostgREST
-    // error) and telling a student their address is unlisted sends them to the
-    // wrong support queue. Fail loudly, distinctly, and in the log.
-    authError('request-otp.registry-lookup-failed', domainError, {
-      attemptedDomain: emailDomain,
-      universityId: universityId ?? null,
-    });
-    return apiError(
-      'AUTH_REGISTRY_UNAVAILABLE',
-      'The university registry could not be read right now. Please try again shortly.',
-      'বিশ্ববিদ্যালয়ের তালিকা এই মুহূর্তে পড়া যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
-      503,
-      undefined,
-      rlEmail.headers
-    );
+  // Students (and legacy admins) must match an active approved domain. Faculty
+  // and alumni use any valid email; their tenant comes from the selected active
+  // university, never from a personal-email domain or a default campus.
+  let registry: { university_id: string; universities: { code?: string; name_en?: string; name_bn?: string } } | null = null;
+  if (role === 'student' || legacyAdmin) {
+    let domainQuery = admin.from('university_email_domains')
+      .select('id, university_id, domain, universities!inner(id, code, name_en, name_bn, is_active)')
+      .eq('domain', emailDomain).eq('is_active', true).eq('universities.is_active', true);
+    if (universityId) domainQuery = domainQuery.eq('university_id', universityId);
+    const { data, error } = await domainQuery.maybeSingle();
+    if (error) {
+      authError('request-otp.registry-lookup-failed', error, { attemptedDomain: emailDomain, universityId: universityId ?? null });
+    } else if (data) {
+      const joined = Array.isArray(data.universities) ? data.universities[0] : data.universities;
+      registry = { university_id: data.university_id, universities: joined ?? {} };
+    }
+    if (!registry) {
+      if (error) return apiError('AUTH_REGISTRY_UNAVAILABLE',
+        'The university registry could not be read right now. Please try again shortly.',
+        'বিশ্ববিদ্যালয়ের তালিকা পড়া যাচ্ছে না। আবার চেষ্টা করুন।', 503, undefined, rlEmail.headers);
+      authLog('request-otp.domain-not-whitelisted', { attemptedDomain: emailDomain, universityId: universityId ?? null });
+      return apiError('DOMAIN_NOT_WHITELISTED',
+        `The email domain @${emailDomain} is not approved for the selected university.`,
+        `@${emailDomain} ডোমেইনটি নির্বাচিত বিশ্ববিদ্যালয়ের জন্য অনুমোদিত নয়।`, 403, undefined, rlEmail.headers);
+    }
+  } else {
+    const { data, error } = await admin.from('universities').select('id, code, name_en, name_bn')
+      .eq('id', universityId!).eq('is_active', true).maybeSingle();
+    if (error) {
+      authError('request-otp.registry-lookup-failed', error, { universityId });
+      return apiError('AUTH_REGISTRY_UNAVAILABLE', 'The university registry is unavailable. Please try again.',
+        'বিশ্ববিদ্যালয়ের তালিকা পাওয়া যাচ্ছে না। আবার চেষ্টা করুন।', 503);
+    }
+    if (!data) return apiError('INVALID_UNIVERSITY', 'Select an active supported university.', 'একটি সক্রিয় সমর্থিত বিশ্ববিদ্যালয় নির্বাচন করুন।', 400);
+    registry = { university_id: data.id, universities: data };
   }
-
-  if (!domainMatch) {
-    authLog('request-otp.domain-not-whitelisted', {
-      attemptedDomain: emailDomain,
-      universityId: universityId ?? null,
-      note: 'no active row in university_email_domains for this domain',
-    });
-    return apiError(
-      'DOMAIN_NOT_WHITELISTED',
-      `The email domain @${emailDomain} is not on the approved Bangladesh public university registry.`,
-      `@${emailDomain} ডোমেইনটি অনুমোদিত পাবলিক বিশ্ববিদ্যালয়ের তালিকায় নেই। আপনার প্রাতিষ্ঠানিক ইমেইল ব্যবহার করুন।`,
-      403,
-      undefined,
-      rlEmail.headers
-    );
-  }
-
-  const hallId = typeof body?.signupPayload?.hallId === 'string' ? body.signupPayload.hallId : '';
-  if (hallId) {
-    const { data: hall, error: hallError } = await admin.from('university_halls').select('id')
-      .eq('id', hallId).eq('university_id', domainMatch.university_id).eq('is_active', true).maybeSingle();
-    if (hallError) return apiError('HALL_LOOKUP_FAILED', 'Could not validate the selected hall.', 'হল যাচাই করা যায়নি।', 503);
+  const tenantId = registry.university_id;
+  const university = registry.universities;
+  if (role === 'student') {
+    if (!hallId) return apiError('HALL_REQUIRED', 'Students must select a residential hall.', 'শিক্ষার্থীদের আবাসিক হল নির্বাচন করতে হবে।', 400);
+    const { data: hall, error } = await admin.from('university_halls').select('id')
+      .eq('id', hallId).eq('university_id', tenantId).eq('is_active', true).maybeSingle();
+    if (error) return apiError('HALL_LOOKUP_FAILED', 'Could not validate the selected hall.', 'হল যাচাই করা যায়নি।', 503);
     if (!hall) return apiError('INVALID_HALL', 'Please select a hall belonging to your university.', 'আপনার বিশ্ববিদ্যালয়ের হল নির্বাচন করুন।', 400);
   }
-
-  const university = (domainMatch.universities ?? {}) as { code?: string; name_en?: string; name_bn?: string };
 
   // Enforce the 60s resend cooldown per email.
   if (await isOtpRequestInCooldown(admin, rawEmail, OTP_RESEND_COOLDOWN_SECONDS)) {
@@ -224,10 +232,6 @@ async function handleOtpRequest(req: NextRequest) {
   // Track A: CSPRNG 6-digit code (100000–999999). Track B: SHA-256(email)
   // derivation so the offline panel can show the same value client-side.
   const otpCode = demoMode ? await computeDemoOtp(rawEmail) : generateOtpCode();
-  const signupPayload = {
-    ...(body?.signupPayload ?? {}),
-    role: body?.role ?? body?.signupPayload?.role ?? 'student',
-  };
 
   // Store the digest + 5-minute expiry in Supabase first: the code must be
   // verifiable the instant the email lands, and the row's id seeds the
@@ -235,7 +239,7 @@ async function handleOtpRequest(req: NextRequest) {
   const challenge = await createOtpChallenge({
     admin,
     email: rawEmail,
-    universityId: domainMatch.university_id,
+    universityId: tenantId,
     code: otpCode,
     ipAddress,
     signupPayload,
@@ -263,13 +267,15 @@ async function handleOtpRequest(req: NextRequest) {
     email: rawEmail,
     otpHash: hashOtp(rawEmail, otpCode),
     expiresAt: challenge.expiresAt,
-    universityId: domainMatch.university_id,
+    universityId: tenantId,
     hallId: typeof signupPayload.hallId === 'string' ? signupPayload.hallId : null,
     departmentId: typeof signupPayload.departmentId === 'string' ? signupPayload.departmentId : null,
     programId: typeof signupPayload.programId === 'string' ? signupPayload.programId : null,
     fullName: typeof signupPayload.fullName === 'string' ? signupPayload.fullName : null,
     studentId: typeof signupPayload.studentId === 'string' ? signupPayload.studentId : null,
-    role: typeof signupPayload.role === 'string' ? signupPayload.role : 'student',
+    role,
+    programSession,
+    purpose: signupPayload.purpose,
     challengeId: challenge.id,
   });
 
@@ -286,7 +292,8 @@ async function handleOtpRequest(req: NextRequest) {
     return apiSuccess(
       {
         email: rawEmail,
-        universityId: domainMatch.university_id,
+        universityId: tenantId,
+        role,
         expiresAt: challenge.expiresAt,
         secondsRemaining: challenge.secondsRemaining,
         cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
@@ -325,7 +332,7 @@ async function handleOtpRequest(req: NextRequest) {
     });
     try {
       await admin.from('audit_log').insert({
-        university_id: domainMatch.university_id,
+        university_id: tenantId,
         action: 'OTP_DELIVERY_FAILED',
         entity_type: 'VERIFICATION_ATTEMPT',
         entity_id: challenge.id,
@@ -370,7 +377,7 @@ async function handleOtpRequest(req: NextRequest) {
   return apiSuccess(
     {
       email: rawEmail,
-      universityId: domainMatch.university_id,
+      universityId: tenantId,
       universityCode: university.code ?? null,
       expiresAt: challenge.expiresAt,
       secondsRemaining: remainingOtpSeconds(challenge.expiresAt),

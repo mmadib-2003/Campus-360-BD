@@ -199,7 +199,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
 
   /* ------------------------------------------------------------------ */
-  /* Module 3 — Civic Ticketing (upvotes)                               */
+  /* Module 3 — Complaint Box (upvotes)                               */
   /* ------------------------------------------------------------------ */
   'complaint-upvotes': {
     key: 'complaint-upvotes',
@@ -214,7 +214,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
 
   /* ------------------------------------------------------------------ */
-  /* Module 4 — Events & Club Connect                                   */
+  /* Module 4 — Events                                   */
   /* ------------------------------------------------------------------ */
   clubs: {
     key: 'clubs',
@@ -360,7 +360,7 @@ export const MODULES: Record<string, ModuleSpec> = {
   },
 
   /* ------------------------------------------------------------------ */
-  /* Module 6 — Academic Archive & Mentorship                           */
+  /* Module 6 — Mentorship                           */
   /* ------------------------------------------------------------------ */
   mentors: {
     key: 'mentors',

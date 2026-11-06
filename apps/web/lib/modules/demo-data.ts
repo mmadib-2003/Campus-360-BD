@@ -32,8 +32,9 @@ export interface DemoSession {
   role: DemoRole;
   email: string;
   fullName: string;
-  hallId?: string;
-  hallName?: string;
+  hallId?: string | null;
+  hallName?: string | null;
+  programSession?: string | null;
 }
 
 export const DEMO_UNIVERSITIES: DemoUniversity[] = [
@@ -677,6 +678,7 @@ export function getDemoSession(): DemoSession {
       fullName: parsed.fullName || ROLE_NAMES[role],
       hallId: parsed.hallId,
       hallName: parsed.hallName,
+      programSession: typeof parsed.programSession === 'string' ? parsed.programSession : undefined,
     };
   } catch {
     return DEFAULT_DEMO_SESSION;
@@ -697,8 +699,9 @@ export function setDemoSession(patch: Partial<DemoSession>) {
     role,
     email: patch.email ?? ROLE_EMAILS[role](demoDomainFor(university)),
     fullName: patch.fullName ?? ROLE_NAMES[role],
-    hallId: patch.hallId ?? (university.id === current.universityId ? current.hallId : undefined),
-    hallName: patch.hallName ?? (university.id === current.universityId ? current.hallName : undefined),
+    hallId: patch.hallId !== undefined ? patch.hallId ?? undefined : (university.id === current.universityId ? current.hallId : undefined),
+    hallName: patch.hallName !== undefined ? patch.hallName ?? undefined : (university.id === current.universityId ? current.hallName : undefined),
+    programSession: patch.programSession !== undefined ? patch.programSession ?? undefined : (university.id === current.universityId ? current.programSession : undefined),
   };
   window.localStorage.setItem('campus360.demo.session.v1', JSON.stringify(next));
   window.dispatchEvent(new CustomEvent('campus360:demo-session', { detail: next }));
@@ -738,8 +741,10 @@ export function subscribeDemoSession(callback: (session: DemoSession) => void): 
 export function getDemoProfile(session: DemoSession = getDemoSession()) {
   const university = getDemoUniversity(session.universityId) ?? DEMO_UNIVERSITIES[1];
   const role = session.role;
-  const hall = DEMO_UNIVERSITY_HALLS.find((h) => h.id === session.hallId && h.universityCode === university.code)
-    ?? DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code);
+  const hall = role === 'student'
+    ? DEMO_UNIVERSITY_HALLS.find((h) => h.id === session.hallId && h.universityCode === university.code)
+      ?? DEMO_UNIVERSITY_HALLS.find((h) => h.universityCode === university.code)
+    : undefined;
   return {
     id: `demo-user-${university.code.toLowerCase()}-${role}`,
     university_id: university.id,
@@ -755,10 +760,11 @@ export function getDemoProfile(session: DemoSession = getDemoSession()) {
       name_en: university.name_en,
       name_bn: university.name_bn,
     },
-    hall_id: session.hallId ?? hall?.id ?? null,
-    halls: session.hallName ? { name: session.hallName, name_en: session.hallName } : hall
+    program_session: session.programSession ?? null,
+    hall_id: role === 'student' ? session.hallId ?? hall?.id ?? null : null,
+    halls: role !== 'student' ? null : session.hallName ? { name: session.hallName, name_en: session.hallName } : hall
       ? { name: hall.name, name_en: hall.name, name_bn: hall.name_bn, type: hall.type }
-      : { name: `${university.code} Residential Hall`, name_en: `${university.code} Residential Hall`, name_bn: `${university.code} আবাসিক হল` },
+      : null,
     departments:
       university.code === 'JU'
         ? {

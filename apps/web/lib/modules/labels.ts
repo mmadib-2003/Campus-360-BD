@@ -209,8 +209,8 @@ export const MODULE_META: Record<
     href: '/skills',
   },
   civic: {
-    title: 'Civic Ticketing & Complaint Box',
-    titleBn: 'সিভিক টিকিটিং ও অভিযোগ বক্স',
+    title: 'Complaint Box',
+    titleBn: 'অভিযোগ বক্স',
     icon: '🛡️',
     blurb: 'Report campus issues with photos, upvote to prioritise, and watch admin status updates in real time.',
     blurbBn: 'ছবিসহ সমস্যা জানান, ভোট দিয়ে অগ্রাধিকার দিন, লাইভ স্ট্যাটাস দেখুন।',
@@ -218,8 +218,8 @@ export const MODULE_META: Record<
     href: '/complaints',
   },
   events: {
-    title: 'Events & Club Connect',
-    titleBn: 'ইভেন্ট ও ক্লাব কানেক্ট',
+    title: 'Events',
+    titleBn: 'ইভেন্টসমূহ',
     icon: '📅',
     blurb: 'One real-time calendar for departmental and club events with live RSVP counts.',
     blurbBn: 'ডিপার্টমেন্ট ও ক্লাবের সব ইভেন্ট এক ক্যালেন্ডারে, লাইভ আরএসভিপি।',
@@ -236,8 +236,8 @@ export const MODULE_META: Record<
     href: '/health',
   },
   mentorship: {
-    title: 'Academic Archive & Mentorship',
-    titleBn: 'একাডেমিক আর্কাইভ ও মেন্টরশিপ',
+    title: 'Mentorship',
+    titleBn: 'মেন্টরশিপ',
     icon: '📖',
     blurb: 'Book real-time mentorship sessions with seniors alongside the virus-scanned archive.',
     blurbBn: 'সিনিয়রদের সাথে রিয়েল-টাইম মেন্টরশিপ সেশন বুক করুন।',

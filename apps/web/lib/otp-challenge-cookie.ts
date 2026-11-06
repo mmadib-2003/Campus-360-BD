@@ -47,6 +47,9 @@ export interface OtpChallengeCookiePayload {
   fullName?: string | null;
   studentId?: string | null;
   role?: string | null;
+  programSession?: string | null;
+  /** Signup challenges require a session; sign-in may collect it in onboarding. */
+  purpose?: string | null;
   /** verification_attempts row id, for best-effort consumption on the fallback path. */
   challengeId?: string | null;
   iat: number;

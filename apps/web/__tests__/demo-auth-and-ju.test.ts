@@ -155,12 +155,12 @@ describe('Task 3 — Navbar anchoring, email display, and module labels', () => 
     expect(quickLogin).not.toContain('truncate w-full');
   });
 
-  it('renames Mentorship & Archive to Mentorship & Tutoring and exposes Skill Exchange', () => {
+  it('uses the concise Mentorship label and exposes Skill Exchange', () => {
     const en = JSON.parse(read('apps/web/messages/en.json')) as { ui: Record<string, string> };
     const bn = JSON.parse(read('apps/web/messages/bn.json')) as { ui: Record<string, string> };
-    expect(en.ui.moduleMentorship).toBe('Mentorship & Tutoring');
+    expect(en.ui.moduleMentorship).toBe('Mentorship');
     expect(en.ui.moduleSkills).toBe('Skill Exchange');
-    expect(bn.ui.moduleMentorship).toBe('মেন্টরশিপ ও টিউটরিং');
+    expect(bn.ui.moduleMentorship).toBe('মেন্টরশিপ');
     expect(bn.ui.moduleSkills).toBe('স্কিল এক্সচেঞ্জ');
   });
 });

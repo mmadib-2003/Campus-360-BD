@@ -90,13 +90,13 @@ export default function FeedPage() {
         <StaggerGroup className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {[
             { href: '/marketplace', label: t('Marketplace'), icon: '🛍️' },
-            { href: '/civic', label: t('Civic Ticketing & Complaint Box'), icon: '🛡️' },
+            { href: '/civic', label: t('Complaint Box'), icon: '🛡️' },
             { href: '/lost-found', label: t('Lost & Found'), icon: '🔍' },
             { href: '/health', label: t('Blood & Health Network'), icon: '🩸' },
             { href: '/housing', label: t('Hall & Off-Campus Housing'), icon: '🏢' },
             { href: '/dining', label: t('Cafeteria & Home Food'), icon: '🍛' },
             { href: '/skills', label: t('Skill Hub & Jobs'), icon: '🎓' },
-            { href: '/events', label: t('Events & RSVPs'), icon: '📅' },
+            { href: '/events', label: t('Events'), icon: '📅' },
           ].map((module) => (
             <StaggerItem key={module.href} className="h-full">
               <motion.div {...cardHover} className="h-full">
