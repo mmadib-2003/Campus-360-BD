@@ -13,9 +13,11 @@ export async function GET(req: NextRequest) {
     // Preview deployments still get the full public registry so the signup
     // combobox, filters and domain hints work without any secrets. The
     // versioned local covers (JU shaheed minar, CU monument, SUST gate, KUET
-    // landmark — see DEMO_CAMPUS_PHOTOS/COVERS in lib/demo-auth.ts and
-    // migration 0024) are carried by the payload itself, so the fallback and
-    // the database answer with the same cache-busted image URLs.
+    // landmark — migration 0024 — and the IU main gate, JnU main building,
+    // RU administration building and BUET Gate 02 — migration 0027) are
+    // carried by the payload itself through DEMO_CAMPUS_PHOTOS/COVERS in
+    // lib/demo-auth.ts, the single source of truth for the fallback imagery,
+    // so the fallback and the database answer with the same cache-busted URLs.
     return apiSuccess(demoUniversitiesPayload(), 200, undefined, REGISTRY_NO_STORE);
   }
 

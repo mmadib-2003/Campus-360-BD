@@ -464,31 +464,32 @@ export function demoNextStep(role: DemoRole): string {
 const DEMO_CAMPUS_COVERS: Record<string, string> = {
   DU: '/campuses/du.jpg',
   JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
-  BUET: '/campuses/buet.jpg',
-  RU: '/campuses/ru.jpg',
   // User-supplied authentic photos (2026-11, docs/IMAGE_ATTRIBUTION.md);
   // the query string busts browser/CDN caches of the older covers.
+  BUET: '/campuses/buet.jpg?v=buet-gate2-2026',
+  RU: '/campuses/ru.jpg?v=ru-admin-2026',
   CU: '/campuses/cu.jpg?v=cu-monument-2026',
   SUST: '/campuses/sust.jpg?v=sust-gate-2026',
-  JNU: '/campuses/jnu.jpg',
+  JNU: '/campuses/jnu.jpg?v=jnu-campus-2026',
   BUTEX: '/campuses/butex.jpg',
   RUET: '/campuses/ruet.jpg',
   CUET: '/campuses/cuet.jpg',
   KUET: '/campuses/kuet.webp?v=kuet-landmark-2026',
   BAU: '/campuses/bau.jpg',
-  IU: '/campuses/iu.jpg',
+  IU: '/campuses/iu.jpg?v=iu-gate-2026',
 };
 
 const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   DU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Curzon_Hall,_University_of_Dhaka,_Dhaka.jpg?width=1600',
   JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
-  BUET: 'https://commons.wikimedia.org/wiki/Special:FilePath/BUET_Campus_(01).jpg?width=1600',
-  // CU, SUST and KUET now use the user-supplied authentic landmark photos
-  // bundled in /public/campuses (migration 0024) instead of Wikimedia files.
+  // CU, SUST and KUET (migration 0024) plus IU, JnU, RU and BUET (migration
+  // 0027) use the user-supplied authentic campus photos bundled in
+  // /public/campuses instead of the Wikimedia files the seed still records.
+  BUET: '/campuses/buet.jpg?v=buet-gate2-2026',
   SUST: '/campuses/sust.jpg?v=sust-gate-2026',
   CU: '/campuses/cu.jpg?v=cu-monument-2026',
-  RU: 'https://commons.wikimedia.org/wiki/Special:FilePath/Rajshahi_University_Campus.jpg?width=1600',
-  JNU: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/Jagannath_University_Bird_View.jpg/1920px-Jagannath_University_Bird_View.jpg',
+  RU: '/campuses/ru.jpg?v=ru-admin-2026',
+  JNU: '/campuses/jnu.jpg?v=jnu-campus-2026',
   BUP: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/BUP_Campus_Aerial_View_2.jpg/1920px-BUP_Campus_Aerial_View_2.jpg',
   JUST: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg/1920px-Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg',
   KUET: '/campuses/kuet.webp?v=kuet-landmark-2026',
@@ -496,7 +497,7 @@ const DEMO_CAMPUS_PHOTOS: Record<string, string> = {
   BAU: 'https://upload.wikimedia.org/wikipedia/commons/e/ed/Bangladesh_Agricultural_University_%28BAU%29.jpg',
   BUTEX: 'https://upload.wikimedia.org/wikipedia/commons/5/5f/Butex..jpg',
   RUET: 'https://upload.wikimedia.org/wikipedia/commons/5/58/Ruet_campus_gate.jpg',
-  IU: 'https://upload.wikimedia.org/wikipedia/commons/4/43/Main_gate_IU.jpg',
+  IU: '/campuses/iu.jpg?v=iu-gate-2026',
 };
 
 const DEMO_CAMPUS_LOGOS: Record<string, string> = {

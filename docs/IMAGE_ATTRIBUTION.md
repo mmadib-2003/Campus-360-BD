@@ -13,10 +13,15 @@ no attribution check should block the release on their account:
 | University of Chittagong (CU) cover | `/campuses/cu.jpg` | Central Shaheed Minar monument relief wall on the CU campus. Served as `/campuses/cu.jpg?v=cu-monument-2026`. |
 | SUST cover | `/campuses/sust.jpg` | Yellow "SUST" landmark sign at the Shahjalal University of Science and Technology entrance. Served as `/campuses/sust.jpg?v=sust-gate-2026`. |
 | KUET cover | `/campuses/kuet.webp`, `/campuses/kuet.jpg` | White "KUET" landmark sign on the lawn at Khulna University of Engineering & Technology. Served as `/campuses/kuet.webp?v=kuet-landmark-2026` (JPEG twin kept so both extensions resolve). |
+| Islamic University (IU) cover | `/campuses/iu.jpg` | White triple-arched main gate of Islamic University, Bangladesh, with the gold Arabic wordmark and the "ISLAMIC UNIVERSITY" sign. Served as `/campuses/iu.jpg?v=iu-gate-2026`. |
+| Jagannath University (JnU) cover | `/campuses/jnu.jpg` | Cream colonnaded main building of Jagannath University with the orange "জগন্নাথ বিশ্ববিদ্যালয়" sign. Served as `/campuses/jnu.jpg?v=jnu-campus-2026`. |
+| University of Rajshahi (RU) cover | `/campuses/ru.jpg` | Rajshahi University administration building behind the circular central lawn. Served as `/campuses/ru.jpg?v=ru-admin-2026`. |
+| BUET cover | `/campuses/buet.jpg` | Gate 02 of the Bangladesh University of Engineering and Technology, with the bilingual university nameboard. Served as `/campuses/buet.jpg?v=buet-gate2-2026`. |
 
 These local files supersede the Wikimedia Commons photographs previously used
-for the CU, SUST and KUET covers (rows below are kept for history). Migration
-`0024_update_cu_sust_kuet_cover_images.sql` points `public.universities` at the
+for the CU, SUST, KUET, IU, JnU, RU and BUET covers (rows below are kept for
+history). Migrations `0024_update_cu_sust_kuet_cover_images.sql` and
+`0027_update_iu_jnu_ru_buet_cover_images.sql` point `public.universities` at the
 versioned local paths.
 
 > **Local-asset attribution audit pending (remaining files only):** the *other*
@@ -31,6 +36,9 @@ The home feed and campus directory show authentic photographs of the flagship
 Bangladeshi public universities. The files are served from Wikimedia Commons
 (`Special:FilePath` for photographs, `upload.wikimedia.org` for the logo
 files). The linked file pages contain the applicable authorship and licence details.
+
+Historical Wikimedia sourcing for the flagship covers — the BUET and RU rows
+below are superseded by the user-supplied photos in the first table.
 
 | University | Cover photograph | Author | Licence |
 | --- | --- | --- | --- |
@@ -60,15 +68,18 @@ assets; they are community-contributed Wikimedia Commons files.
 
 `apps/web/public/campuses/` contains local photographic fallbacks. Except for
 the user-supplied files listed at the top of this page (`cu.jpg`, `sust.jpg`,
-`kuet.webp`, `kuet.jpg` — cleared for release), their exact sources and licence
-terms still need to be matched to each file before release; the Wikimedia links
-on this page do not establish attribution for those copies.
+`kuet.webp`, `kuet.jpg`, `iu.jpg`, `jnu.jpg`, `ru.jpg`, `buet.jpg` — cleared for
+release), their exact sources and licence terms still need to be matched to each
+file before release; the Wikimedia links on this page do not establish
+attribution for those copies.
 
 ## Expanded campus photography (18 additional universities)
 
 The home feed now shows authentic campus photographs for 24 public universities.
 These are the additional files (all served from Wikimedia Commons; each file
-page carries the authoritative author and licence):
+page carries the authoritative author and licence). The IU and JNU rows are
+historical: migration 0027 replaced those covers with the user-supplied main
+gate and main building photographs listed at the top of this page.
 
 | University | Cover photograph |
 | --- | --- |

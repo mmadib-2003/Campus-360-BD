@@ -33,7 +33,13 @@ import {
 } from '@/lib/supabase-url';
 
 /** Pass as the trailing headers argument of `apiSuccess` / `apiError`. */
-export const REGISTRY_CACHE_VERSION = '2026-11-cu-sust-kuet-covers-v1';
+// Bumped whenever the registry payload changes shape or media. It travels as
+// `X-Registry-Version` on every registry answer, so a client, a proxy log or a
+// support screenshot can tell which generation it is holding; the no-store
+// headers below are what stop that generation from being cached at all, and the
+// `?v=` suffix on the cover URLs retires the browser/CDN copies of the photos
+// themselves (2026-11: IU/JnU/RU/BUET covers, migration 0027).
+export const REGISTRY_CACHE_VERSION = '2026-11-iu-jnu-ru-buet-covers-v1';
 
 export const REGISTRY_NO_STORE: Record<string, string> = {
   'Cache-Control': 'no-store, max-age=0',
