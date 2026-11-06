@@ -12,7 +12,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (!isSupabaseServerConfigured()) {
     // Same static fallback as the list route: the demo payload carries the
     // versioned local covers (CU monument, SUST gate, KUET landmark —
-    // migration 0024), so a secret-less preview shows the same photos.
+    // migration 0024 — and IU main gate, JnU main building, RU administration
+    // building, BUET Gate 02 — migration 0027) from DEMO_CAMPUS_PHOTOS/COVERS
+    // in lib/demo-auth.ts, so a secret-less preview shows the same photos.
     const key = params.id.trim().toLowerCase();
     const university = demoUniversitiesPayload().find(
       (candidate) => candidate.id.toLowerCase() === key || candidate.code.toLowerCase() === key

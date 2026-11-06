@@ -342,13 +342,15 @@ describe('authentic campus imagery and one-click demo identities', () => {
       ['CU', 'Campus,_University_of_Chittagong_1.jpg'],
       ['RU', 'Rajshahi_University_Campus.jpg'],
     ] as const;
-    // JU, CU and SUST previews use the bundled user-supplied photos (see
-    // docs/IMAGE_ATTRIBUTION.md and migrations 0023/0024) instead of the
-    // Wikimedia files the seed still records for a fresh database.
+    // JU, CU, SUST, RU and BUET previews use the bundled user-supplied photos
+    // (see docs/IMAGE_ATTRIBUTION.md and migrations 0023/0024/0027) instead of
+    // the Wikimedia files the seed still records for a fresh database.
     const localPreviewCovers: Record<string, string> = {
       JU: '/campuses/ju.jpg?v=ju-shaheed-minar',
       CU: '/campuses/cu.jpg?v=cu-monument-2026',
       SUST: '/campuses/sust.jpg?v=sust-gate-2026',
+      RU: '/campuses/ru.jpg?v=ru-admin-2026',
+      BUET: '/campuses/buet.jpg?v=buet-gate2-2026',
     };
     for (const [code, file] of expected) {
       expect(seed, `${code} cover`).toContain(file);
@@ -412,10 +414,10 @@ describe('expanded authentic campus imagery (24 universities)', () => {
       expect(expanded, `${code} migration cover`).toContain(file);
     }
     // The offline preview payload must carry the same authentic files for the
-    // demo campuses it serves. KUET is the exception: its preview cover is the
-    // bundled user-supplied landmark photo (migration 0024), checked below.
+    // demo campuses it serves. KUET, IU, JnU, RU and BUET are the exceptions:
+    // their preview covers are the bundled user-supplied photos (migrations
+    // 0024/0027), checked below.
     for (const file of [
-      'Jagannath_University_Bird_View.jpg',
       'BUP_Campus_Aerial_View_2.jpg',
       'Sir_Jagadish_Chandra_Bose_Academic_Building%2C_Jashore_University_of_Science_and_Technology.jpg',
       'CUET_GATE.jpg',
@@ -424,6 +426,8 @@ describe('expanded authentic campus imagery (24 universities)', () => {
       expect(demoAuth, `demo payload ${file}`).toContain(file);
     }
     expect(demoAuth, 'demo payload KUET landmark').toContain('/campuses/kuet.webp?v=kuet-landmark-2026');
+    expect(demoAuth, 'demo payload JnU main building').toContain('/campuses/jnu.jpg?v=jnu-campus-2026');
+    expect(demoAuth, 'demo payload IU main gate').toContain('/campuses/iu.jpg?v=iu-gate-2026');
     const kuetMigration = read('supabase/migrations/0024_update_cu_sust_kuet_cover_images.sql');
     for (const cover of [
       '/campuses/cu.jpg?v=cu-monument-2026',
@@ -432,5 +436,70 @@ describe('expanded authentic campus imagery (24 universities)', () => {
     ]) {
       expect(kuetMigration, `0024 ${cover}`).toContain(cover);
     }
+  });
+});
+
+
+describe('user-supplied IU / JnU / RU / BUET covers (migration 0027)', () => {
+  const demoAuth = read('apps/web/lib/demo-auth.ts');
+  const migration = read('supabase/migrations/0027_update_iu_jnu_ru_buet_cover_images.sql');
+  const attribution = read('docs/IMAGE_ATTRIBUTION.md');
+  const registryCache = read('apps/web/lib/registry-cache.ts');
+  const covers: Array<[string, string, string]> = [
+    ['IU', 'iu.jpg', '/campuses/iu.jpg?v=iu-gate-2026'],
+    ['JNU', 'jnu.jpg', '/campuses/jnu.jpg?v=jnu-campus-2026'],
+    ['RU', 'ru.jpg', '/campuses/ru.jpg?v=ru-admin-2026'],
+    ['BUET', 'buet.jpg', '/campuses/buet.jpg?v=buet-gate2-2026'],
+  ];
+
+  it.each(covers)('%s ships a real JPEG behind the versioned cover path', (code, file, url) => {
+    const absolute = path.join(repoRoot, 'apps/web/public/campuses', file);
+    expect(fs.existsSync(absolute), `${code} file`).toBe(true);
+    const bytes = fs.readFileSync(absolute);
+    // JPEG SOI marker: the uploads were converted, not renamed .png files.
+    expect(bytes.subarray(0, 3).toString('hex'), `${code} is a JPEG`).toBe('ffd8ff');
+    expect(bytes.byteLength, `${code} is not empty`).toBeGreaterThan(20_000);
+    // Both fallback maps must agree, because DEMO_CAMPUS_PHOTOS wins over
+    // DEMO_CAMPUS_COVERS in demoUniversitiesPayload().
+    expect(demoAuth.match(new RegExp(`'${url.replace(/[?./]/g, '\\$&')}'`, 'g'))?.length, `${code} in both maps`)
+      .toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(covers)('%s is pointed at the local cover by the migration', (code, _file, url) => {
+    expect(migration).toContain(url);
+    expect(migration).toContain(`('${code}',`);
+    expect(migration).toContain('cover_image_url');
+    expect(migration).toContain('BEGIN;');
+    expect(migration).toContain('COMMIT;');
+    // logo_url is a trademark, not a cover: the migration must not touch it.
+    expect(migration).not.toMatch(/SET[^;]*logo_url/);
+  });
+
+  it('no longer serves the superseded Wikimedia covers for these four', () => {
+    for (const superseded of [
+      'Main_gate_IU.jpg',
+      'Jagannath_University_Bird_View.jpg',
+      'Rajshahi_University_Campus.jpg',
+      'BUET_Campus_(01).jpg',
+    ]) {
+      expect(demoAuth, superseded).not.toContain(superseded);
+    }
+  });
+
+  it('bumps the registry cache key so the directory cards refetch', () => {
+    expect(registryCache).toContain("REGISTRY_CACHE_VERSION = '2026-11-iu-jnu-ru-buet-covers-v1'");
+    expect(registryCache).not.toContain('2026-11-cu-sust-kuet-covers-v1');
+    expect(registryCache).toContain("'X-Registry-Version': REGISTRY_CACHE_VERSION");
+    expect(registryCache).toContain("'Vercel-CDN-Cache-Control': 'no-store'");
+  });
+
+  it.each(covers)('%s is documented as user-supplied media', (code, file, url) => {
+    expect(attribution).toContain(`/campuses/${file}`);
+    expect(attribution).toContain(url);
+    expect(attribution).toContain('0027_update_iu_jnu_ru_buet_cover_images.sql');
+    // The cleared-for-release table is what keeps the attribution audit from
+    // blocking these four files.
+    const cleared = attribution.split('## Institutional logos')[0];
+    expect(cleared, `${code} cleared for release`).toContain(`/campuses/${file}`);
   });
 });
