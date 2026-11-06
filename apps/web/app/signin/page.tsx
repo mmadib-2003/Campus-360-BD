@@ -10,7 +10,14 @@ import { UniversityCombobox, type UniversityOption } from '@/components/auth/Uni
 import { HallCombobox, type HallOption } from '@/components/auth/HallCombobox';
 import { RoleSelector } from '@/components/auth/RoleSelector';
 import { RoleEmailField } from '@/components/auth/RoleEmailField';
-import { approvedDomains, hallForRole, matchesUniversityDomain, requiresHall } from '@/lib/auth-rules';
+import {
+  approvedDomains,
+  displayNameFromEmail,
+  hallForRole,
+  matchesUniversityDomain,
+  normalizeAccountEmail,
+  requiresHall,
+} from '@/lib/auth-rules';
 import { RequestOtpSchema } from '@campus360/shared';
 
 /** True when /api/auth/session reports a signed-in, email-verified account. */
@@ -91,8 +98,12 @@ export default function SignInPage() {
       setError(t('Please select your residential hall')); return;
     }
     const selectedHallId = hallForRole(role, hallId);
-    const request = { email, universityId, role, purpose: 'signin', hallId: selectedHallId,
-      signupPayload: { role, hallId: selectedHallId } };
+    const normalizedEmail = normalizeAccountEmail(email);
+    // First-time sign-ins create the account from this payload, so the display
+    // name default and the tenant travel with the challenge.
+    const fullName = displayNameFromEmail(normalizedEmail);
+    const request = { email: normalizedEmail, universityId, role, purpose: 'signin', hallId: selectedHallId,
+      signupPayload: { role, hallId: selectedHallId, fullName, email: normalizedEmail, universityId } };
     if (!RequestOtpSchema.safeParse(request).success) { setError(t('Check your email, role and university details')); return; }
     const domains = approvedDomains(universities.find((university) => university.id === universityId));
     if (requiresHall(role) && !matchesUniversityDomain(email, domains)) {
@@ -115,21 +126,24 @@ export default function SignInPage() {
         window.sessionStorage.setItem(
           'campus360.signup',
           JSON.stringify({
-            email,
+            email: normalizedEmail,
             universityId: payload.data?.universityId ?? universityId,
             hallId: selectedHallId,
             hallName: selectedHallId ? halls.find((hall) => hall.id === selectedHallId)?.name ?? '' : null,
             purpose: 'signin',
             role: payload.data?.role ?? role,
-            fullName: email.split('@')[0] ?? 'Demo Student',
+            fullName,
             studentId: '',
+            programSession: null,
+            departmentId: null,
+            programId: null,
             demoCode: payload.data?.demoCode ?? null,
             demo: Boolean(payload.data?.demo),
             expiresAt: payload.data?.expiresAt ?? null,
           })
         );
       }
-      router.push(`/verify-email?email=${encodeURIComponent(email)}&role=${role}`);
+      router.push(`/verify-email?email=${encodeURIComponent(normalizedEmail)}&role=${role}`);
     } catch {
       setError(t('Verification failed'));
     } finally {

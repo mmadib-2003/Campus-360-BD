@@ -7,6 +7,10 @@ import {
   isDemoEmail,
   verifyDemoSessionTokenEdge,
 } from '@/lib/demo-session-edge';
+import {
+  VERIFIED_SESSION_COOKIE,
+  verifyVerifiedSessionTokenEdge,
+} from '@/lib/verified-session-edge';
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next();
@@ -17,6 +21,14 @@ export async function middleware(req: NextRequest) {
   // 1. Verify HMAC-signed `campus360_demo_session` cookie alongside Supabase Auth.
   const rawDemoCookie = req.cookies.get(DEMO_SESSION_COOKIE)?.value;
   const demoSession = await verifyDemoSessionTokenEdge(rawDemoCookie);
+  // Signed identity minted after a successful 6-digit OTP. It survives a
+  // GoTrue/profile outage, so the middleware must honour it too.
+  const verifiedSession = await verifyVerifiedSessionTokenEdge(
+    req.cookies.get(VERIFIED_SESSION_COOKIE)?.value
+  );
+  // Newest session wins so Quick Demo Login still switches roles freely.
+  const demoPreferred =
+    Boolean(demoSession) && (!verifiedSession || (demoSession?.iat ?? 0) >= verifiedSession.iat);
 
   // 2. Refresh Supabase Auth session cookies when configured.
   let supabaseUser: {
@@ -55,7 +67,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const isDemo =
-    Boolean(demoSession) ||
+    demoPreferred ||
     isDemoEmail(supabaseUser?.email) ||
     Boolean(supabaseUser?.user_metadata?.is_demo);
 
@@ -87,6 +99,20 @@ export async function middleware(req: NextRequest) {
 
     res.headers.set('x-campus360-demo-session', '1');
     res.headers.set('x-campus360-demo-role', effectiveRole);
+    return res;
+  }
+
+  // A verified OTP session is a real sign-in: keep it off the OTP form and the
+  // sign-in page, but unlike a demo session it still goes through /onboarding
+  // when the profile needs a program session or a student hall.
+  if (verifiedSession) {
+    if (pathname === '/verify-email' || pathname === '/signin') {
+      const redirect = NextResponse.redirect(new URL('/', req.url));
+      res.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+      return redirect;
+    }
+    res.headers.set('x-campus360-verified-session', '1');
+    res.headers.set('x-campus360-verified-role', verifiedSession.role);
     return res;
   }
 

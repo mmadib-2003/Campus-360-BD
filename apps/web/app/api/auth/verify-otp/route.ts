@@ -3,13 +3,25 @@
 // Step 2 of the email OTP flow: validate the submitted code against the
 // digest stored in `verification_attempts`, enforce the 5-minute TTL and the
 // 5-attempt budget, retire the challenge, provision the Supabase user and
-// establish the session cookie.
+// establish the session cookies.
 //
-//   POST /api/auth/verify-otp   { email, otp, role?, programSession?, hallId? }
+//   POST /api/auth/verify-otp
+//   { email, otp, role?, universityId?, hallId?, programSession?,
+//     departmentId?, programId?, fullName?, studentId? }
 //
 // On success the challenge is consumed atomically-ish (verified_at +
 // consumed_at set, otp_hash nulled) so a captured code cannot be replayed even
 // if the response is lost and the request is retried.
+//
+// A valid code ALWAYS signs the user in
+// -------------------------------------
+// Once the digest matches, the mailbox is proven. Account provisioning
+// (lib/otp-account.ts) and the Supabase session exchange are therefore
+// best-effort: if the service role key, RLS, a trigger or GoTrue misbehaves,
+// the verified identity is sealed into the signed HTTP-only
+// `campus360_verified_session` cookie and the response is still 200. The old
+// "Your email is verified, but the account could not be loaded" dead end is
+// gone; `/api/auth/session` repairs the database write on the next read.
 //
 // Idempotency & serverless safety (the "stuck on /verify-email" fix):
 //   • A caller that already holds a verified session for the submitted email
@@ -25,7 +37,7 @@
 // ============================================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import crypto from 'crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { authError, authLog } from '@/lib/auth-log';
 import { createSupabaseAdminClient, createSupabaseRouteClient } from '@/lib/supabase-server';
 import { apiError, apiSuccess } from '@/lib/api-response';
@@ -67,6 +79,12 @@ import {
   setOtpVerifiedReceipt,
   type OtpChallengeCookiePayload,
 } from '@/lib/otp-challenge-cookie';
+import {
+  ensureVerifiedAccount,
+  resolveAccountContext,
+  type AccountContext,
+} from '@/lib/otp-account';
+import { issueVerifiedSession, readVerifiedSession } from '@/lib/verified-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -173,18 +191,15 @@ async function handleVerifyOtp(req: NextRequest) {
   // (verified_at within the window) corroborates it when readable.
   if (otpVerifiedReceiptMatches(readOtpVerifiedReceiptRaw(), email, otp)) {
     const recent = await readRecentVerifiedOtpChallenge(admin, email, OTP_IDEMPOTENCY_WINDOW_SECONDS);
-    if (recent && !contextMatches({ role: String(recent.signup_payload?.role ?? 'student'),
-      hallId: typeof recent.signup_payload?.hallId === 'string' ? recent.signup_payload.hallId : null,
-      programSession: typeof recent.signup_payload?.programSession === 'string' ? recent.signup_payload.programSession : null }, submitted.data)) {
-      return apiError('OTP_CONTEXT_MISMATCH', 'Verification details do not match the issued code. Request a new code.',
-        'যাচাইকরণের তথ্য প্রদত্ত কোডের সাথে মেলে না। নতুন কোড নিন।', 409);
+    if (recent && !contextMatches(payloadContext(recent.signup_payload), submitted.data)) {
+      return contextMismatch();
     }
     authLog('verify-otp.idempotent-receipt', {
       email: redactEmail(email),
       dbCorroborated: Boolean(recent),
     });
     // The first response's Set-Cookie may have been lost — re-mint if needed.
-    await refreshOrEstablishSession(email);
+    await refreshOrEstablishSession(email, payloadContext(recent?.signup_payload), submitted.data);
     return alreadyVerifiedSuccess();
   }
 
@@ -205,7 +220,7 @@ async function handleVerifyOtp(req: NextRequest) {
           401
         );
       }
-      return verifyViaCookieFallback(admin, email, otp, cookieChallenge);
+      return verifyViaCookieFallback(admin, email, otp, cookieChallenge, submitted.data);
     }
 
     // `readActiveOtpChallenge` already logged a lookup failure when the query
@@ -219,11 +234,8 @@ async function handleVerifyOtp(req: NextRequest) {
     );
   }
 
-  if (!contextMatches({ role: String(challenge.signup_payload?.role ?? 'student'),
-    hallId: typeof challenge.signup_payload?.hallId === 'string' ? challenge.signup_payload.hallId : null,
-    programSession: typeof challenge.signup_payload?.programSession === 'string' ? challenge.signup_payload.programSession : null }, submitted.data)) {
-    return contextMismatch();
-  }
+  const issued = payloadContext(challenge.signup_payload);
+  if (!contextMatches(issued, submitted.data)) return contextMismatch();
 
   if (isChallengeExpired(challenge)) {
     // Retire it immediately so the client cannot keep hammering a dead code.
@@ -265,8 +277,7 @@ async function handleVerifyOtp(req: NextRequest) {
     );
   }
 
-  const issuedPayload = challenge.signup_payload ?? {};
-  if (issuedPayload.purpose === 'signup' && !ProgramSessionSchema.safeParse(issuedPayload.programSession).success) {
+  if (issued.purpose === 'signup' && !ProgramSessionSchema.safeParse(issued.programSession).success) {
     return apiError('PROGRAM_SESSION_REQUIRED', 'Select a valid program session before creating your account.',
       'অ্যাকাউন্ট তৈরির আগে সঠিক প্রোগ্রাম সেশন নির্বাচন করুন।', 400);
   }
@@ -277,53 +288,39 @@ async function handleVerifyOtp(req: NextRequest) {
 
   const secondsLeft = remainingOtpSeconds(challenge.expires_at);
 
-  // Provision or locate the Supabase user + profile.
-  const payload = issuedPayload as Record<string, string | null>;
-  const provisioned = await provisionVerifiedUser(admin, email, challenge.university_id, payload);
-  if (!provisioned.ok) return provisioned.response;
-  const { userId, isNewUser, needsOnboarding, role: accountRole } = provisioned;
-
-  await authLogged('verify-otp.audit-insert-failed', () =>
-    admin.from('audit_log').insert({
-    university_id: challenge.university_id,
-    actor_id: userId,
-    action: 'EMAIL_OTP_VERIFIED',
-    entity_type: 'PROFILE',
-    entity_id: userId,
-    metadata: {
-      email: redactEmail(email),
-      challenge_id: challenge.id,
-      seconds_used: OTP_TTL_SECONDS - secondsLeft,
-      demo: isDemoAuthMode(),
-    },
-    })
-  );
-
-  // Log the user in (session cookies land on path '/').
-  const session = await establishSupabaseSession(email);
-  if (!session.ok) return session.response;
-
-  // Retire the cookie backup + any stale preview OTP cookie, and seal a
-  // short-lived verification receipt so duplicate submissions succeed.
-  finalizeVerificationCookies(email, otp);
-
-  const nextStep = isNewUser || (needsOnboarding && accountRole !== 'admin') ? '/onboarding' : demoNextStep(normalizeDemoRole(accountRole));
-  return apiSuccess({
-    ok: true,
-    verified: true,
-    userId,
-    universityId: challenge.university_id,
-    role: accountRole,
-    trustLevel: 'EMAIL_VERIFIED',
-    challengeConsumed: true,
-    nextStep,
-    redirectTo: nextStep,
+  return completeVerification(admin, {
+    email,
+    otp,
+    issued: { ...issued, email, universityId: challenge.university_id },
+    submitted: submitted.data,
+    challengeId: challenge.id,
+    secondsUsed: OTP_TTL_SECONDS - secondsLeft,
+    viaCookieFallback: false,
   });
 }
 
 function contextMismatch() {
   return apiError('OTP_CONTEXT_MISMATCH', 'Verification details do not match the issued code. Request a new code.',
     'যাচাইকরণের তথ্য প্রদত্ত কোডের সাথে মেলে না। নতুন কোড নিন।', 409);
+}
+
+/** The metadata request-otp sealed into verification_attempts.signup_payload. */
+function payloadContext(payload: Record<string, unknown> | null | undefined): AccountContext {
+  const source = payload ?? {};
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() ? value.trim() : null);
+  return {
+    email: text(source.email),
+    universityId: text(source.universityId),
+    // Challenges issued before explicit role selection were student-only.
+    role: text(source.role) ?? 'student',
+    hallId: text(source.hallId),
+    departmentId: text(source.departmentId),
+    programId: text(source.programId),
+    programSession: text(source.programSession),
+    fullName: text(source.fullName),
+    studentId: text(source.studentId),
+    purpose: text(source.purpose) ?? 'signin',
+  };
 }
 
 /** Optional only for old clients; supplied values must match the challenge. */
@@ -351,11 +348,13 @@ function alreadyVerifiedSuccess(): NextResponse {
 
 /**
  * True when the request already carries a verified session for `email`:
- * either the signed quick-demo cookie or a Supabase session whose address is
- * confirmed. `getUser()` also refreshes the Supabase cookies via the SSR
- * client, so the caller's session is extended just by asking.
+ * the signed verified-session cookie, the signed quick-demo cookie, or a
+ * Supabase session whose address is confirmed. `getUser()` also refreshes the
+ * Supabase cookies via the SSR client, so the session is extended by asking.
  */
 async function hasVerifiedSessionForEmail(email: string): Promise<boolean> {
+  const verified = readVerifiedSession();
+  if (verified && verified.email === email && verified.emailVerified) return true;
   try {
     const demo = readSignedDemoSession();
     if (demo && demo.email.trim().toLowerCase() === email && demo.email_verified) return true;
@@ -380,21 +379,44 @@ async function hasVerifiedSessionForEmail(email: string): Promise<boolean> {
 }
 
 /** Best-effort session refresh/re-mint for the idempotent path. */
-async function refreshOrEstablishSession(email: string): Promise<void> {
+async function refreshOrEstablishSession(
+  email: string,
+  issued: AccountContext,
+  submitted: AccountContext
+): Promise<void> {
   try {
     const routeSupabase = createSupabaseRouteClient();
     const {
       data: { user },
     } = await routeSupabase.auth.getUser();
-    if (user?.email?.trim().toLowerCase() === email) return; // cookies refreshed
+    if (user?.email?.trim().toLowerCase() === email && readVerifiedSession()?.email === email) return;
+  } catch {
+    /* fall through to a fresh mint */
+  }
 
+  try {
     const admin = createSupabaseAdminClient();
-    const { data: linkData } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
-    if (linkData?.properties?.hashed_token) {
-      await routeSupabase.auth.verifyOtp({
-        type: 'magiclink',
-        token_hash: linkData.properties.hashed_token,
-      });
+    const context = resolveAccountContext({ ...issued, email }, { ...submitted, email });
+    const account = await ensureVerifiedAccount(admin, context);
+    const supabaseSession = await establishSupabaseSession(email);
+    issueVerifiedSession({
+      id: account.userId,
+      email,
+      role: account.role,
+      fullName: account.fullName,
+      studentId: account.studentId,
+      universityId: account.universityId,
+      universityCode: account.universityCode,
+      universityName: account.universityName,
+      hallId: account.hallId,
+      departmentId: account.departmentId,
+      programId: account.programId,
+      programSession: account.programSession,
+      persistence: account.persisted ? 'supabase' : 'pending',
+      needsOnboarding: account.needsOnboarding,
+    });
+    if (!supabaseSession) {
+      authLog('verify-otp.idempotent-signed-cookie-session', { email: redactEmail(email) });
     }
   } catch (error) {
     authError('verify-otp.idempotent-session-refresh-failed', error, { email: redactEmail(email) });
@@ -418,10 +440,11 @@ function finalizeVerificationCookies(email: string, otp: string): void {
 // ---------------------------------------------------------------------------
 
 async function verifyViaCookieFallback(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
+  admin: SupabaseClient,
   email: string,
   otp: string,
-  cookieChallenge: OtpChallengeCookiePayload
+  cookieChallenge: OtpChallengeCookiePayload,
+  submitted: AccountContext
 ): Promise<NextResponse> {
   authLog('verify-otp.cookie-fallback', { email: redactEmail(email) });
 
@@ -429,20 +452,6 @@ async function verifyViaCookieFallback(
     return apiError('PROGRAM_SESSION_REQUIRED', 'Select a valid program session before creating your account.',
       'অ্যাকাউন্ট তৈরির আগে সঠিক প্রোগ্রাম সেশন নির্বাচন করুন।', 400);
   }
-  const payload: Record<string, string | null> = {
-    fullName: cookieChallenge.fullName ?? '',
-    studentId: cookieChallenge.studentId ?? '',
-    role: cookieChallenge.role ?? 'student',
-    hallId: cookieChallenge.role === 'student' || !cookieChallenge.role ? cookieChallenge.hallId ?? '' : null,
-    programSession: cookieChallenge.programSession ?? null,
-    purpose: cookieChallenge.purpose ?? 'signin',
-    departmentId: cookieChallenge.departmentId ?? '',
-    programId: cookieChallenge.programId ?? '',
-  };
-
-  const provisioned = await provisionVerifiedUser(admin, email, cookieChallenge.universityId, payload);
-  if (!provisioned.ok) return provisioned.response;
-  const { userId, isNewUser, needsOnboarding, role: accountRole } = provisioned;
 
   // Best-effort: retire the database row too, when this instance can see it.
   if (cookieChallenge.challengeId) {
@@ -450,203 +459,181 @@ async function verifyViaCookieFallback(
   }
   await clearProfileDemoOtp(admin, email);
 
+  return completeVerification(admin, {
+    email,
+    otp,
+    issued: {
+      email,
+      universityId: cookieChallenge.universityId,
+      role: cookieChallenge.role ?? 'student',
+      hallId: cookieChallenge.hallId ?? null,
+      departmentId: cookieChallenge.departmentId ?? null,
+      programId: cookieChallenge.programId ?? null,
+      programSession: cookieChallenge.programSession ?? null,
+      fullName: cookieChallenge.fullName ?? null,
+      studentId: cookieChallenge.studentId ?? null,
+      purpose: cookieChallenge.purpose ?? 'signin',
+    },
+    submitted,
+    challengeId: cookieChallenge.challengeId ?? null,
+    secondsUsed: null,
+    viaCookieFallback: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Account + session establishment (shared by the DB and cookie paths)
+// ---------------------------------------------------------------------------
+
+interface CompleteVerificationInput {
+  email: string;
+  otp: string;
+  issued: AccountContext;
+  submitted: AccountContext;
+  challengeId: string | null;
+  secondsUsed: number | null;
+  viaCookieFallback: boolean;
+}
+
+/**
+ * The code matched: provision the account, start the Supabase session when
+ * possible, and ALWAYS leave the browser with a signed verified session.
+ * Nothing in here returns an error response — a proven mailbox is a sign-in.
+ */
+async function completeVerification(
+  admin: SupabaseClient,
+  input: CompleteVerificationInput
+): Promise<NextResponse> {
+  const { email, otp } = input;
+  const context = resolveAccountContext(input.issued, { ...input.submitted, email });
+  const account = await ensureVerifiedAccount(admin, context);
+
   await authLogged('verify-otp.audit-insert-failed', () =>
     admin.from('audit_log').insert({
-      university_id: cookieChallenge.universityId,
-      actor_id: userId,
+      university_id: account.universityId,
+      actor_id: account.synthetic ? null : account.userId,
       action: 'EMAIL_OTP_VERIFIED',
       entity_type: 'PROFILE',
-      entity_id: userId,
+      entity_id: account.userId,
       metadata: {
         email: redactEmail(email),
-        challenge_id: cookieChallenge.challengeId ?? null,
-        via_cookie_fallback: true,
+        challenge_id: input.challengeId,
+        seconds_used: input.secondsUsed,
+        via_cookie_fallback: input.viaCookieFallback,
+        profile_persisted: account.persisted,
+        degraded: account.degraded,
         demo: isDemoAuthMode(),
       },
     })
   );
 
-  const session = await establishSupabaseSession(email);
-  if (!session.ok) return session.response;
+  // Supabase's own session cookies are the preferred transport, but they are
+  // an optimization now — not a precondition for being signed in.
+  const supabaseSession = await establishSupabaseSession(email);
+  issueVerifiedSession({
+    id: account.userId,
+    email,
+    role: account.role,
+    fullName: account.fullName,
+    studentId: account.studentId,
+    universityId: account.universityId,
+    universityCode: account.universityCode,
+    universityName: account.universityName,
+    hallId: account.hallId,
+    departmentId: account.departmentId,
+    programId: account.programId,
+    programSession: account.programSession,
+    persistence: account.persisted ? 'supabase' : 'pending',
+    needsOnboarding: account.needsOnboarding,
+  });
 
+  // Retire the cookie backup + any stale preview OTP cookie, and seal a
+  // short-lived verification receipt so duplicate submissions succeed.
   finalizeVerificationCookies(email, otp);
 
-  const nextStep = isNewUser || (needsOnboarding && accountRole !== 'admin') ? '/onboarding' : demoNextStep(normalizeDemoRole(accountRole));
+  const nextStep = account.isNewUser || (account.needsOnboarding && account.role !== 'admin')
+    ? '/onboarding'
+    : demoNextStep(normalizeDemoRole(account.role));
+
+  authLog('verify-otp.verified', {
+    email: redactEmail(email),
+    role: account.role,
+    newUser: account.isNewUser,
+    profilePersisted: account.persisted,
+    sessionMode: supabaseSession ? 'supabase' : 'signed-cookie',
+    degraded: account.degraded,
+  });
+
   return apiSuccess({
     ok: true,
     verified: true,
-    userId,
-    universityId: cookieChallenge.universityId,
-    role: accountRole,
+    userId: account.userId,
+    user: {
+      id: account.userId,
+      email,
+      role: account.role,
+      fullName: account.fullName,
+      universityId: account.universityId,
+      hallId: account.hallId,
+      departmentId: account.departmentId,
+      programId: account.programId,
+      programSession: account.programSession,
+      emailVerified: true,
+    },
+    universityId: account.universityId,
+    role: account.role,
     trustLevel: 'EMAIL_VERIFIED',
     challengeConsumed: true,
-    viaCookieFallback: true,
+    profilePersisted: account.persisted,
+    sessionMode: supabaseSession ? 'supabase' : 'signed-cookie',
+    ...(account.degraded.length > 0 ? { degraded: account.degraded } : {}),
+    ...(input.viaCookieFallback ? { viaCookieFallback: true } : {}),
     nextStep,
     redirectTo: nextStep,
   });
 }
 
-// ---------------------------------------------------------------------------
-// Provisioning + session issuance (shared by the DB and cookie paths)
-// ---------------------------------------------------------------------------
-
-type ProvisionResult =
-  | { ok: true; userId: string; isNewUser: boolean; needsOnboarding: boolean; role: string }
-  | { ok: false; response: NextResponse };
-
-async function provisionVerifiedUser(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  email: string,
-  universityId: string,
-  payload: Record<string, string | null>
-): Promise<ProvisionResult> {
-  const requestedRole = String(payload.role ?? 'student').toLowerCase();
-  const programSession = ProgramSessionSchema.safeParse(payload.programSession).success
-    ? String(payload.programSession) : null;
-  const { data: existingProfile, error: profileErr } = await admin.from('profiles')
-    .select('id, university_id, role, program_session, user_roles(role)')
-    .eq('email', email).maybeSingle();
-  if (profileErr) {
-    authError('verify-otp.profile-lookup-failed', profileErr, { email: redactEmail(email) });
-    return { ok: false, response: apiError('PROFILE_LOOKUP_FAILED',
-      'Your email is verified, but the account could not be loaded. Please request a new code and sign in again.',
-      'ইমেইল যাচাই হয়েছে, তবে অ্যাকাউন্ট লোড করা যায়নি। নতুন কোড দিয়ে আবার সাইন ইন করুন।', 503) };
-  }
-
-  if (existingProfile) {
-    const userId = String(existingProfile.id);
-    // An existing account's authoritative role is never replaced by a login
-    // selector. In particular, a public form cannot remove administrative roles.
-    const assignedRoles = Array.isArray(existingProfile.user_roles)
-      ? existingProfile.user_roles.map((row: { role?: unknown }) => String(row.role ?? '').toLowerCase()) : [];
-    const privileged = assignedRoles.some((role: string) => ['admin', 'super_admin', 'university_admin', 'governance', 'governing_body'].includes(role));
-    const actualRole = privileged ? 'admin' : assignedRoles[0] ?? String(existingProfile.role ?? requestedRole).toLowerCase();
-    const updates: Record<string, unknown> = {};
-    if (programSession) updates.program_session = programSession;
-    if (existingProfile.university_id === universityId && actualRole === requestedRole) {
-      if (requestedRole === 'student' && payload.hallId) updates.hall_id = payload.hallId;
-      if (requestedRole === 'faculty' || requestedRole === 'alumni') updates.hall_id = null;
-    }
-    if (Object.keys(updates).length > 0) {
-      const { error } = await admin.from('profiles').update(updates).eq('id', userId).eq('university_id', universityId);
-      if (error) {
-        authError('verify-otp.profile-update-failed', error, { email: redactEmail(email) });
-        return { ok: false, response: apiError('PROFILE_UPDATE_FAILED',
-          'Your verified account details could not be saved. Please try a new code.',
-          'যাচাইকৃত অ্যাকাউন্টের তথ্য সংরক্ষণ করা যায়নি। নতুন কোড দিয়ে চেষ্টা করুন।', 503) };
-      }
-    }
-    await admin.from('profiles').update({ trust_level: 'EMAIL_VERIFIED' }).eq('id', userId).eq('trust_level', 'UNVERIFIED');
-    return { ok: true, userId, isNewUser: false, needsOnboarding: !(programSession ?? existingProfile.program_session), role: actualRole };
-  }
-
-  const tempPassword = crypto.randomBytes(24).toString('hex');
-  const { data: createdAuth, error: authErr } = await admin.auth.admin.createUser({
-    email, password: tempPassword, email_confirm: true,
-    user_metadata: { university_id: universityId, full_name: payload.fullName ?? email.split('@')[0], role: requestedRole },
-  });
-  if (authErr || !createdAuth.user) {
-    authError('verify-otp.user-create-failed', authErr ?? new Error('createUser returned no user'), { email: redactEmail(email) });
-    return { ok: false, response: apiError('AUTH_CREATE_FAILED', 'Failed to provision verified user account.', 'অ্যাকাউন্ট তৈরি করা যায়নি।', 500) };
-  }
-  const userId = createdAuth.user.id;
-  const { error: insertError } = await admin.from('profiles').insert({
-    id: userId,
-    university_id: universityId,
-    department_id: payload.departmentId || null,
-    hall_id: requestedRole === 'student' ? payload.hallId || null : null,
-    // Migration 0012. The academic program remains optional and independent.
-    program_id: payload.programId || null,
-    program_session: programSession,
-    role: requestedRole,
-    email,
-    full_name: payload.fullName || email.split('@')[0],
-    student_id: payload.studentId || 'PENDING',
-    trust_level: 'EMAIL_VERIFIED',
-    onboarding_completed: Boolean(programSession),
-  });
-  if (insertError) {
-    authError('verify-otp.profile-create-failed', insertError, { email: redactEmail(email) });
-    return { ok: false, response: apiError('PROFILE_CREATE_FAILED',
-      'Your email is verified, but the profile could not be saved. Please sign in again to finish setup.',
-      'ইমেইল যাচাই হয়েছে, তবে প্রোফাইল সংরক্ষণ করা যায়নি। আবার সাইন ইন করে সেটআপ সম্পূর্ণ করুন।', 503) };
-  }
-  const roleMap: Record<string, string> = {
-    student: 'STUDENT', faculty: 'FACULTY', alumni: 'ALUMNI', admin: 'ADMIN', governance: 'GOVERNANCE',
-  };
-  const { error: roleError } = await admin.from('user_roles').insert({
-    user_id: userId, university_id: universityId, role: roleMap[requestedRole] ?? 'STUDENT',
-  });
-  if (roleError) {
-    authError('verify-otp.role-create-failed', roleError, { email: redactEmail(email) });
-    return { ok: false, response: apiError('ROLE_ASSIGNMENT_FAILED',
-      'Your profile was saved, but its role could not be assigned. Please contact support.',
-      'প্রোফাইল সংরক্ষিত হয়েছে, কিন্তু ভূমিকা নির্ধারণ করা যায়নি। সহায়তার সাথে যোগাযোগ করুন।', 503) };
-  }
-  return { ok: true, userId, isNewUser: true, needsOnboarding: !programSession, role: requestedRole };
-}
-
-type SessionResult = { ok: true } | { ok: false; response: NextResponse };
-
-/** Mint a magiclink with the service client and exchange it through the SSR
- *  client so the verified session lands in cookies on path '/'. */
-async function establishSupabaseSession(email: string): Promise<SessionResult> {
-  const admin = createSupabaseAdminClient();
-  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-  });
-  if (linkErr) {
-    authError('verify-otp.generate-link-failed', linkErr, { email: redactEmail(email) });
-  }
-
-  const routeSupabase = createSupabaseRouteClient();
-
-  if (!linkData?.properties?.hashed_token) {
-    // No token, no cookie. Reporting success from here told the client
-    // "verified" while leaving it signed out — which is exactly what looked like
-    // "sign-in crashing" from the browser. The challenge is already consumed, so
-    // the message says what to do next rather than inviting a retry of the code.
-    authError(
-      'verify-otp.session-token-missing',
-      linkErr ?? new Error('generateLink returned no hashed_token'),
-      { email: redactEmail(email) }
-    );
-    return {
-      ok: false,
-      response: apiError(
-        'SESSION_ISSUE_FAILED',
-        'Email verified, but the session could not be started. Please request a new code and sign in again.',
-        'ইমেইল যাচাই সফল হয়েছে, তবে সেশন শুরু করা যায়নি। নতুন কোড অনুরোধ করে আবার সাইন ইন করুন।',
-        500
-      ),
-    };
-  }
-
-  const {
-    error: sessionErr,
-    data: { user },
-  } = await routeSupabase.auth.verifyOtp({
-    type: 'magiclink',
-    token_hash: linkData.properties.hashed_token,
-  });
-
-  if (sessionErr || !user) {
-    authError('verify-otp.session-exchange-failed', sessionErr ?? new Error('verifyOtp returned no user'), {
-      email: redactEmail(email),
+/**
+ * Mint a magiclink with the service client and exchange it through the SSR
+ * client so the Supabase session lands in cookies on path '/'. Best-effort:
+ * a failure here is logged and answered by the signed verified-session cookie.
+ */
+async function establishSupabaseSession(email: string): Promise<boolean> {
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
     });
-    return {
-      ok: false,
-      response: apiError(
-        'SESSION_ISSUE_FAILED',
-        'Email verified, but the session could not be started. Please sign in again.',
-        'ইমেইল যাচাই সফল হয়েছে, তবে সেশন শুরু করা যায়নি। আবার সাইন ইন করুন।',
-        500
-      ),
-    };
-  }
+    if (linkErr) {
+      authError('verify-otp.generate-link-failed', linkErr, { email: redactEmail(email) });
+    }
+    if (!linkData?.properties?.hashed_token) {
+      authError('verify-otp.session-token-missing', linkErr ?? new Error('generateLink returned no hashed_token'), {
+        email: redactEmail(email),
+      });
+      return false;
+    }
 
-  return { ok: true };
+    const routeSupabase = createSupabaseRouteClient();
+    const {
+      error: sessionErr,
+      data: { user },
+    } = await routeSupabase.auth.verifyOtp({
+      type: 'magiclink',
+      token_hash: linkData.properties.hashed_token,
+    });
+    if (sessionErr || !user) {
+      authError('verify-otp.session-exchange-failed', sessionErr ?? new Error('verifyOtp returned no user'), {
+        email: redactEmail(email),
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    authError('verify-otp.session-establish-failed', error, { email: redactEmail(email) });
+    return false;
+  }
 }
 
 // verify-otp helper: bookkeeping writes (audit trail) must never turn a

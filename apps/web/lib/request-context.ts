@@ -13,6 +13,12 @@ import {
   JU_CANONICAL_IIT_DEPARTMENT_ID,
   JU_CANONICAL_UNIVERSITY_ID,
 } from './modules/demo-data';
+import {
+  appRolesForVerifiedRole,
+  buildVerifiedProfile,
+  readVerifiedSession,
+  type VerifiedSessionPayload,
+} from './verified-session';
 
 export interface SessionProfile {
   id: string;
@@ -86,14 +92,68 @@ function buildSyntheticUser(session: SignedDemoSessionPayload): User {
   };
 }
 
+/** The `user` object route handlers expect, built from signed verified claims. */
+function buildVerifiedUser(session: VerifiedSessionPayload): User {
+  const nowIso = new Date().toISOString();
+  return {
+    id: session.id,
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: session.email,
+    email_confirmed_at: nowIso,
+    app_metadata: { provider: 'email', providers: ['email'], role: session.role },
+    user_metadata: {
+      full_name: session.fullName,
+      name: session.fullName,
+      role: session.role,
+      university_id: session.universityId,
+      hall_id: session.hallId,
+      department_id: session.departmentId,
+      program_session: session.programSession,
+      email_verified: true,
+    },
+    identities: [],
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+}
+
 /**
  * Resolves the authenticated user for a route handler.
- * Reads Supabase Auth cookies first and falls back to the HMAC-signed
- * `campus360_demo_session` cookie so demo accounts work seamlessly even when
- * GoTrue is unreachable.
+ * Reads Supabase Auth cookies first, then the HMAC-signed
+ * `campus360_verified_session` cookie minted after a successful OTP, then the
+ * `campus360_demo_session` cookie — so a verified user keeps campus access even
+ * when GoTrue or the service-role key is unavailable.
  */
 export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Response }> {
+  const signedDemoSession = readSignedDemoSession();
+  const verifiedSession = readVerifiedSession();
+  // Newest session wins: Quick Demo Login keeps working after a real sign-in.
+  const demoSession =
+    verifiedSession && (!signedDemoSession || verifiedSession.iat > (signedDemoSession.iat ?? 0))
+      ? null
+      : signedDemoSession;
+
   if (!isSupabaseServerConfigured()) {
+    // Without the service-role key the database is only reachable as anon, but
+    // the caller's identity is still proven: public campus reads keep working.
+    if (verifiedSession) {
+      try {
+        const supabase = createSupabaseRouteClient();
+        return {
+          auth: {
+            supabase,
+            admin: supabase,
+            user: buildVerifiedUser(verifiedSession),
+            profile: buildVerifiedProfile(verifiedSession) as unknown as SessionProfile,
+            roles: appRolesForVerifiedRole(verifiedSession.role),
+            isAdmin: false,
+          },
+        };
+      } catch {
+        /* no public credentials either — fall through to the 503 */
+      }
+    }
     return {
       response: apiError(
         'SUPABASE_NOT_CONFIGURED',
@@ -103,8 +163,6 @@ export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Re
       ),
     };
   }
-
-  const demoSession = readSignedDemoSession();
 
   try {
     const supabase = createSupabaseRouteClient();
@@ -187,6 +245,50 @@ export async function requireAuth(): Promise<{ auth?: RequestAuth; response?: Re
           profile: effectiveProfile,
           roles,
           isAdmin,
+        },
+      };
+    }
+
+    // Fallback: the signed `campus360_verified_session` cookie issued after a
+    // successful 6-digit OTP. Prefer the database row when it is readable.
+    if (verifiedSession) {
+      let dbProfile: SessionProfile | null = null;
+      let roles: string[] = [];
+      try {
+        const { data } = await admin
+          .from('profiles')
+          .select(
+            'id, university_id, email, full_name, trust_level, student_id, department_id, program_session, hall_id, universities(code, name_en, name_bn), halls:university_halls(name, name_bn)'
+          )
+          .eq('email', verifiedSession.email)
+          .maybeSingle();
+        if (data?.university_id) {
+          dbProfile = data as unknown as SessionProfile;
+          const { data: roleRows } = await admin
+            .from('user_roles')
+            .select('role, university_id')
+            .eq('user_id', String(data.id));
+          roles = (roleRows ?? []).map((row) => String(row.role));
+        }
+      } catch {
+        /* signed claims below */
+      }
+
+      if (roles.length === 0) roles = appRolesForVerifiedRole(verifiedSession.role);
+      return {
+        auth: {
+          supabase: admin,
+          admin,
+          user: buildVerifiedUser(
+            dbProfile ? { ...verifiedSession, id: String(dbProfile.id) } : verifiedSession
+          ),
+          profile: dbProfile ?? (buildVerifiedProfile(verifiedSession) as unknown as SessionProfile),
+          roles,
+          // Administrative access is never granted by cookie claims alone
+          // unless the database confirmed the role when the cookie was minted.
+          isAdmin:
+            roles.some((role) => ADMIN_ROLE_LIST.includes(role)) ||
+            (verifiedSession.role === 'admin' && verifiedSession.persistence === 'supabase'),
         },
       };
     }
