@@ -661,7 +661,9 @@
     "No module found": "কোনো মডিউল পাওয়া যায়নি",
     "Selected campus": "নির্বাচিত ক্যাম্পাস",
     "Sign in below to explore this campus — every module is pre-scoped to it.": "এই ক্যাম্পাস দেখতে নিচে সাইন ইন করুন — সব মডিউল এই ক্যাম্পাসেই সীমাবদ্ধ।",
-    "Welcome / Overview": "স্বাগতম / পরিচিতি"
+    "Welcome / Overview": "স্বাগতম / পরিচিতি",
+    "New here?": "নতুন এখানে?",
+    "Get Started — Join Your Campus": "শুরু করুন — আপনার ক্যাম্পাসে যোগ দিন"
   },
   "roles": {
     "student": "শিক্ষার্থী",
