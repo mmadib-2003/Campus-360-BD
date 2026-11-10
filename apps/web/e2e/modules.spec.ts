@@ -37,6 +37,14 @@ test.describe('Campus360 interactive modules', () => {
         if (message.type() === 'error' && !message.text().includes('favicon')) errors.push(message.text());
       });
 
+      if (route.path === '/') {
+        // The dashboard sits behind the one-time /welcome redirect: visit /welcome
+        // first so the "seen" flag exists, exactly as a returning visitor would.
+        await page.goto('/welcome');
+        await page.waitForFunction(() =>
+          Object.keys(window.localStorage).some((key) => key.startsWith('campus360:welcome-seen:'))
+        );
+      }
       await page.goto(route.path);
       await expect(page.getByRole('heading', { name: new RegExp(route.heading, 'i') }).first()).toBeVisible();
 
