@@ -21,24 +21,44 @@ import { CampusScopeToggle } from '@/components/CampusScopeToggle';
 import { useCampusScope } from '@/lib/use-campus-scope';
 import { withCampusScope } from '@/lib/campus-scope';
 
-const MODULES = [
-  { href: '/', key: 'moduleFeed', icon: '🏠' },
-  { href: '/marketplace', key: 'moduleMarketplace2', icon: '🛍️' },
-  { href: '/skills', key: 'moduleSkills', icon: '🎓' },
-  { href: '/civic', key: 'moduleCivic', icon: '🛡️' },
-  { href: '/events', key: 'moduleEvents', icon: '📅' },
-  { href: '/events/map', key: 'moduleLiveMap', icon: '📍' },
-  { href: '/health', key: 'moduleHealth', icon: '🩸' },
-  { href: '/archive', key: 'moduleArchive', icon: '📚' },
-  { href: '/mentorship', key: 'moduleMentorship', icon: '📖' },
-  { href: '/housing', key: 'moduleHousing2', icon: '🏢' },
-  { href: '/careers', key: 'moduleCareers', icon: '💼' },
-  { href: '/dining', key: 'moduleDining2', icon: '🍛' },
-  { href: '/lost-found', key: 'moduleLostFound2', icon: '🔍' },
-  { href: '/sports', key: 'moduleSports', icon: '🏆' },
-  { href: '/trust', key: 'moduleTrust', icon: '✅' },
-  { href: '/reviews', key: 'moduleReviews', icon: '⭐' },
-  { href: '/admin/console', key: 'moduleAdmin', icon: '🏛️' },
+// One flat list per group: every route that used to live in the long sidebar is
+// still here, just under a heading so the menu scans in three beats.
+const NAV_HOME = { href: '/', key: 'moduleFeed', icon: '🏠' };
+const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; key: string; icon: string }> }> = [
+  {
+    label: 'Campus Life',
+    items: [
+      { href: '/marketplace', key: 'moduleMarketplace2', icon: '🛍️' },
+      { href: '/events', key: 'moduleEvents', icon: '📅' },
+      { href: '/events/map', key: 'moduleLiveMap', icon: '📍' },
+      { href: '/housing', key: 'moduleHousing2', icon: '🏢' },
+      { href: '/dining', key: 'moduleDining2', icon: '🍛' },
+      { href: '/lost-found', key: 'moduleLostFound2', icon: '🔍' },
+      { href: '/sports', key: 'moduleSports', icon: '🏆' },
+    ],
+  },
+  {
+    label: 'Academics & Career',
+    items: [
+      { href: '/archive', key: 'moduleArchive', icon: '📚' },
+      { href: '/skills', key: 'moduleSkills', icon: '🎓' },
+      { href: '/mentorship', key: 'moduleMentorship', icon: '📖' },
+      { href: '/careers', key: 'moduleCareers', icon: '💼' },
+    ],
+  },
+  {
+    label: 'Health & Support',
+    items: [
+      { href: '/health', key: 'moduleHealth', icon: '🩸' },
+      { href: '/civic', key: 'moduleCivic', icon: '🛡️' },
+      { href: '/trust', key: 'moduleTrust', icon: '✅' },
+      { href: '/reviews', key: 'moduleReviews', icon: '⭐' },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [{ href: '/admin/console', key: 'moduleAdmin', icon: '🏛️' }],
+  },
 ];
 
 const ROLE_OPTIONS: Array<{ value: DemoRole; key: string }> = [
@@ -154,21 +174,81 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
+  const isWelcome = pathname === '/welcome';
+
+  const renderNavLink = (
+    item: { href: string; key: string; icon: string },
+    tone: 'light' | 'drawer',
+    onNavigate?: () => void
+  ) => {
+    const active = isActive(item.href);
+    const palette =
+      tone === 'drawer'
+        ? active
+          ? 'bg-emerald-500/15 text-emerald-400'
+          : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+        : active
+          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60';
+    return (
+      <Link
+        key={item.href}
+        href={scopedHref(item.href)}
+        onClick={onNavigate}
+        aria-current={active ? 'page' : undefined}
+        className={`flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-xl text-sm font-medium transition ${palette} ${active ? 'font-semibold' : ''}`}
+      >
+        <span aria-hidden>{item.icon}</span>
+        <span className="min-w-0 truncate">{t(item.key)}</span>
+      </Link>
+    );
+  };
+
+  // One menu, three headings: used by the desktop sidebar and the mobile drawer.
+  const renderNav = (tone: 'light' | 'drawer', onNavigate?: () => void) => (
+    <div className="space-y-5">
+      {renderNavLink(NAV_HOME, tone, onNavigate)}
+      {NAV_GROUPS.map((group) => (
+        <div key={group.label} className="space-y-1">
+          <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t(group.label)}
+          </p>
+          {group.items.map((item) => renderNavLink(item, tone, onNavigate))}
+        </div>
+      ))}
+      <Link
+        href="/welcome"
+        onClick={onNavigate}
+        className="flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-xl text-sm text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400"
+      >
+        <span aria-hidden>✨</span>
+        <span>{t('About Campus360')}</span>
+      </Link>
+    </div>
+  );
+
+  const iconButton =
+    'inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base shrink-0';
+  const subtleButton =
+    'inline-flex min-h-[44px] items-center px-3 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800';
+
   return (
     <div className="min-h-screen w-full max-w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
-      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-40 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+      <header className="campus360-top-navbar sticky top-0 inset-x-0 z-40 w-full shrink-0 !mt-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-3 py-2.5 sm:px-6 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             {/* Hamburger: the only way into the module list below lg. */}
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label={t('Open main menu')}
-              aria-expanded={mobileNavOpen}
-              className="lg:hidden inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-base shrink-0"
-            >
-              ☰
-            </button>
+            {!isWelcome && (
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label={t('Open main menu')}
+                aria-expanded={mobileNavOpen}
+                className={`lg:hidden ${iconButton}`}
+              >
+                ☰
+              </button>
+            )}
             <Link href="/" className="flex items-center gap-2.5 min-w-0">
               {/* Official Campus360 BD mark (user-supplied brand asset, see
                   docs/IMAGE_ATTRIBUTION.md). */}
@@ -178,37 +258,24 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                 className="h-10 w-10 rounded-full object-cover bg-white p-0.5 shadow-sm shrink-0"
               />
               {/* Wordmark yields to the controls on the narrowest phones. */}
-              <div className="hidden sm:block min-w-0">
-                <div className="font-bold text-base tracking-tight truncate">{t('Campus360 BD')}</div>
-                <div className="hidden md:block text-xs text-slate-500 dark:text-slate-400 truncate">
-                  {t('Verified Multi-University Super-App')}
-                </div>
-              </div>
+              <span className="hidden sm:block font-bold text-base tracking-tight truncate">{t('Campus360 BD')}</span>
             </Link>
           </div>
 
-          {/* Desktop command palette trigger. */}
-          <button
-            type="button"
-            onClick={() => setCmdKOpen(true)}
-            className="hidden lg:flex items-center justify-between w-96 max-w-md px-3.5 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-          >
-            <span className="truncate">{t('Search complaints (JU-CASE-...), courses (CSE-301), events, universities...')}</span>
-            <kbd className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 text-[11px] font-mono border border-slate-300 dark:border-slate-700 shrink-0 ml-2">
-              ⌘K
-            </kbd>
-          </button>
-
           <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-            {/* Compact search: opens the same palette as a full-width modal. */}
-            <button
-              type="button"
-              onClick={() => setCmdKOpen(true)}
-              aria-label={t('Search')}
-              className="lg:hidden inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-base"
-            >
-              🔍
-            </button>
+            {/* One search entry point (also ⌘K): compact icon on phones, labelled on desktop. */}
+            {!isWelcome && (
+              <button
+                type="button"
+                onClick={() => setCmdKOpen(true)}
+                aria-label={t('Search')}
+                className={`${iconButton} lg:w-auto lg:gap-2 lg:px-3.5 lg:text-xs lg:text-slate-500 lg:dark:text-slate-400`}
+              >
+                <span aria-hidden>🔍</span>
+                <span className="hidden lg:inline">{t('Search')}</span>
+                <kbd className="hidden lg:inline px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-mono border border-slate-200 dark:border-slate-700">⌘K</kbd>
+              </button>
+            )}
             {/* Theme toggle stays in the bar from 375px up; on the narrowest
                 320px phones it lives in the drawer so nothing wraps. */}
             <span className="hidden min-[375px]:inline-flex">
@@ -217,12 +284,12 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             <button
               type="button"
               onClick={toggleLocale}
-              className="inline-flex h-11 min-h-[44px] items-center px-2.5 sm:px-3 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
+              className={`${subtleButton} h-11 px-2.5 sm:px-3`}
               aria-label={locale === 'en' ? 'বাংলা' : 'English'}
             >
               {locale === 'en' ? 'বাংলা' : 'EN'}
             </button>
-            <NotificationBell />
+            {!isWelcome && <NotificationBell />}
             {session.loading ? (
               <div role="status" aria-label={t('Loading account')} className="h-11 w-20 sm:w-28 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
             ) : session.authenticated ? (
@@ -235,24 +302,17 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                   <span className="block truncate font-semibold">{displayName}</span>
                   <span className="block truncate text-[10px] text-emerald-100">{roleLabel}</span>
                 </Link>
-                <button
-                  type="button"
-                  onClick={signOut}
-                  className="hidden sm:inline-flex min-h-[44px] items-center px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
+                <button type="button" onClick={signOut} className={`hidden sm:inline-flex ${subtleButton}`}>
                   {t('Sign Out')}
                 </button>
               </>
             ) : session.error ? (
-              <button type="button" onClick={session.refresh} className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700">
+              <button type="button" onClick={session.refresh} className={subtleButton}>
                 {t('Retry account')}
               </button>
             ) : (
               <>
-                <Link
-                  href="/signin"
-                  className="inline-flex min-h-[44px] min-w-0 items-center px-2.5 sm:px-3 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap overflow-hidden"
-                >
+                <Link href="/signin" className={`${subtleButton} min-w-0 whitespace-nowrap overflow-hidden`}>
                   {t('Sign In')}
                 </Link>
                 <Link
@@ -266,38 +326,26 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
           </div>
         </div>
 
-        {session.authenticated && profile && (
-          <div className="bg-slate-900 dark:bg-emerald-950/95 border-t border-slate-800 dark:border-emerald-800/40 px-3 sm:px-6 py-1.5 text-slate-100">
-            <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2 text-xs">
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
+        {/* Identity line: one quiet row instead of a rack of coloured pills. */}
+        {!isWelcome && session.authenticated && profile && (
+          <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 sm:px-6 py-1.5">
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                 🏛️ {asText(locale === 'bn' ? univ.name_bn : univ.name_en, 'CAMPUS')} ({asText(univ.code, '—')})
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-medium">✓ {trustLabel}</span>
-              {asText(dept.code) && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200">🎓 {asText(dept.code)}</span>
-              )}
-              {asText(profile.program_session) && (
-                <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 font-medium">
-                  📅 {asText(profile.program_session)}
-                </span>
-              )}
-              {(asText(hall.name) || asText(hall.name_en)) && (
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200">
-                  🏠 {asText(hall.name) || asText(hall.name_en)}
-                </span>
-              )}
-              <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-400 font-mono text-[11px]">
-                ROLE: {asText(roles[0], 'STUDENT')}
-              </span>
+              {trustLabel && <span>✓ {trustLabel}</span>}
+              {asText(dept.code) && <span>{asText(dept.code)}</span>}
+              {asText(profile.program_session) && <span>{asText(profile.program_session)}</span>}
+              {(asText(hall.name) || asText(hall.name_en)) && <span>{asText(hall.name) || asText(hall.name_en)}</span>}
 
               {session.demo && (
                 <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] uppercase tracking-wide text-emerald-300/80">{t('Campus switcher (preview)')}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-slate-400">{t('Campus switcher (preview)')}</span>
                   <select
                     aria-label={t('Switch campus')}
                     value={demoSession.universityId}
                     onChange={(event) => switchCampus(event.target.value)}
-                    className="max-w-[46vw] sm:max-w-none px-2 py-1 rounded-lg bg-slate-950 text-emerald-300 border border-emerald-700/50 text-[11px]"
+                    className="max-w-[46vw] sm:max-w-none px-2 py-1 rounded-lg bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-[11px]"
                   >
                     {DEMO_UNIVERSITIES.map((university) => (
                       <option key={university.id} value={university.id}>
@@ -309,7 +357,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                     aria-label={t('Your role')}
                     value={demoSession.role}
                     onChange={(event) => switchRole(event.target.value as DemoRole)}
-                    className="px-2 py-1 rounded-lg bg-slate-950 text-emerald-300 border border-emerald-700/50 text-[11px]"
+                    className="px-2 py-1 rounded-lg bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-[11px]"
                   >
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -326,7 +374,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
 
       {/* Slide-over navigation drawer (<lg). Backdrop tap, Escape and any
           route change all close it; body scroll is locked while it is open. */}
-      {mobileNavOpen && (
+      {!isWelcome && mobileNavOpen && (
         <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t('Navigation menu')}>
           <div
             className="campus360-backdrop absolute inset-0 bg-black/60 backdrop-blur-xs"
@@ -356,28 +404,9 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               </button>
             </div>
 
-            <div className="space-y-1">
-              {MODULES.map((module) => {
-                const active = isActive(module.href);
-                return (
-                  <Link
-                    key={module.href}
-                    href={scopedHref(module.href)}
-                    onClick={() => setMobileNavOpen(false)}
-                    className={`flex items-center gap-3 min-h-[44px] px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                      active
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                        : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
-                    }`}
-                  >
-                    <span aria-hidden>{module.icon}</span>
-                    <span className="min-w-0 truncate">{t(module.key)}</span>
-                  </Link>
-                );
-              })}
-            </div>
+            {renderNav('drawer', () => setMobileNavOpen(false))}
 
-            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+            <div className="mt-5 pt-4 border-t border-slate-800 space-y-2">
               {/* The theme toggle relocates here on the narrowest phones. */}
               <div className="flex min-[375px]:hidden items-center justify-between gap-2 px-1">
                 <span className="text-xs text-slate-400">{t('Theme')}</span>
@@ -405,68 +434,63 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         </div>
       )}
 
-      <div className="relative z-0 max-w-7xl w-full mx-auto flex-1 flex items-start gap-6 px-3 sm:px-6 pt-6">
-        {/* Persistent sidebar only on lg+; smaller screens use the drawer. */}
-        <aside className="hidden lg:flex lg:w-64 lg:shrink-0">
-          <nav className="sticky top-28 w-full max-h-[calc(100vh-8rem)] overflow-y-auto space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            {MODULES.map((module) => {
-              const active = isActive(module.href);
-              return (
-                <Link
-                  key={module.href}
-                  href={scopedHref(module.href)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                    active
-                      ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
-                >
-                  <span>{module.icon}</span>
-                  <span>{t(module.key)}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
+      {isWelcome ? (
+        // The welcome page is a full-bleed, self-contained one-pager: no sidebar,
+        // no bottom tabs.
+        <main className="flex-1 min-w-0 max-w-full">{children}</main>
+      ) : (
+        <div className="relative z-0 max-w-7xl w-full mx-auto flex-1 flex items-start gap-8 px-3 sm:px-6 pt-8">
+          {/* Persistent sidebar only on lg+; smaller screens use the drawer. */}
+          <aside className="hidden lg:flex lg:w-60 lg:shrink-0">
+            <nav
+              aria-label="Main navigation"
+              className="sticky top-28 w-full max-h-[calc(100vh-8rem)] overflow-y-auto bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+            >
+              {renderNav('light')}
+            </nav>
+          </aside>
 
-        {/* pb-20 keeps content clear of the fixed bottom quick-nav on mobile. */}
-        <main className="flex-1 min-w-0 max-w-full pb-20 lg:pb-8">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
-      </div>
+          {/* pb-20 keeps content clear of the fixed bottom quick-nav on mobile. */}
+          <main className="flex-1 min-w-0 max-w-full pb-20 lg:pb-10">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
+        </div>
+      )}
 
       {/* Mobile bottom quick-nav: five thumb-reachable tabs, safe-area aware. */}
-      <nav
-        aria-label="Quick navigation"
-        className="fixed bottom-0 inset-x-0 z-40 flex lg:hidden bg-slate-950/95 backdrop-blur border-t border-slate-800 pb-[env(safe-area-inset-bottom)]"
-      >
-        {[
-          { href: '/', icon: '🏠', label: t('Home') },
-          { href: '/feed', icon: '📰', label: t('Feed') },
-          { href: '/marketplace', icon: '🛍️', label: t('Market') },
-          { href: '/events', icon: '📅', label: t('Events') },
-        ].map((tab) => (
-          <Link
-            key={tab.href}
-            href={scopedHref(tab.href)}
-            aria-current={isActive(tab.href) ? 'page' : undefined}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium ${
-              isActive(tab.href) ? 'text-emerald-400' : 'text-slate-400'
-            }`}
-          >
-            <span className="text-base leading-none" aria-hidden>{tab.icon}</span>
-            <span className="max-w-[68px] truncate">{tab.label}</span>
-          </Link>
-        ))}
-        <button
-          type="button"
-          onClick={() => setMobileNavOpen(true)}
-          aria-label={t('More')}
-          aria-expanded={mobileNavOpen}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium text-slate-400"
+      {!isWelcome && (
+        <nav
+          aria-label="Quick navigation"
+          className="fixed bottom-0 inset-x-0 z-40 flex lg:hidden bg-white/95 dark:bg-slate-950/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 pb-[env(safe-area-inset-bottom)]"
         >
-          <span className="text-base leading-none" aria-hidden>☰</span>
-          <span>{t('More')}</span>
-        </button>
-      </nav>
+          {[
+            { href: '/', icon: '🏠', label: t('Home') },
+            { href: '/feed', icon: '📰', label: t('Feed') },
+            { href: '/marketplace', icon: '🛍️', label: t('Market') },
+            { href: '/events', icon: '📅', label: t('Events') },
+          ].map((tab) => (
+            <Link
+              key={tab.href}
+              href={scopedHref(tab.href)}
+              aria-current={isActive(tab.href) ? 'page' : undefined}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium ${
+                isActive(tab.href) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+              }`}
+            >
+              <span className="text-base leading-none" aria-hidden>{tab.icon}</span>
+              <span className="max-w-[68px] truncate">{tab.label}</span>
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label={t('More')}
+            aria-expanded={mobileNavOpen}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
+          >
+            <span className="text-base leading-none" aria-hidden>☰</span>
+            <span>{t('More')}</span>
+          </button>
+        </nav>
+      )}
 
       {cmdKOpen && (
         <div

@@ -63,78 +63,58 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
     };
   }, []);
 
+  const guest = !session.loading && !session.authenticated;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <motion.section
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="relative overflow-hidden p-5 sm:p-8 rounded-2xl bg-gradient-to-br from-emerald-900/60 via-slate-900 to-teal-950 border border-emerald-500/30 shadow-xl"
+        className="c360-card space-y-6 p-6 sm:p-8"
       >
-        {/* Slow ambient blobs — the page should feel alive before any data lands. */}
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute -top-24 -right-16 h-64 w-64 rounded-full bg-emerald-500/25 blur-3xl"
-          animate={{ scale: [1, 1.18, 1], opacity: [0.45, 0.75, 0.45] }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-teal-400/20 blur-3xl"
-          animate={{ scale: [1, 1.12, 1], opacity: [0.35, 0.65, 0.35] }}
-          transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-        />
-
-        <div className="relative">
-          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-            </span>
-            🇧🇩 {t('13 Bangladesh Public Universities Supported')}
-          </span>
-          {session.authenticated && <div className="mt-4 w-full max-w-xl"><CampusScopeToggle universityCode={session.profile?.universities?.code} /></div>}
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white mt-4">
+        <div className="max-w-3xl space-y-3">
+          <h1 className="c360-h1 !text-2xl sm:!text-3xl">
             {t('One verified super-app for every public university campus in Bangladesh')}
           </h1>
-          <p className="text-sm text-slate-300 mt-2 max-w-2xl">
-            {session.authenticated ? t(scope === 'all' ? 'Showing public listings across supported universities.' : 'Showing listings and activity for your university only.') : t('Strict institutional email OTP verification, row-level tenant isolation, a 50 MB virus-scanned Academic Archive, SLA-tracked anonymous grievance resolution, and live campus events.')}
+          <p className="c360-muted">
+            {session.authenticated
+              ? t(scope === 'all' ? 'Showing public listings across supported universities.' : 'Showing listings and activity for your university only.')
+              : t('Strict institutional email OTP verification, row-level tenant isolation, a 50 MB virus-scanned Academic Archive, SLA-tracked anonymous grievance resolution, and live campus events.')}
           </p>
-          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mt-6">
-            <Link
-              href="/signup"
-              className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow transition hover:scale-[1.03] hover:shadow-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-            >
-              {t('Join Your Campus')}
-            </Link>
-            <Link
-              href="/track/JU-CASE-2026-482913"
-              className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition hover:scale-[1.02]"
-            >
-              {t('Track Grievance Case')} (JU-CASE-...)
-            </Link>
-            <Link
-              href="/signin"
-              className="min-h-[44px] inline-flex items-center justify-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-white/10 hover:bg-white/15 text-white border border-white/20 transition hover:scale-[1.02]"
-            >
-              ⚡ {t('Quick Demo Login')}
-            </Link>
+        </div>
+        {session.authenticated && (
+          <div className="w-full max-w-xl">
+            <CampusScopeToggle universityCode={session.profile?.universities?.code} />
           </div>
+        )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          {guest && (
+            <>
+              <Link href="/signup" className="c360-btn-primary">
+                {t('Join Your Campus')}
+              </Link>
+              <Link href="/signin" className="c360-btn-secondary">
+                ⚡ {t('Quick Demo Login')}
+              </Link>
+            </>
+          )}
+          <Link
+            href="/track/JU-CASE-2026-482913"
+            className="inline-flex min-h-[44px] items-center text-sm font-semibold text-emerald-600 underline-offset-4 hover:underline dark:text-emerald-400"
+          >
+            {t('Track Grievance Case')} (JU-CASE-...) →
+          </Link>
         </div>
       </motion.section>
 
       <ModuleHub />
 
       {!compact && (
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end sm:justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-bold">{t('Supported Public Universities Registry')}</h2>
-              <p className="text-[11px] text-slate-400">
-                {t('Authentic campus photography supplied by campus contributors; remaining photos and institutional logos via Wikimedia Commons.')}
-              </p>
-            </div>
-            <Link href="/signup" className="text-xs text-emerald-400 hover:underline">
+        <section className="space-y-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="c360-h2">{t('Supported Public Universities Registry')}</h2>
+            <Link href="/signup" className="text-sm font-semibold text-emerald-600 hover:underline dark:text-emerald-400">
               {t('View Full Searchable Dropdown')} →
             </Link>
           </div>
@@ -148,13 +128,10 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
               description={t('Campus cards will appear as soon as the registry responds.')}
             />
           ) : (
-            <StaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <StaggerGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {universities.map((university) => (
                 <StaggerItem key={university.id} className="h-full">
-                  <motion.article
-                    {...cardHover}
-                    className="card-glow h-full overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-                  >
+                  <motion.article {...cardHover} className="c360-card card-glow h-full overflow-hidden">
                     <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-emerald-900/70 via-slate-900 to-teal-950">
                       {university.cover_image_url ? (
                         <img
@@ -182,28 +159,21 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
                             className="h-7 w-7 rounded-lg bg-white/90 object-contain p-0.5 ring-1 ring-white/25"
                           />
                         ) : null}
-                        <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 font-bold text-xs">
-                          {university.code}
-                        </span>
+                        <span className="text-xs font-bold text-white">{university.code}</span>
                       </div>
                     </div>
-                    <div className="p-4 space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-slate-400 font-mono truncate">
-                          {(university.university_email_domains ?? []).map((domain) => `@${domain.domain}`).join(', ')}
-                        </span>
-                        {university.city ? (
-                          <span className="text-[11px] text-slate-400 shrink-0">{university.city}</span>
-                        ) : null}
-                      </div>
-                      <div className="font-semibold text-sm">{locale === 'bn' ? university.name_bn : university.name_en}</div>
-                      <div className="text-xs text-slate-400">{locale === 'bn' ? university.name_en : university.name_bn}</div>
+                    <div className="space-y-1 p-4">
+                      <h3 className="text-sm font-semibold leading-snug">{locale === 'bn' ? university.name_bn : university.name_en}</h3>
+                      {university.city ? <p className="text-xs text-slate-500 dark:text-slate-400">{university.city}</p> : null}
                     </div>
                   </motion.article>
                 </StaggerItem>
               ))}
             </StaggerGroup>
           )}
+          <p className="text-[11px] text-slate-400">
+            {t('Authentic campus photography supplied by campus contributors; remaining photos and institutional logos via Wikimedia Commons.')}
+          </p>
         </section>
       )}
     </div>

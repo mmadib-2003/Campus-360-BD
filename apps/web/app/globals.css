@@ -243,3 +243,68 @@ html {
     scroll-behavior: auto;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Design primitives (UI simplification).
+   One radius (rounded-2xl), one soft shadow, one primary + one secondary
+   button, and one heading scale. New and refactored surfaces compose these
+   instead of carrying one-off gradient / border / size combinations.
+   Palette: emerald (primary), slate (neutral). Teal is only used inside the
+   existing primary gradient.
+   --------------------------------------------------------------------------- */
+@layer components {
+  .c360-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  }
+  .c360-card-interactive {
+    @apply c360-card transition duration-200 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60;
+  }
+  .c360-btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent;
+  }
+  .c360-btn-primary {
+    @apply c360-btn bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-sm hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-500/25;
+  }
+  .c360-btn-secondary {
+    @apply c360-btn border border-slate-300 bg-white text-slate-800 hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  }
+  .c360-h1 {
+    @apply text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl;
+  }
+  .c360-h2 {
+    @apply text-xl font-bold tracking-tight sm:text-2xl;
+  }
+  .c360-h3 {
+    @apply text-base font-semibold;
+  }
+  .c360-muted {
+    @apply text-sm text-slate-500 dark:text-slate-400;
+  }
+}
+
+/* Welcome hero: two slow ambient blobs, purely decorative. */
+@keyframes campus360-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate3d(0, -14px, 0) scale(1.08);
+    opacity: 0.8;
+  }
+}
+.campus360-float {
+  animation: campus360-float 10s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .campus360-float {
+    animation: none;
+  }
+  .c360-btn-primary,
+  .c360-btn-secondary,
+  .c360-card-interactive {
+    transition: none;
+    transform: none !important;
+  }
+}
