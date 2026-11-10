@@ -133,6 +133,12 @@ function Hero({ onDemo }: { onDemo: () => void }) {
             ⚡ {t('Try Instant Demo')}
           </button>
         </div>
+        <p className="mt-4 text-xs text-slate-400">
+          {t('New here?')}{' '}
+          <Link href="/signup" className="font-semibold text-emerald-300 hover:text-emerald-200 underline underline-offset-2">
+            {t('Get Started — Join Your Campus')}
+          </Link>
+        </p>
       </div>
     </motion.section>
   );
