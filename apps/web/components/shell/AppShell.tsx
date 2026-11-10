@@ -20,26 +20,11 @@ import { asArray, asRow, asText } from '@/lib/render-safe';
 import { CampusScopeToggle } from '@/components/CampusScopeToggle';
 import { useCampusScope } from '@/lib/use-campus-scope';
 import { withCampusScope } from '@/lib/campus-scope';
+import { NAV_GROUPS, NAV_MODULES } from '@/lib/modules/nav';
 
-const MODULES = [
-  { href: '/', key: 'moduleFeed', icon: '🏠' },
-  { href: '/marketplace', key: 'moduleMarketplace2', icon: '🛍️' },
-  { href: '/skills', key: 'moduleSkills', icon: '🎓' },
-  { href: '/civic', key: 'moduleCivic', icon: '🛡️' },
-  { href: '/events', key: 'moduleEvents', icon: '📅' },
-  { href: '/events/map', key: 'moduleLiveMap', icon: '📍' },
-  { href: '/health', key: 'moduleHealth', icon: '🩸' },
-  { href: '/archive', key: 'moduleArchive', icon: '📚' },
-  { href: '/mentorship', key: 'moduleMentorship', icon: '📖' },
-  { href: '/housing', key: 'moduleHousing2', icon: '🏢' },
-  { href: '/careers', key: 'moduleCareers', icon: '💼' },
-  { href: '/dining', key: 'moduleDining2', icon: '🍛' },
-  { href: '/lost-found', key: 'moduleLostFound2', icon: '🔍' },
-  { href: '/sports', key: 'moduleSports', icon: '🏆' },
-  { href: '/trust', key: 'moduleTrust', icon: '✅' },
-  { href: '/reviews', key: 'moduleReviews', icon: '⭐' },
-  { href: '/admin/console', key: 'moduleAdmin', icon: '🏛️' },
-];
+// Navigation registry — shared with the dashboard module switcher so the
+// sidebar, drawer, ⌘K palette and switcher can never drift apart.
+const MODULES = NAV_MODULES;
 
 const ROLE_OPTIONS: Array<{ value: DemoRole; key: string }> = [
   { value: 'student', key: 'Student' },
@@ -68,6 +53,9 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   const [searchQuery, setSearchQuery] = React.useState('');
   const [cmdKOpen, setCmdKOpen] = React.useState(false);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  // Sidebar groups start expanded; the user can collapse any group. The group
+  // containing the active route is always kept expanded (see render below).
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
   const [demoSession, setDemoSessionState] = React.useState(() => getDemoSession());
 
   React.useEffect(() => subscribeDemoSession(setDemoSessionState), []);
@@ -153,6 +141,15 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   const scopedHref = (href: string) => withCampusScope(href, scope);
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+
+  // Welcome mode (Phase 2): unauthenticated visitors at the root entry get the
+  // minimal one-page Welcome experience (its own header, hero, pillars and
+  // university showcase) without the dashboard chrome. Signed-in visitors at
+  // '/' keep the full shell + HomeView dashboard, exactly as before.
+  const isWelcome = pathname === '/' && !session.loading && !session.authenticated;
+  if (isWelcome) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen w-full max-w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
@@ -356,7 +353,17 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
               </button>
             </div>
 
-            <div className="space-y-1">
+            <Link
+              href="/welcome"
+              onClick={() => setMobileNavOpen(false)}
+              className="flex items-center gap-3 min-h-[44px] px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 hover:text-white transition border-t border-slate-800 pt-3 mt-1 mb-2"
+            >
+              <span aria-hidden>✨</span>
+              <span>{t('Welcome / Overview')}</span>
+            </Link>
+
+            {/* All Modules drawer: every route stays reachable as a clean grid. */}
+            <div className="grid grid-cols-2 gap-2">
               {MODULES.map((module) => {
                 const active = isActive(module.href);
                 return (
@@ -364,14 +371,14 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                     key={module.href}
                     href={scopedHref(module.href)}
                     onClick={() => setMobileNavOpen(false)}
-                    className={`flex items-center gap-3 min-h-[44px] px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                    className={`flex flex-col items-start gap-1.5 min-h-[64px] p-3 rounded-2xl text-xs font-medium transition ${
                       active
                         ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                        : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                        : 'text-slate-300 border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 hover:text-white'
                     }`}
                   >
-                    <span aria-hidden>{module.icon}</span>
-                    <span className="min-w-0 truncate">{t(module.key)}</span>
+                    <span aria-hidden className="text-base leading-none">{module.icon}</span>
+                    <span className="min-w-0 leading-tight">{t(module.key)}</span>
                   </Link>
                 );
               })}
@@ -406,26 +413,62 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
       )}
 
       <div className="relative z-0 max-w-7xl w-full mx-auto flex-1 flex items-start gap-6 px-3 sm:px-6 pt-6">
-        {/* Persistent sidebar only on lg+; smaller screens use the drawer. */}
+        {/* Persistent sidebar only on lg+; smaller screens use the drawer.
+            Four collapsible groups (Phase 3) replace the flat 17-link list;
+            the group holding the active route stays expanded. */}
         <aside className="hidden lg:flex lg:w-64 lg:shrink-0">
-          <nav className="sticky top-28 w-full max-h-[calc(100vh-8rem)] overflow-y-auto space-y-1 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            {MODULES.map((module) => {
-              const active = isActive(module.href);
+          <nav className="sticky top-28 w-full max-h-[calc(100vh-8rem)] overflow-y-auto space-y-2 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+            {NAV_GROUPS.map((group) => {
+              const groupModules = group.hrefs
+                .map((href) => MODULES.find((module) => module.href === href))
+                .filter((module): module is (typeof MODULES)[number] => Boolean(module));
+              const groupActive = groupModules.some((module) => isActive(module.href));
+              const collapsed = Boolean(collapsedGroups[group.labelKey]) && !groupActive;
               return (
-                <Link
-                  key={module.href}
-                  href={scopedHref(module.href)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                    active
-                      ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
-                >
-                  <span>{module.icon}</span>
-                  <span>{t(module.key)}</span>
-                </Link>
+                <div key={group.labelKey}>
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedGroups((state) => ({ ...state, [group.labelKey]: !state[group.labelKey] }))}
+                    aria-expanded={!collapsed}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition"
+                  >
+                    <span className="truncate">{t(group.labelKey)}</span>
+                    <span aria-hidden className={`transition-transform ${collapsed ? '-rotate-90' : ''}`}>▾</span>
+                  </button>
+                  {!collapsed && (
+                    <div className="space-y-1 mt-1">
+                      {groupModules.map((module) => {
+                        const active = isActive(module.href);
+                        return (
+                          <Link
+                            key={module.href}
+                            href={scopedHref(module.href)}
+                            aria-current={active ? 'page' : undefined}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                              active
+                                ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                            }`}
+                          >
+                            <span>{module.icon}</span>
+                            <span>{t(module.key)}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
+
+            {/* Always-available link back to the one-page Welcome overview. */}
+            <Link
+              href="/welcome"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition border-t border-slate-200/80 dark:border-slate-800 pt-3 mt-1"
+            >
+              <span aria-hidden>✨</span>
+              <span>{t('Welcome / Overview')}</span>
+            </Link>
           </nav>
         </aside>
 
@@ -440,9 +483,9 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
       >
         {[
           { href: '/', icon: '🏠', label: t('Home') },
-          { href: '/feed', icon: '📰', label: t('Feed') },
+          { href: '/archive', icon: '📚', label: t('Academic') },
           { href: '/marketplace', icon: '🛍️', label: t('Market') },
-          { href: '/events', icon: '📅', label: t('Events') },
+          { href: '/health', icon: '🩸', label: t('Emergency Blood') },
         ].map((tab) => (
           <Link
             key={tab.href}
@@ -459,12 +502,12 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
-          aria-label={t('More')}
+          aria-label={t('All Modules')}
           aria-expanded={mobileNavOpen}
           className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] py-1.5 text-[10px] font-medium text-slate-400"
         >
           <span className="text-base leading-none" aria-hidden>☰</span>
-          <span>{t('More')}</span>
+          <span>{t('All Modules')}</span>
         </button>
       </nav>
 
@@ -495,7 +538,31 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
                 ESC
               </button>
             </div>
-            <div className="p-3 space-y-2 text-xs">
+            <div className="p-3 space-y-2 text-xs max-h-[60vh] overflow-y-auto">
+              {/* Module switcher (Phase 3): jump to any module in one second. */}
+              {searchQuery.trim() && (
+                <>
+                  <p className="px-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('Modules')}</p>
+                  {MODULES.filter((module) =>
+                    t(module.key).toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+                    module.href.toLowerCase().includes(searchQuery.trim().toLowerCase())
+                  ).map((module) => (
+                    <button
+                      key={module.href}
+                      type="button"
+                      onClick={() => {
+                        setCmdKOpen(false);
+                        router.push(scopedHref(module.href));
+                      }}
+                      className="w-full min-h-[44px] text-left p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5"
+                    >
+                      <span aria-hidden>{module.icon}</span>
+                      <span className="font-medium">{t(module.key)}</span>
+                      <span className="ml-auto text-slate-400">→</span>
+                    </button>
+                  ))}
+                </>
+              )}
               {searchQuery.toUpperCase().includes('-CASE-') && (
                 <button
                   type="button"
