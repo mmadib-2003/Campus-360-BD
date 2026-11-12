@@ -573,7 +573,7 @@ export function SignInPrompt({ moduleName }: { moduleName: string }) {
         Anyone can read the listings. Posting, booking, messaging and the contact details students share with each
         other need a verified campus account — sign in with your verified email for those.
       </p>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">
         তালিকা দেখা সবার জন্য উন্মুক্ত। পোস্ট করতে, বুক করতে ও যোগাযোগের বিবরণ দেখতে যাচাইকৃত ইমেইলে সাইন-ইন করুন।
       </p>
       <div className="flex flex-col sm:flex-row gap-2">

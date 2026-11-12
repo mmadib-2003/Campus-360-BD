@@ -16,6 +16,7 @@ import {
 } from '@/lib/modules/demo-data';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { SiteFooter } from '@/components/site/Footer';
 import { asArray, asRow, asText } from '@/lib/render-safe';
 import { CampusScopeToggle } from '@/components/CampusScopeToggle';
 import { useCampusScope } from '@/lib/use-campus-scope';
@@ -475,6 +476,11 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         {/* pb-20 keeps content clear of the fixed bottom quick-nav on mobile. */}
         <main className="flex-1 min-w-0 max-w-full pb-20 lg:pb-8">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
       </div>
+
+      {/* Comprehensive site footer (brand, quick/policy links, contact +
+          payment partners). pb-20 on mobile clears the fixed bottom quick-nav;
+          desktop has no such nav so the footer sits flush. */}
+      <SiteFooter className="pb-16 lg:pb-0" />
 
       {/* Mobile bottom quick-nav: five thumb-reachable tabs, safe-area aware. */}
       <nav

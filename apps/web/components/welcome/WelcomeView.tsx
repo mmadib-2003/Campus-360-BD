@@ -21,6 +21,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { QuickDemoLogin } from '@/components/auth/QuickDemoLogin';
 import { DEMO_UNIVERSITY_HALLS, getDemoUniversity, setDemoSession } from '@/lib/modules/demo-data';
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
+import { SiteFooter } from '@/components/site/Footer';
 import { PILLARS } from './pillars';
 
 interface RegistryUniversity {
@@ -150,7 +151,7 @@ function PillarOverview() {
   const active = PILLARS.find((pillar) => pillar.id === activeId) ?? PILLARS[0];
 
   return (
-    <section className="space-y-5">
+    <section id="services" aria-label={t('Explore Campus360 BD')} className="space-y-5 scroll-mt-24">
       <div className="text-center max-w-xl mx-auto">
         <h2 className="text-xl sm:text-2xl font-extrabold">{t('Explore Campus360 BD')}</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -281,7 +282,7 @@ function UniversityShowcase() {
   }
 
   return (
-    <section className="space-y-5">
+    <section id="universities" aria-label={t('Supported Public Universities')} className="space-y-5 scroll-mt-24">
       <div className="text-center max-w-xl mx-auto">
         <h2 className="text-xl sm:text-2xl font-extrabold">{t('Supported Public Universities')}</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -461,18 +462,7 @@ export function WelcomeView() {
         <PillarOverview />
         <UniversityShowcase />
       </main>
-      <footer className="border-t border-slate-200/80 dark:border-slate-800">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <span className="font-semibold">{t('Campus360 BD')} — {t('Verified Multi-University Super-App')}</span>
-          <span className="flex items-center gap-4">
-            <Link href="/signin" className="hover:text-emerald-500">{t('Sign In')}</Link>
-            <button type="button" onClick={() => setDemoOpen(true)} className="hover:text-emerald-500">
-              ⚡ {t('Try Instant Demo')}
-            </button>
-            <Link href="/signup" className="hover:text-emerald-500">{t('Join Your Campus')}</Link>
-          </span>
-        </div>
-      </footer>
+      <SiteFooter />
 
       {demoOpen && (
         <div

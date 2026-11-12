@@ -14,7 +14,7 @@ import React from 'react';
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, background: '#0f172a' }}>
+      <body style={{ margin: 0, background: '#000000' }}>
         <div
           style={{
             minHeight: '100vh',

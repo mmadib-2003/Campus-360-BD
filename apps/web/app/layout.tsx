@@ -31,13 +31,13 @@ export const metadata = {
 
 // Mobile-first viewport: device-width rendering, pinch-zoom still allowed
 // (maximumScale 5 keeps accessibility), safe-area coverage for notched
-// phones, and a theme color that matches the dark shell.
+// phones, and a theme color that matches the true-black shell.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
   viewportFit: 'cover',
-  themeColor: '#020617',
+  themeColor: '#000000',
 };
 
 const MESSAGES = { en, bn } as const;
