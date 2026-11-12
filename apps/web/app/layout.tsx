@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import en from '../messages/en.json';
 import bn from '../messages/bn.json';
 import { LOCALE_COOKIE, resolveLocale } from '@/i18n';
+import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/AppShell';
 import { SessionProvider } from '@/lib/modules/session';
 import { MotionProvider } from '@/components/motion/MotionProvider';
@@ -41,24 +42,23 @@ export const viewport: Viewport = {
 
 const MESSAGES = { en, bn } as const;
 
-// TRUE DARK — parser-blocking bootstrap. Inlined as a plain <script> in
-// <head> (never next/script beforeInteractive, which App Router defers past
-// first paint; never useEffect, which flashes by definition). Runs before
-// any stylesheet is parsed, pins .dark + color-scheme on <html>, and is
-// idempotent — safe alongside the static className="dark" the server ships.
-// Note: this product is dark-only by design (no light theme exists), so the
-// script always resolves dark rather than re-deriving from localStorage /
-// prefers-color-scheme.
-const THEME_SCRIPT = `(function(){try{document.documentElement.classList.remove('light');document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}catch(e){}})();`;
+// Parser-blocking theme bootstrap. Inlined as a plain <script> in <head>
+// (never next/script beforeInteractive, which App Router defers past first
+// paint; never useEffect, which flashes by definition). Resolves the stored
+// theme BEFORE first paint — next-themes' own injected script reconciles
+// again at the top of <body>, but this head script guarantees the very first
+// paint is never the wrong color. Mirrors next-themes: localStorage key
+// "theme", default dark, system preference not consulted (the provider sets
+// enableSystem={false}). Idempotent alongside the static className="dark".
+const THEME_SCRIPT = `(function(){try{var t=null;try{t=window.localStorage.getItem('theme')}catch(e){}var light=(t==='light');var d=document.documentElement;d.classList.remove(light?'dark':'light');d.classList.add(light?'light':'dark');d.style.colorScheme=light?'light':'dark';}catch(e){}})();`;
 
-// Painted even if globals.css loses the cascade to a late-arriving external
-// stylesheet: !important beats any subsequently parsed rule.
-const THEME_STYLE = `html, body {
-  background-color: #000000 !important;
-  color-scheme: dark !important;
-  margin: 0;
-  padding: 0;
-}`;
+// Pre-CSS background with !important so a late-loading external stylesheet
+// can never win the cascade. Theme-aware (the inverse of the old hard-coded
+// #000 rule, which would have made the light theme unswitchable): dark is
+// the default, white paints only when the bootstrap above resolved .light.
+const THEME_STYLE = `html, body { margin: 0; padding: 0; }
+html:not(.light), html:not(.light) body { background-color: #000000 !important; color-scheme: dark !important; }
+html.light, html.light body { background-color: #ffffff !important; color-scheme: light !important; }`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const headerStore = headers();
@@ -68,19 +68,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const messages = sanitizeMessages(MESSAGES[locale] as { ui?: Record<string, string> });
 
   return (
-    // TRUE DARK is forced: static class + inline color-scheme on <html> so the
-    // very first paint (and any no-JS crawl of the page) is #000. There is no
-    // theme provider any more — the product is dark-only by design, and the
-    // static .dark class on <html> is all the dark: Tailwind variants need.
+    // Static dark class + suppressHydrationWarning: the head bootstrap and
+    // next-themes both mutate this element's class before/at hydration —
+    // suppressHydrationWarning is the officially supported escape hatch.
     <html lang={locale} className="dark" style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <head>
-        {/* Pre-CSS background (!important) — wins the cascade against any
-            late-loading external stylesheet. */}
+        {/* Pre-CSS background (theme-aware, !important) — wins the cascade
+            against any late-loading external stylesheet. */}
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
-        {/* Theme bootstrap (synchronous). */}
+        {/* Theme bootstrap (synchronous, resolves stored theme before paint). */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {/* The boundary sits inside the shell on purpose: a page that throws --
               a null embed, a JSONB array that arrived as a string -- used to take
@@ -94,6 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </SessionProvider>
           </MotionProvider>
         </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

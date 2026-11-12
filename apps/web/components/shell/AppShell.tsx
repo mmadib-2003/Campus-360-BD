@@ -18,6 +18,7 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { SiteFooter } from '@/components/site/Footer';
 import { asArray, asRow, asText } from '@/lib/render-safe';
 import { CampusScopeToggle } from '@/components/CampusScopeToggle';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { useCampusScope } from '@/lib/use-campus-scope';
 import { withCampusScope } from '@/lib/campus-scope';
 import { NAV_GROUPS, NAV_MODULES } from '@/lib/modules/nav';
@@ -206,7 +207,7 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
             >
               🔍
             </button>
-            {/* True-dark-only build: no light theme to toggle to. */}
+            <ThemeToggle />
             <button
               type="button"
               onClick={toggleLocale}
