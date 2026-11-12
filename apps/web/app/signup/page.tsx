@@ -601,23 +601,11 @@ export default function SignUpPage() {
           <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
             <label className="flex items-center gap-2 min-h-[44px]">
               <input type="checkbox" className="h-5 w-5 shrink-0" checked={consentTerms} onChange={(event) => setConsentTerms(event.target.checked)} />
-              <span>
-                {t('I agree to the Terms of Service')} (
-                <Link href="/terms" className="text-emerald-600 dark:text-emerald-400 hover:underline">
-                  {t('Terms')}
-                </Link>
-                )
-              </span>
+              <span>{t('I agree to the Terms of Service')}</span>
             </label>
             <label className="flex items-center gap-2 min-h-[44px]">
               <input type="checkbox" className="h-5 w-5 shrink-0" checked={consentPrivacy} onChange={(event) => setConsentPrivacy(event.target.checked)} />
-              <span>
-                {t('I agree to the Privacy & Data Retention Policy')} (
-                <Link href="/privacy" className="text-emerald-600 dark:text-emerald-400 hover:underline">
-                  {t('Privacy')}
-                </Link>
-                )
-              </span>
+              <span>{t('I agree to the Privacy & Data Retention Policy')}</span>
             </label>
             <label className="flex items-center gap-2 min-h-[44px]">
               <input

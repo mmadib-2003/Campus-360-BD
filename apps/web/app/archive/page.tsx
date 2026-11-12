@@ -51,14 +51,6 @@ export default function ArchivePage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!isSupabaseConfigured()) {
-        if (!cancelled) {
-          setFiles([]);
-          setError(null);
-          setLoading(false);
-        }
-        return;
-      }
       setLoading(true);
       setError(null);
       try {

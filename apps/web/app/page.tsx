@@ -1,8 +1,6 @@
 import React from 'react';
-import { WelcomeGate } from '@/components/welcome/WelcomeGate';
-import { loadWelcomeUniversities } from '@/lib/welcome-registry';
+import { HomeView } from '@/components/HomeView';
 
-export default async function HomePage() {
-  const initialUniversities = await loadWelcomeUniversities();
-  return <WelcomeGate initialUniversities={initialUniversities} />;
+export default function HomePage() {
+  return <HomeView />;
 }

@@ -148,12 +148,12 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
               description={t('Campus cards will appear as soon as the registry responds.')}
             />
           ) : (
-            <StaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <StaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {universities.map((university) => (
                 <StaggerItem key={university.id} className="h-full">
                   <motion.article
                     {...cardHover}
-                    className="card-glow h-full overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+                    className="card-glow h-full overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
                   >
                     <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-emerald-900/70 via-slate-900 to-teal-950">
                       {university.cover_image_url ? (
@@ -187,7 +187,7 @@ export function HomeView({ compact = false }: { compact?: boolean }) {
                         </span>
                       </div>
                     </div>
-                    <div className="p-5 space-y-1.5">
+                    <div className="p-4 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[11px] text-slate-400 font-mono truncate">
                           {(university.university_email_domains ?? []).map((domain) => `@${domain.domain}`).join(', ')}

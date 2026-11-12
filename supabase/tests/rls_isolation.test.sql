@@ -1,25 +1,17 @@
 -- supabase/tests/rls_isolation.test.sql
 -- Run via: supabase test db
--- Note: harness alignment with 0026 trigger + RLS audit delete documented in Issue #38.
 BEGIN;
-SELECT plan(11);
+SELECT plan(10);
 
 -- Create two test users: Student A at JU, Student B at DU
 INSERT INTO auth.users (id, email) VALUES
   ('11111111-1111-1111-1111-111111111111', 'student.a@juniv.edu'),
   ('22222222-2222-2222-2222-222222222222', 'student.b@du.ac.bd');
 
-INSERT INTO public.profiles (id, university_id, email, full_name, student_id, trust_level, email_verified)
+INSERT INTO public.profiles (id, university_id, email, full_name, student_id, trust_level)
 VALUES
-  ('11111111-1111-1111-1111-111111111111', (SELECT id FROM public.universities WHERE code = 'JU'), 'student.a@juniv.edu', 'JU Student A', 'JU-2021', 'EMAIL_VERIFIED', true),
-  ('22222222-2222-2222-2222-222222222222', (SELECT id FROM public.universities WHERE code = 'DU'), 'student.b@du.ac.bd', 'DU Student B', 'DU-2021', 'EMAIL_VERIFIED', true)
-ON CONFLICT (id) DO UPDATE SET
-  university_id = EXCLUDED.university_id,
-  email = EXCLUDED.email,
-  full_name = EXCLUDED.full_name,
-  student_id = EXCLUDED.student_id,
-  trust_level = EXCLUDED.trust_level,
-  email_verified = EXCLUDED.email_verified;
+  ('11111111-1111-1111-1111-111111111111', (SELECT id FROM public.universities WHERE code = 'JU'), 'student.a@juniv.edu', 'JU Student A', 'JU-2021', 'EMAIL_VERIFIED'),
+  ('22222222-2222-2222-2222-222222222222', (SELECT id FROM public.universities WHERE code = 'DU'), 'student.b@du.ac.bd', 'DU Student B', 'DU-2021', 'EMAIL_VERIFIED');
 
 -- JU Student A creates a private post and a grievance complaint
 SET LOCAL ROLE authenticated;
@@ -67,17 +59,13 @@ SELECT is(
   'DU Student B CANNOT read JU complaint'
 );
 
--- Verify immutable audit log cannot be deleted (exercised as postgres so RLS 0-row
--- filtering does not skip FOR EACH ROW trigger trg_complaint_audit_log_immutable; see #38)
-SET LOCAL ROLE postgres;
+-- Verify immutable audit log cannot be deleted
 PREPARE delete_audit AS DELETE FROM public.complaint_audit_log;
 SELECT throws_ok(
   'delete_audit',
   'Audit logs are immutable and cannot be updated or deleted.',
   'Immutable trigger blocks deletion on complaint_audit_log'
 );
-SET LOCAL ROLE authenticated;
-SET LOCAL "request.jwt.claim.sub" = '22222222-2222-2222-2222-222222222222';
 
 -- Verify review aggregate trigger updates review_aggregates automatically
 INSERT INTO public.reviews (university_id, author_id, target_type, target_id, rating, body)

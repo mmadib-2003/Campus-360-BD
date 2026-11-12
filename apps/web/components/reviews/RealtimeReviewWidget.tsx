@@ -59,11 +59,6 @@ export function RealtimeReviewWidget({
   const toast = useToast();
 
   const load = useCallback(async () => {
-    if (!isSupabaseConfigured()) {
-      setError(null);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
@@ -118,28 +113,6 @@ export function RealtimeReviewWidget({
     if (!body.trim()) return;
     setPending(true);
     try {
-      if (!isSupabaseConfigured()) {
-        const created: ReviewItem = {
-          id: `demo-review-${Date.now()}`,
-          university_id: universityId,
-          rating,
-          title: title.trim() || undefined,
-          body: body.trim(),
-          verified_participation: true,
-          created_at: new Date().toISOString(),
-          author_id: session.userId ?? undefined,
-        };
-        setReviews((prev) => {
-          const next = [created, ...prev];
-          const avg = next.reduce((sum, item) => sum + Number(item.rating), 0) / next.length;
-          setAvgRating(avg);
-          return next;
-        });
-        setTitle('');
-        setBody('');
-        toast.show('Review published — it appears live for your campus.');
-        return;
-      }
       const res = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
