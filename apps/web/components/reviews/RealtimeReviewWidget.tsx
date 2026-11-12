@@ -207,7 +207,7 @@ export function RealtimeReviewWidget({
                   type="button"
                   aria-label={`${star} star`}
                   onClick={() => setRating(star)}
-                  className={`text-xl leading-none ${star <= rating ? 'text-amber-400' : 'text-slate-300 dark:text-slate-600'}`}
+                  className={`text-xl leading-none ${star <= rating ? 'text-amber-400' : 'text-slate-300 dark:text-slate-500'}`}
                 >
                   ★
                 </button>

@@ -161,7 +161,7 @@ export function QuickDemoLogin() {
         </div>
       )}
 
-      <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
         {locale === 'bn'
           ? 'ডেমো অ্যাকাউন্টগুলো জাহাঙ্গীরনগর বিশ্ববিদ্যালয় (JU • IIT) টেন্যান্টে সংযুক্ত — প্রতিটি ডেমো পাসওয়ার্ড Demo#1234।'
           : 'Demo accounts are pre-verified under Jahangirnagar University (JU • IIT) — password Demo#1234.'}
