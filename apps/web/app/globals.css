@@ -2,45 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-/* TRUE DARK base layer (belt): the unlayered body rule below already paints
-   hsl(var(--background)) = #000, but pin the Tailwind layer too so nothing in
-   the cascade can reintroduce a white page background. */
-@layer base {
-  html {
-    @apply bg-black text-white;
-  }
-  body {
-    @apply bg-black text-white !important;
-  }
-}
 
 /* ---------------------------------------------------------------------------
-   shadcn/ui dark-mode variables (TRUE DARK, forced).
-   The .dark block repeats the :root tokens; next-themes is pinned with
-   forcedTheme="dark" and the <html> tag carries class="dark" statically.
+   shadcn/ui theme variables. :root carries the LIGHT palette (default shadcn
+   convention); .dark repeats with the true-black palette. Dark is the app
+   default — <html> ships class="dark" statically and the pre-paint bootstrap
+   in app/layout.tsx resolves the stored preference — but :root must stay a
+   working palette because the toggle now flips between the two.
    --------------------------------------------------------------------------- */
 :root {
-  /* TRUE DARK everywhere: the light palette is retired. :root itself carries
-     the dark tokens (belt) and .dark repeats them (braces) so any UA widget,
-     print stylesheet or no-JS crawl still renders #000 instead of white. */
-  --background: 0 0% 0%;
-  --foreground: 0 0% 98%;
-  --card: 0 0% 4%;
-  --card-foreground: 0 0% 98%;
-  --popover: 0 0% 4%;
-  --popover-foreground: 0 0% 98%;
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
   --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 0 0% 9%;
-  --muted-foreground: 0 0% 66%;
-  --accent: 0 0% 12%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 72.2% 50.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 15%;
-  --input: 0 0% 15%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
   --ring: 160 84% 39%;
   --chart-1: 220 70% 50%;
   --chart-2: 160 60% 45%;
@@ -48,12 +36,12 @@
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
   --radius: 0.75rem;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 .dark {
-  /* TRUE DARK: page background is #000000; depth comes from barely-lifted
-     #0a0a0a (cards) / #171717 (raised) surfaces and #262626 hairline borders. */
+  /* TRUE DARK (default): page background is #000000; depth comes from
+     barely-lifted #0a0a0a (cards) / #171717 (raised) surfaces. */
   --background: 0 0% 0%;
   --foreground: 0 0% 98%;
   --card: 0 0% 4%;
@@ -79,6 +67,12 @@
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
   color-scheme: dark;
+}
+
+/* Selection tint (emerald, matching brand) — light-mode default and dark. */
+::selection {
+  background: rgb(16 185 129 / 0.3);
+  color: #052e1b;
 }
 
 /* True-black selection tint (emerald, matching brand). */
@@ -343,8 +337,6 @@ summary {
 }
 
 html {
-  background-color: #000;
-  color-scheme: dark;
   scroll-behavior: smooth;
   scroll-padding-top: 6rem;
 }
