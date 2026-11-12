@@ -331,6 +331,8 @@ summary {
 }
 
 html {
+  background-color: #000;
+  color-scheme: dark;
   scroll-behavior: smooth;
   scroll-padding-top: 6rem;
 }
