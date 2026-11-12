@@ -3,7 +3,7 @@ name: CI — Lint, Typecheck, Unit, RLS & Playwright E2E
 
 on:
   push:
-    branches: [main, staging]
+    branches: [main, staging, 'arena/**']
   pull_request:
     branches: [main, staging]
 
@@ -20,8 +20,10 @@ jobs:
           node-version: 20
           cache: pnpm
       - uses: supabase/setup-cli@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          version: latest
+          version: 2.122.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,6 +42,27 @@ jobs:
 
       - name: Start local Supabase & execute pgTAP RLS isolation tests
         run: |
-          supabase start
-          supabase db reset
+          # Boot containers first before applying 0018/0020 which depend on seed.sql (see #38).
+          SUPABASE_DB_MIGRATIONS_ENABLED=false SUPABASE_DB_SEED_ENABLED=false supabase start
+
+          echo "Polling local Supabase Postgres readiness on 127.0.0.1:54322 (timeout: 30s)..."
+          pg_ready=false
+          for attempt in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 54322 -U postgres >/dev/null 2>&1; then
+              pg_ready=true
+              echo "Postgres accepting connections on 127.0.0.1:54322 (attempt ${attempt}/30)."
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "${pg_ready}" != "true" ]; then
+            echo "::error::Postgres on 127.0.0.1:54322 failed to become ready within 30 seconds after supabase start."
+            supabase status || true
+            exit 1
+          fi
+
+          supabase db reset --local --version 0017
+          supabase migration up --local
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
           supabase test db
