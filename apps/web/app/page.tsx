@@ -1,6 +1,6 @@
 import React from 'react';
-import { WelcomeGate } from '@/components/welcome/WelcomeGate';
+import { HomeView } from '@/components/HomeView';
 
 export default function HomePage() {
-  return <WelcomeGate />;
+  return <HomeView />;
 }

@@ -10,7 +10,6 @@ import { useSession } from '@/lib/modules/client';
 import { useCampusScope } from '@/lib/use-campus-scope';
 import { withCampusScope } from '@/lib/campus-scope';
 import { Badge, Card, SkeletonList } from './ui';
-import { ModuleSwitcher } from './ModuleSwitcher';
 import { useUi } from '@/lib/i18n-client';
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
 
@@ -50,9 +49,6 @@ export function ModuleHub() {
 
   return (
     <section className="space-y-4">
-      {/* Quick module switcher: jump to any module in one second. */}
-      <ModuleSwitcher />
-
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">{t('Campus360 Interactive Modules')}</h2>
@@ -78,7 +74,7 @@ export function ModuleHub() {
               <motion.div {...cardHover} className="h-full">
                 <Link
                   href={withCampusScope(meta.href, scope)}
-                  className="group card-glow flex h-full flex-col justify-between p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
+                  className="group card-glow flex h-full flex-col justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                 >
                   <div className="flex items-start gap-3">
                     <span className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center text-lg shrink-0 transition-transform duration-200 group-hover:scale-110">
@@ -105,7 +101,7 @@ export function ModuleHub() {
         })}
       </StaggerGroup>
 
-      <Card className="p-5 space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
             <h3 className="font-bold text-sm">🛍️ {t('Marketplace')}</h3>
@@ -118,7 +114,7 @@ export function ModuleHub() {
         <MarketplacePreview />
       </Card>
 
-      <Card className="p-5 space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
             <h3 className="font-bold text-sm">🩸 {t('Blood & Health Network')}</h3>
