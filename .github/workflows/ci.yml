@@ -49,7 +49,7 @@ jobs:
             if ! "$@" >/tmp/sb-step.log 2>&1; then
               cat /tmp/sb-step.log
               local summary
-              summary=$(tail -n 25 /tmp/sb-step.log | tr '\r\n' '  ' | cut -c 1-900)
+              summary=$(tr '\r\n' '  ' </tmp/sb-step.log | tail -c 900)
               echo "::error title=${label}::${summary}"
               exit 1
             fi
