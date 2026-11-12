@@ -17,7 +17,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useUi } from '@/lib/i18n-client';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { QuickDemoLogin } from '@/components/auth/QuickDemoLogin';
 import { DEMO_UNIVERSITY_HALLS, getDemoUniversity, setDemoSession } from '@/lib/modules/demo-data';
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
@@ -67,7 +66,6 @@ function WelcomeHeader() {
           <span className="font-bold text-base tracking-tight truncate">{t('Campus360 BD')}</span>
         </Link>
         <div className="flex items-center gap-2 shrink-0">
-          <ThemeToggle />
           <button
             type="button"
             onClick={toggleLocale}

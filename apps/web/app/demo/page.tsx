@@ -130,7 +130,7 @@ export default function DemoPage() {
                 className={`border-t dark:border-slate-800 ${
                   preselectedCode && account.universityCode === preselectedCode
                     ? 'bg-emerald-500/5'
-                    : 'border-slate-100'
+                    : 'border-slate-100 dark:border-slate-800'
                 }`}
               >
                 <td className="px-4 py-2.5">

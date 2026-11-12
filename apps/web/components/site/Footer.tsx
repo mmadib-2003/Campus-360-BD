@@ -249,11 +249,11 @@ export function SiteFooter({ className = '' }: { className?: string }) {
         </motion.section>
       </motion.div>
 
-      {/* Bottom bar */}
+      {/* Bottom bar — centered, separated by a top hairline. */}
       <div className="relative border-t border-slate-200 dark:border-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[3.5rem] py-2 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-0.5 sm:gap-4 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 text-center">
-          <p>Copyright © 2026 Campus360BD | All Rights Reserved.</p>
-          <p className="flex items-center gap-1.5 whitespace-nowrap">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[3.5rem] py-2.5 flex flex-col items-center justify-center gap-1 text-center">
+          <p className="text-[11px] sm:text-xs text-slate-400">Copyright © 2026 Campus360BD | All Rights Reserved.</p>
+          <p className="flex items-center gap-1.5 text-[10px] text-slate-500">
             <span aria-hidden>🇧🇩</span>
             <span>{t('Built for the public universities of Bangladesh')}</span>
           </p>

@@ -50,9 +50,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const messages = sanitizeMessages(MESSAGES[locale] as { ui?: Record<string, string> });
 
   return (
-    <html lang={locale} suppressHydrationWarning>
+    // TRUE DARK is forced: static class + inline color-scheme on <html> so the
+    // very first paint (and any no-JS crawl of the page) is #000. next-themes
+    // is pinned with forcedTheme below so a stored "light" preference can
+    // never reintroduce the light theme.
+    <html lang={locale} className="dark" style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false} disableTransitionOnChange>
           <NextIntlClientProvider locale={locale} messages={messages}>
             {/* The boundary sits inside the shell on purpose: a page that throws --
                 a null embed, a JSONB array that arrived as a string -- used to take
