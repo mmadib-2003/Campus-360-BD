@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TRUE DARK base layer (belt): the unlayered body rule below already paints
+   hsl(var(--background)) = #000, but pin the Tailwind layer too so nothing in
+   the cascade can reintroduce a white page background. */
+@layer base {
+  html {
+    @apply bg-black text-white;
+  }
+  body {
+    @apply bg-black text-white !important;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    shadcn/ui dark-mode variables (TRUE DARK, forced).
    The .dark block repeats the :root tokens; next-themes is pinned with

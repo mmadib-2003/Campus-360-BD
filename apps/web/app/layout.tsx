@@ -5,7 +5,6 @@ import { NextIntlClientProvider } from 'next-intl';
 import en from '../messages/en.json';
 import bn from '../messages/bn.json';
 import { LOCALE_COOKIE, resolveLocale } from '@/i18n';
-import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/AppShell';
 import { SessionProvider } from '@/lib/modules/session';
 import { MotionProvider } from '@/components/motion/MotionProvider';
@@ -50,11 +49,16 @@ const MESSAGES = { en, bn } as const;
 // Note: this product is dark-only by design (no light theme exists), so the
 // script always resolves dark rather than re-deriving from localStorage /
 // prefers-color-scheme.
-const THEME_SCRIPT = `(function(){try{var d=document.documentElement;d.classList.remove('light');d.classList.add('dark');d.style.colorScheme='dark';}catch(e){}})();`;
+const THEME_SCRIPT = `(function(){try{document.documentElement.classList.remove('light');document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}catch(e){}})();`;
 
-// Painted even if globals.css is still loading (slow networks, cold cache):
-// kills the white UA-default flash before the first stylesheet link.
-const THEME_STYLE = 'html{background-color:#000;color-scheme:dark}body{background-color:#000}';
+// Painted even if globals.css loses the cascade to a late-arriving external
+// stylesheet: !important beats any subsequently parsed rule.
+const THEME_STYLE = `html, body {
+  background-color: #000000 !important;
+  color-scheme: dark !important;
+  margin: 0;
+  padding: 0;
+}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const headerStore = headers();
@@ -65,32 +69,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     // TRUE DARK is forced: static class + inline color-scheme on <html> so the
-    // very first paint (and any no-JS crawl of the page) is #000. next-themes
-    // is pinned with forcedTheme below so a stored "light" preference can
-    // never reintroduce the light theme.
+    // very first paint (and any no-JS crawl of the page) is #000. There is no
+    // theme provider any more — the product is dark-only by design, and the
+    // static .dark class on <html> is all the dark: Tailwind variants need.
     <html lang={locale} className="dark" style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <head>
-        {/* 1. Theme bootstrap (synchronous) — before any stylesheet.
-            2. Pre-CSS background — paints #000 even if globals.css is late. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Pre-CSS background (!important) — wins the cascade against any
+            late-loading external stylesheet. */}
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
+        {/* Theme bootstrap (synchronous). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false} disableTransitionOnChange>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            {/* The boundary sits inside the shell on purpose: a page that throws --
-                a null embed, a JSONB array that arrived as a string -- used to take
-                the header, the nav and every other section down with it. Now the
-                module area degrades and the campus stays navigable. */}
-            <MotionProvider>
-              <SessionProvider>
-                <AppShell profile={null}>
-                  <SafeSection label="This page">{children}</SafeSection>
-                </AppShell>
-              </SessionProvider>
-            </MotionProvider>
-          </NextIntlClientProvider>
-        </ThemeProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {/* The boundary sits inside the shell on purpose: a page that throws --
+              a null embed, a JSONB array that arrived as a string -- used to take
+              the header, the nav and every other section down with it. Now the
+              module area degrades and the campus stays navigable. */}
+          <MotionProvider>
+            <SessionProvider>
+              <AppShell profile={null}>
+                <SafeSection label="This page">{children}</SafeSection>
+              </AppShell>
+            </SessionProvider>
+          </MotionProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );
