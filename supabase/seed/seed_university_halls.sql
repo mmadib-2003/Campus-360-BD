@@ -226,7 +226,7 @@ JOIN (VALUES
   ('SUST', 'Bijoy 24 Hall', 'বিজয় ২৪ ছাত্র হল', 'RESIDENTIAL'),
   ('SUST', 'Ayesha Siddiqa Hall', 'আয়েশা সিদ্দিকা ছাত্রী হল', 'RESIDENTIAL'),
   ('SUST', 'Begum Sirajunnesa Chowdhury Hall', 'বেগম সিরাজুন্নেসা চৌধুরী ছাত্রী হল', 'RESIDENTIAL'),
-  ('SUST', 'Fatimah Tuz Zahra Hall', 'ফাতেমা তুজ জাহরা ছাত্রী হল', 'RESIDENTIAL'),
+  ('SUST', 'Fatimah Tuz Zahra Hall', 'ফাতেমা তুজ জাহরা ছাত্রী হল', 'RESIDENTIAL')
 
   -- Halls for the remaining 45 campuses are collected through /admin/panel; the
   -- fallback in section 3 keeps their students signable-up meanwhile. (A named roster
