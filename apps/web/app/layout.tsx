@@ -42,6 +42,20 @@ export const viewport: Viewport = {
 
 const MESSAGES = { en, bn } as const;
 
+// TRUE DARK — parser-blocking bootstrap. Inlined as a plain <script> in
+// <head> (never next/script beforeInteractive, which App Router defers past
+// first paint; never useEffect, which flashes by definition). Runs before
+// any stylesheet is parsed, pins .dark + color-scheme on <html>, and is
+// idempotent — safe alongside the static className="dark" the server ships.
+// Note: this product is dark-only by design (no light theme exists), so the
+// script always resolves dark rather than re-deriving from localStorage /
+// prefers-color-scheme.
+const THEME_SCRIPT = `(function(){try{var d=document.documentElement;d.classList.remove('light');d.classList.add('dark');d.style.colorScheme='dark';}catch(e){}})();`;
+
+// Painted even if globals.css is still loading (slow networks, cold cache):
+// kills the white UA-default flash before the first stylesheet link.
+const THEME_STYLE = 'html{background-color:#000;color-scheme:dark}body{background-color:#000}';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const headerStore = headers();
   const cookieStore = cookies();
@@ -55,6 +69,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // is pinned with forcedTheme below so a stored "light" preference can
     // never reintroduce the light theme.
     <html lang={locale} className="dark" style={{ colorScheme: 'dark' }} suppressHydrationWarning>
+      <head>
+        {/* 1. Theme bootstrap (synchronous) — before any stylesheet.
+            2. Pre-CSS background — paints #000 even if globals.css is late. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
+      </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false} disableTransitionOnChange>
           <NextIntlClientProvider locale={locale} messages={messages}>
