@@ -142,11 +142,16 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 
-  // Welcome mode (Phase 2): unauthenticated visitors at the root entry get the
-  // minimal one-page Welcome experience (its own header, hero, pillars and
-  // university showcase) without the dashboard chrome. Signed-in visitors at
-  // '/' keep the full shell + HomeView dashboard, exactly as before.
-  const isWelcome = pathname === '/' && !session.loading && !session.authenticated;
+  // Standalone public pages ('/welcome', '/privacy', '/terms') and the
+  // unauthenticated root entry ('/' before or without a verified session)
+  // render their own minimal header, main landmark and footer without the
+  // authenticated dashboard chrome. Signed-in visitors at '/' keep the full
+  // shell + HomeView dashboard, exactly as before.
+  const isWelcome =
+    pathname === '/welcome' ||
+    pathname === '/privacy' ||
+    pathname === '/terms' ||
+    (pathname === '/' && !session.authenticated);
   if (isWelcome) {
     return <>{children}</>;
   }
@@ -473,7 +478,17 @@ export function AppShell({ children }: { profile?: unknown; children: React.Reac
         </aside>
 
         {/* pb-20 keeps content clear of the fixed bottom quick-nav on mobile. */}
-        <main className="flex-1 min-w-0 max-w-full pb-20 lg:pb-8">{showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}{children}</main>
+        <main className="flex-1 min-w-0 max-w-full pb-20 lg:pb-8">
+          {showScope && <CampusScopeToggle universityCode={session.profile?.universities?.code} />}
+          {children}
+          <footer className="mt-10 pt-4 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <span>{t('Campus360 BD')}</span>
+            <span className="flex items-center gap-4">
+              <Link href="/privacy" className="hover:text-emerald-500">{t('Privacy')}</Link>
+              <Link href="/terms" className="hover:text-emerald-500">{t('Terms')}</Link>
+            </span>
+          </footer>
+        </main>
       </div>
 
       {/* Mobile bottom quick-nav: five thumb-reachable tabs, safe-area aware. */}

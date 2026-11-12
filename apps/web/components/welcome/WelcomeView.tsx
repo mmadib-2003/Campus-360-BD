@@ -23,7 +23,7 @@ import { DEMO_UNIVERSITY_HALLS, getDemoUniversity, setDemoSession } from '@/lib/
 import { StaggerGroup, StaggerItem, cardHover } from '@/components/motion/Stagger';
 import { PILLARS } from './pillars';
 
-interface RegistryUniversity {
+export interface RegistryUniversity {
   id: string;
   code: string;
   name_en: string;
@@ -91,7 +91,7 @@ function Hero({ onDemo }: { onDemo: () => void }) {
   const { t } = useUi();
   return (
     <motion.section
-      initial={{ opacity: 0, y: 14 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       className="relative overflow-hidden p-6 sm:p-10 rounded-2xl bg-gradient-to-br from-emerald-900/60 via-slate-900 to-teal-950 border border-emerald-500/30 shadow-xl text-center"
@@ -147,7 +147,6 @@ function Hero({ onDemo }: { onDemo: () => void }) {
 function PillarOverview() {
   const { locale, t } = useUi();
   const [activeId, setActiveId] = React.useState(PILLARS[0].id);
-  const active = PILLARS.find((pillar) => pillar.id === activeId) ?? PILLARS[0];
 
   return (
     <section className="space-y-5">
@@ -164,9 +163,11 @@ function PillarOverview() {
           return (
             <button
               key={pillar.id}
+              id={`pillar-tab-${pillar.id}`}
               type="button"
               role="tab"
               aria-selected={selected}
+              aria-controls={`pillar-panel-${pillar.id}`}
               onMouseEnter={() => setActiveId(pillar.id)}
               onFocus={() => setActiveId(pillar.id)}
               onClick={() => setActiveId(pillar.id)}
@@ -185,55 +186,66 @@ function PillarOverview() {
         })}
       </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={active.id}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm"
-        >
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {locale === 'bn' ? active.taglineBn : t(active.tagline)}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-            {active.items.map((item) => (
-              <Link
-                key={`${item.href}-${item.title}`}
-                href={item.href}
-                className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-base shrink-0 transition-transform duration-200 group-hover:scale-110" aria-hidden>
-                    {item.icon}
-                  </span>
-                  <span className="font-semibold text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
-                    {locale === 'bn' ? item.titleBn : t(item.title)}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-                  {locale === 'bn' ? item.blurbBn : t(item.blurb)}
-                </p>
-              </Link>
-            ))}
+      {PILLARS.map((pillar) => {
+        const selected = pillar.id === activeId;
+        return (
+          <div
+            key={pillar.id}
+            id={`pillar-panel-${pillar.id}`}
+            role="tabpanel"
+            aria-labelledby={`pillar-tab-${pillar.id}`}
+            hidden={!selected}
+            className={
+              selected
+                ? 'p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm'
+                : 'hidden'
+            }
+          >
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {locale === 'bn' ? pillar.taglineBn : t(pillar.tagline)}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+              {pillar.items.map((item) => (
+                <Link
+                  key={`${item.href}-${item.title}`}
+                  href={item.href}
+                  className="group p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 hover:border-emerald-500/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-base shrink-0 transition-transform duration-200 group-hover:scale-110" aria-hidden>
+                      {item.icon}
+                    </span>
+                    <span className="font-semibold text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
+                      {locale === 'bn' ? item.titleBn : t(item.title)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                    {locale === 'bn' ? item.blurbBn : t(item.blurb)}
+                  </p>
+                </Link>
+              ))}
+            </div>
           </div>
-        </motion.div>
-      </AnimatePresence>
+        );
+      })}
     </section>
   );
 }
 
-function UniversityShowcase() {
+function UniversityShowcase({ initialUniversities }: { initialUniversities?: RegistryUniversity[] }) {
   const { locale, t } = useUi();
   const router = useRouter();
-  const [universities, setUniversities] = React.useState<RegistryUniversity[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const hasInitial = Array.isArray(initialUniversities) && initialUniversities.length > 0;
+  const [universities, setUniversities] = React.useState<RegistryUniversity[]>(() =>
+    hasInitial ? initialUniversities : []
+  );
+  const [loading, setLoading] = React.useState(!hasInitial);
   const [category, setCategory] = React.useState('ALL');
   const [query, setQuery] = React.useState('');
   const [selectedCode, setSelectedCode] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (hasInitial) return;
     let cancelled = false;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
@@ -254,7 +266,7 @@ function UniversityShowcase() {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, []);
+  }, [hasInitial]);
 
   const filtered = React.useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -329,7 +341,7 @@ function UniversityShowcase() {
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('Try a different name, code or category.')}</p>
         </div>
       ) : (
-        <StaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StaggerGroup initial={false} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((university) => {
             const isSelected = university.code === selectedCode;
             const domains = university.university_email_domains ?? [];
@@ -440,7 +452,7 @@ function UniversityShowcase() {
   );
 }
 
-export function WelcomeView() {
+export function WelcomeView({ initialUniversities }: { initialUniversities?: RegistryUniversity[] } = {}) {
   const { t } = useUi();
   const [demoOpen, setDemoOpen] = React.useState(false);
 
@@ -459,12 +471,14 @@ export function WelcomeView() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-10 sm:space-y-14">
         <Hero onDemo={() => setDemoOpen(true)} />
         <PillarOverview />
-        <UniversityShowcase />
+        <UniversityShowcase initialUniversities={initialUniversities} />
       </main>
       <footer className="border-t border-slate-200/80 dark:border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <span className="font-semibold">{t('Campus360 BD')} — {t('Verified Multi-University Super-App')}</span>
-          <span className="flex items-center gap-4">
+          <span className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/privacy" className="hover:text-emerald-500">{t('Privacy')}</Link>
+            <Link href="/terms" className="hover:text-emerald-500">{t('Terms')}</Link>
             <Link href="/signin" className="hover:text-emerald-500">{t('Sign In')}</Link>
             <button type="button" onClick={() => setDemoOpen(true)} className="hover:text-emerald-500">
               ⚡ {t('Try Instant Demo')}

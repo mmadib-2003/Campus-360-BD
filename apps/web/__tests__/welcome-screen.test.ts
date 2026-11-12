@@ -72,6 +72,10 @@ vi.mock('@/components/auth/QuickDemoLogin', () => ({
 }));
 
 import { WelcomeView } from '@/components/welcome/WelcomeView';
+import { WelcomeGate } from '@/components/welcome/WelcomeGate';
+import { MODULE_META } from '@/lib/modules/labels';
+import PrivacyPage from '@/app/privacy/page';
+import TermsPage from '@/app/terms/page';
 import { SessionProvider } from '@/lib/modules/session';
 import { AppShell } from '@/components/shell/AppShell';
 
@@ -202,5 +206,100 @@ describe('welcome gate inside the app shell', () => {
     expect(output).not.toContain('Open main menu');
     expect(output).not.toContain('Join Your Campus');
     expect(output).not.toContain('All Modules');
+  });
+
+  it('keeps /, /welcome, /privacy and /terms chromeless during initial SSR before session resolves', () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    for (const route of ['/', '/welcome', '/privacy', '/terms']) {
+      mocks.pathname = route;
+      act(() => {
+        tree = create(
+          React.createElement(
+            SessionProvider,
+            null,
+            React.createElement(
+              AppShell,
+              null,
+              React.createElement('div', { 'data-testid': `child-${route}` }, route)
+            )
+          )
+        );
+      });
+      const output = text();
+      expect(tree!.root.findAllByProps({ 'data-testid': `child-${route}` }).length).toBe(1);
+      expect(output).not.toContain('Open main menu');
+      expect(output).not.toContain('All Modules');
+      act(() => tree?.unmount());
+      tree = undefined;
+    }
+    mocks.pathname = '/';
+  });
+
+  it('renders WelcomeGate immediately with initialUniversities and no loading skeleton while unauthenticated', () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    act(() => {
+      tree = create(
+        React.createElement(
+          SessionProvider,
+          null,
+          React.createElement(WelcomeGate, {
+            initialUniversities: [
+              {
+                id: 'demo-univ-du',
+                code: 'DU',
+                name_en: 'University of Dhaka',
+                name_bn: 'ঢাকা বিশ্ববিদ্যালয়',
+                city: 'Dhaka',
+                category: 'GENERAL',
+                logo_url: '/logos/du.png',
+                cover_image_url: '/campuses/du.jpg',
+                university_email_domains: [{ domain: 'du.ac.bd', is_primary: true }],
+              },
+            ],
+          })
+        )
+      );
+    });
+    const output = text();
+    expect(output).toContain('One verified super-app for every public university campus in Bangladesh');
+    expect(output).toContain('University of Dhaka');
+    expect(output).toContain('University of Dhaka logo');
+    expect(output).not.toContain('"aria-busy":true');
+    for (const meta of Object.values(MODULE_META)) {
+      expect(output).toContain(meta.href);
+    }
+    expect(output).toContain('/archive');
+    expect(output).toContain('/privacy');
+    expect(output).toContain('/terms');
+  });
+});
+
+describe('public legal pages (/privacy and /terms)', () => {
+  it('renders PrivacyPage and TermsPage with exact data-stewardship and terms copy', () => {
+    act(() => {
+      tree = create(React.createElement(PrivacyPage));
+    });
+    const privacyOutput = text();
+    expect(privacyOutput).toContain('Privacy & Data Retention');
+    expect(privacyOutput).toContain(
+      'Student ID card images uploaded for verification are scheduled for permanent deletion 7 days after upload and are purged after review.'
+    );
+    expect(privacyOutput).toContain(
+      'Anonymous grievances store no student identity; they are tracked only through a keyed hash of your tracking secret.'
+    );
+    expect(privacyOutput).toContain('mailto:support@campus360bd.com');
+    act(() => tree?.unmount());
+
+    act(() => {
+      tree = create(React.createElement(TermsPage));
+    });
+    const termsOutput = text();
+    expect(termsOutput).toContain('Terms of Service');
+    expect(termsOutput).toContain(
+      'Accounts are for members of supported public universities and require a verified institutional email address.'
+    );
+    expect(termsOutput).toContain(
+      'Use of your data is described in the Privacy & Data Retention summary.'
+    );
   });
 });
