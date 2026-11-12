@@ -12,6 +12,8 @@ import { useRouter } from 'next/navigation';
 import { useUi } from '@/lib/i18n-client';
 import {
   DEMO_ACCOUNTS,
+  DEMO_UNIVERSITIES,
+  getDemoSession,
   setDemoSession,
   setDemoSignedOut,
   type DemoRole,
@@ -36,6 +38,15 @@ export default function DemoPage() {
   const { t, locale } = useUi();
   const [status, setStatus] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
+  // A campus chosen on the Welcome screen is preselected here, so the
+  // "Explore [University] Campus" button lands on a pre-scoped roster.
+  const [preselectedCode, setPreselectedCode] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const session = getDemoSession();
+    const university = DEMO_UNIVERSITIES.find((item) => item.id === session.universityId);
+    setPreselectedCode(university?.code ?? null);
+  }, []);
 
   async function quickSignIn(email: string) {
     setBusy(email);
@@ -83,6 +94,18 @@ export default function DemoPage() {
         </p>
       </div>
 
+      {preselectedCode && (
+        <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-sm flex flex-wrap items-center gap-2">
+          <span aria-hidden>🎯</span>
+          <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+            {t('Selected campus')}: {preselectedCode}
+          </span>
+          <span className="text-xs text-slate-600 dark:text-slate-300">
+            {t('Sign in below to explore this campus — every module is pre-scoped to it.')}
+          </span>
+        </div>
+      )}
+
       {status && (
         <div role="alert" className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs">
           {status}
@@ -102,7 +125,14 @@ export default function DemoPage() {
           </thead>
           <tbody>
             {DEMO_ACCOUNTS.map((account) => (
-              <tr key={account.email} className="border-t border-slate-100 dark:border-slate-800">
+              <tr
+                key={account.email}
+                className={`border-t dark:border-slate-800 ${
+                  preselectedCode && account.universityCode === preselectedCode
+                    ? 'bg-emerald-500/5'
+                    : 'border-slate-100'
+                }`}
+              >
                 <td className="px-4 py-2.5">
                   <span
                     className={`px-2 py-0.5 rounded-full font-semibold ${
