@@ -109,7 +109,7 @@ jobs:
           CI: 'true'
           NEXT_TELEMETRY_DISABLED: '1'
           OTP_PEPPER_SECRET: campus360-e2e-preview-otp-pepper-secret-32b
-        run: pnpm test:e2e
+        run: pnpm test:e2e:web
 
       - name: Upload Playwright report on failure
         if: failure()
