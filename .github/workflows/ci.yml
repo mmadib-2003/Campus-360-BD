@@ -79,3 +79,45 @@ jobs:
           run_checked "supabase db reset 0017" supabase db reset --local --version 0017
           run_checked "supabase migration up" supabase migration up --local
           run_checked "supabase test db" supabase test db
+
+  e2e:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @campus360/web exec playwright install --with-deps chromium
+
+      - name: Build production web app
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: pnpm build
+
+      - name: Run Playwright E2E suite (chromium + mobile-chrome)
+        env:
+          CI: 'true'
+          NEXT_TELEMETRY_DISABLED: '1'
+          OTP_PEPPER_SECRET: campus360-e2e-preview-otp-pepper-secret-32b
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7
+
